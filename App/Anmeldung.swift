@@ -63,6 +63,7 @@ struct Anmeldung: View {
         }
         do {
             try await sitzung.hoerbuchClient?.anmelden()
+            await Benachrichtigungen.geraetMelden()
             schliessen()
         } catch {
             fehler = "Navidrome ist verbunden, aber Audiobookshelf nicht: \(error.localizedDescription)"

@@ -124,4 +124,4 @@ Gesucht wird in Prowlarr in der Hörbuch-Kategorie mit „Autor Titel“. Findet
 - Bei `sprache=de` muss die Fassung deutsch sein.
 - Ein Sammelpaket mit mehreren Teilen nimmt der Server nur, wenn es kein Einzelpaket gibt.
 
-Danach lädt SABnzbd. Der Server legt die Dateien als `Autor/Reihe/Titel` ab, lässt Audiobookshelf neu einlesen und ordnet das Hörbuch per ASIN zu. Dann setzt er den Status `da` und schickt eine Push-Nachricht über ntfy.
+Danach lädt SABnzbd. Der Server legt die Dateien als `Autor/Reihe/Titel` ab, lässt Audiobookshelf neu einlesen und ordnet das Hörbuch per ASIN zu. Dann setzt er den Status `da` und schickt eine Push-Nachricht an Ohrregal (siehe „Push-Nachrichten“).

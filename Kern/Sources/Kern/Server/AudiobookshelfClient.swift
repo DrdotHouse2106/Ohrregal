@@ -179,6 +179,22 @@ public final class AudiobookshelfClient {
         }
     }
 
+    /// Ein einzelnes Hörbuch, z. B. nach dem Antippen einer Push-Nachricht.
+    public func hoerbuch(_ id: String) async throws -> Hoerbuch {
+        try await hole("/api/items/\(id)")
+    }
+
+    /// Gerät für Push-Nachrichten anmelden (`umgebung`: „produktion“ oder „sandbox“).
+    public func meldeGeraet(_ token: String, umgebung: String) async throws {
+        let (daten, code) = try await sende("/wunsch-api/geraet", methode: "POST", json: ["apnsToken": token, "umgebung": umgebung])
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
+    public func geraetAbmelden(_ token: String) async throws {
+        let (daten, code) = try await sende("/wunsch-api/geraet/\(token)", methode: "DELETE")
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
     public func zurueckziehen(_ id: String) async throws {
         let (daten, code) = try await sende("/wunsch-api/wunsch/\(id)", methode: "DELETE")
         guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }

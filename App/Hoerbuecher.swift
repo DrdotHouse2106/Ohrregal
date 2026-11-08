@@ -299,7 +299,9 @@ struct WunschView: View {
         guard let abs = sitzung.hoerbuchClient else { return }
         do {
             switch try await abs.wuensche(t) {
-            case .angenommen: meldung = "„\(t.title ?? "")“ ist gewünscht. Du bekommst Bescheid, sobald es da ist."
+            case .angenommen:
+                meldung = "„\(t.title ?? "")“ ist gewünscht. Du bekommst Bescheid, sobald es da ist."
+                await Benachrichtigungen.erlaubnisHolen()
             case .schonVorhanden: meldung = "„\(t.title ?? "")“ ist schon in deiner Bibliothek."
             }
             await liste()

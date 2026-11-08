@@ -7,6 +7,7 @@ import SwiftUI
 
 @main
 struct OhrregalApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var sitzung = geteilteSitzung
     @State private var player = geteilterPlayer
 
@@ -36,6 +37,13 @@ struct OhrregalApp: App {
 final class Sitzung {
     var client: NavidromeClient? { didSet { geteilterPlayer.client = client } }
     var hoerbuchClient: AudiobookshelfClient? { didSet { geteilterPlayer.hoerbuchClient = hoerbuchClient } }
+    /// Ziel nach dem Antippen einer Push-Nachricht.
+    var sprung: Sprung?
+
+    enum Sprung: Equatable {
+        case hoerbuch(String)
+        case wuensche
+    }
 
     init() {
         let d = UserDefaults.standard
@@ -81,6 +89,7 @@ final class Sitzung {
     }
 
     func abmelden() {
+        Task { await Benachrichtigungen.geraetAbmelden() }
         Schluesselbund.loesche("navidrome")
         client = nil
     }
@@ -102,26 +111,50 @@ struct Hauptansicht: View {
     @Environment(Player.self) private var player
     @Environment(\.client) private var client
     @State private var playerOffen = false
+    @State private var tab = 0
+    @State private var hoerbuchPfad = NavigationPath()
 
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             NavigationStack { StartView().ziele() }
                 .miniPlayer($playerOffen)
                 .tabItem { Label("Start", systemImage: "house.fill") }
+                .tag(0)
             NavigationStack { MusikView().ziele() }
                 .miniPlayer($playerOffen)
                 .tabItem { Label("Musik", systemImage: "music.note") }
-            NavigationStack { HoerbuecherView().ziele() }
+                .tag(1)
+            NavigationStack(path: $hoerbuchPfad) { HoerbuecherView().ziele() }
                 .miniPlayer($playerOffen)
                 .tabItem { Label("Hörbücher", systemImage: "books.vertical.fill") }
+                .tag(2)
             NavigationStack { SucheView().ziele() }
                 .miniPlayer($playerOffen)
                 .tabItem { Label("Suchen", systemImage: "magnifyingglass") }
+                .tag(3)
         }
         .sheet(isPresented: $playerOffen) { VollPlayer() }
+        .onChange(of: sitzung.sprung) { springen() }
+        .onAppear { springen() }
         .task(id: client.adresse("ping")) {
             player.client = client
             player.hoerbuchClient = sitzung.hoerbuchClient
+        }
+    }
+
+    /// Öffnet nach einer Push-Nachricht das Hörbuch bzw. „Meine Wünsche“.
+    private func springen() {
+        guard let ziel = sitzung.sprung else { return }
+        sitzung.sprung = nil
+        tab = 2
+        Task {
+            var pfad = NavigationPath()
+            if case .hoerbuch(let id) = ziel, let h = try? await sitzung.hoerbuchClient?.hoerbuch(id) {
+                pfad.append(h)
+            } else {
+                pfad.append(Ziel.wuensche)
+            }
+            hoerbuchPfad = pfad
         }
     }
 }
