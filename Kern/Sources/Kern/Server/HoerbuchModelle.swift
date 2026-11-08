@@ -16,12 +16,29 @@ public struct Hoerbuch: Decodable, Hashable, Identifiable, Sendable {
         public let duration: Double?
     }
 
+    /// Liest die gekürzte Form (Listen: authorName …) und die volle Form (Einzelabruf: authors[], narrators[], series[]).
     public struct Metadaten: Decodable, Hashable, Sendable {
         public let title: String?
         public let authorName: String?
         public let narratorName: String?
         public let seriesName: String?
         public let description: String?
+
+        enum CodingKeys: String, CodingKey { case title, authorName, narratorName, seriesName, description, authors, narrators, series }
+        struct Name: Decodable { let name: String; let sequence: String? }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            func leer(_ s: String?) -> String? { s?.isEmpty == false ? s : nil }
+            title = try? c.decode(String.self, forKey: .title)
+            authorName = leer((try? c.decode(String.self, forKey: .authorName))
+                ?? (try? c.decode([Name].self, forKey: .authors))?.map(\.name).joined(separator: ", "))
+            narratorName = leer((try? c.decode(String.self, forKey: .narratorName))
+                ?? (try? c.decode([String].self, forKey: .narrators))?.joined(separator: ", "))
+            seriesName = leer((try? c.decode(String.self, forKey: .seriesName))
+                ?? (try? c.decode([Name].self, forKey: .series))?.map { n in n.sequence.map { "\(n.name) – Teil \($0)" } ?? n.name }.joined(separator: ", "))
+            description = leer((try? c.decode(String.self, forKey: .description))?.ohneHTML)
+        }
     }
 
     public var titel: String { media.metadata.title ?? "Ohne Titel" }
@@ -70,14 +87,7 @@ public struct BuchTreffer: Decodable, Hashable, Identifiable, Sendable {
     public let grund: String?
 
     /// Beschreibung ohne HTML (Audible liefert sie mit Absätzen und Formatierung).
-    public var beschreibung: String? {
-        description?
-            .replacingOccurrences(of: "<br\\s*/?>|</p>", with: "\n", options: .regularExpression)
-            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&nbsp;", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    public var beschreibung: String? { description?.ohneHTML }
 
     public struct Reihe: Decodable, Hashable, Sendable {
         public let series: String?
@@ -163,4 +173,15 @@ public struct Kategorie: Decodable, Hashable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let unter: [Kategorie]?
+}
+
+extension String {
+    /// Text ohne HTML-Auszeichnung; Absätze bleiben als Zeilenumbruch erhalten.
+    public var ohneHTML: String {
+        replacingOccurrences(of: "<br\\s*/?>|</p>", with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }

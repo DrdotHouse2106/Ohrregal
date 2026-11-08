@@ -53,3 +53,25 @@ final class HoerverlaufTests: XCTestCase {
         XCTAssertTrue(verlauf.unbeliebt().isEmpty)
     }
 }
+
+final class HoerbuchMetadatenTests: XCTestCase {
+    /// Einzelabruf liefert Listen statt der gekürzten Namen.
+    func testVolleForm() throws {
+        let json = """
+        {"id":"li_1","media":{"duration":26280,"metadata":{"title":"Beispielbuch","authors":[{"id":"a1","name":"Erika Muster"}],
+         "narrators":["Max Sprecher"],"series":[{"id":"s1","name":"Beispielreihe","sequence":"1"}],"description":"<p>Erster Absatz</p><p>Zweiter</p>"}}}
+        """
+        let h = try JSONDecoder().decode(Hoerbuch.self, from: Data(json.utf8))
+        XCTAssertEqual(h.autor, "Erika Muster")
+        XCTAssertEqual(h.media.metadata.narratorName, "Max Sprecher")
+        XCTAssertEqual(h.media.metadata.seriesName, "Beispielreihe – Teil 1")
+        XCTAssertEqual(h.media.metadata.description, "Erster Absatz\nZweiter")
+    }
+
+    func testGekuerzteForm() throws {
+        let json = #"{"id":"li_1","media":{"metadata":{"title":"Beispielbuch","authorName":"Erika Muster","narratorName":"Max Sprecher","seriesName":"Beispielreihe #1"}}}"#
+        let h = try JSONDecoder().decode(Hoerbuch.self, from: Data(json.utf8))
+        XCTAssertEqual(h.autor, "Erika Muster")
+        XCTAssertEqual(h.media.metadata.seriesName, "Beispielreihe #1")
+    }
+}

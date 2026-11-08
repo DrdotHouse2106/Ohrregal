@@ -234,6 +234,10 @@ struct HoerbuchView: View {
     let hoerbuch: Hoerbuch
     @State private var startet = false
 
+    private var istGeladen: Bool {
+        player.istHoerbuch && player.anzeige?.cover == sitzung.hoerbuchClient?.coverURL(hoerbuch.id)
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
@@ -251,6 +255,8 @@ struct HoerbuchView: View {
                     Text(stundenText(dauer)).font(.caption).foregroundStyle(Farben.textGedaempft)
                 }
                 Button {
+                    // Läuft dieses Hörbuch schon, schaltet der Knopf nur Pause/Weiter um.
+                    if istGeladen { player.umschalten(); return }
                     startet = true
                     Task {
                         await player.spiele(hoerbuch: hoerbuch)
@@ -258,8 +264,12 @@ struct HoerbuchView: View {
                     }
                 } label: {
                     HStack {
-                        if startet { ProgressView() } else { Image(systemName: "play.fill") }
-                        Text(player.anzeige?.titel == hoerbuch.titel && player.istHoerbuch ? "Läuft" : "Abspielen")
+                        if startet {
+                            ProgressView()
+                        } else {
+                            Image(systemName: istGeladen && player.spielt ? "pause.fill" : "play.fill")
+                        }
+                        Text(istGeladen ? (player.spielt ? "Pause" : "Weiterhören") : "Abspielen")
                     }
                     .frame(maxWidth: .infinity)
                 }

@@ -241,7 +241,7 @@ public final class AudiobookshelfClient {
 
     /// Ein einzelnes Hörbuch, z. B. nach dem Antippen einer Push-Nachricht.
     public func hoerbuch(_ id: String) async throws -> Hoerbuch {
-        try await hole("/api/items/\(id)")
+        try await hole("/api/items/\(id)?expanded=1")
     }
 
     /// Gerät für Push-Nachrichten anmelden (`umgebung`: „produktion“ oder „sandbox“).
