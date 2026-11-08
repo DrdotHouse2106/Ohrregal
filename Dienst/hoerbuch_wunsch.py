@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 
 
 def env(name, standard=None, pflicht=False):
@@ -507,13 +507,16 @@ def bewerte(r, w):
     groesse_mb = (r.get("size") or 0) / 1e6
     if w["laufzeitMin"]:
         mb_min = groesse_mb / max(1, int(w["laufzeitMin"]))
-        if mb_min < 0.2 or mb_min > 3.0:
+        verlustfrei = bool(nw & {"flac", "wav", "alac"})
+        if mb_min < 0.2 or mb_min > (10.0 if verlustfrei else 3.0):
             if "Sammelpaket" not in hinweis:
                 return None, f"Größe passt nicht zur Laufzeit ({groesse_mb:.0f} MB)"
         else:
             punkte += 10
     elif groesse_mb < 20:
         return None, "zu klein"
+    if nw & {"flac", "wav", "alac"}:
+        punkte -= 5  # verlustfrei geht, aber kleinere Fassungen zuerst
     if re.search(r"\bm4b\b", name):
         punkte += 3
     punkte += min(5, (r.get("grabs") or 0) // 10)

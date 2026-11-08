@@ -68,6 +68,12 @@ class Hoerspiel(unittest.TestCase):
         p, _ = h.bewerte(r("Lena Brueckmann - Die Glocken von Morhaven - Hoerspiel"), W)
         self.assertIsNone(p)
 
+    def test_flac_erlaubt_aber_mp3_vorn(self):
+        flac, _ = h.bewerte(r("Die Vier Fragezeichen-042 und das Nebelschiff-DE-AUDIOBOOK-CD-FLAC", mb=480), self.W)
+        mp3, _ = h.bewerte(r("Die Vier Fragezeichen-042 und das Nebelschiff-DE-AUDIOBOOK-MP3", mb=70), self.W)
+        self.assertIsNotNone(flac)
+        self.assertGreater(mp3, flac)
+
     def test_fragezeichen_werden_wort(self):
         self.assertEqual(h.norm("Die vier ???"), "die vier fragezeichen")
 

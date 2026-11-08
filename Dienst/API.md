@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 2.2.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.2.1. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 2.2.0. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.2.0"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.2.1"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -173,7 +173,7 @@ Hinweis: „neu“ braucht beim ersten Aufruf bis zu 5 Sekunden, weil Audible zu
 
 ## Bewertung der Treffer (Server)
 
-**Hörspiele (ab 2.2.0):** Ob ein Wunsch ein Hörspiel ist, entscheidet Audible (content_type „Performance“ oder format_type „original_recording“). Ohne ASIN entscheidet „Hörspiel“ im Titel. Bei Hörspielen bevorzugt der Server Hörspiel-Releases, „ungekürzt“ spielt keine Rolle, und Hörspiel-, Lesungs-, Radio- und Kinder-Fassungen werden nicht aussortiert. Folgen von Reihen wie Hörspielserien passen auch nur über Reihenname und Folgennummer, ohne Titel. „???“ und „!!!“ zählen als „Fragezeichen“ bzw. „Ausrufezeichen“.
+**Hörspiele (ab 2.2.0):** Ob ein Wunsch ein Hörspiel ist, entscheidet Audible (content_type „Performance“ oder format_type „original_recording“). Ohne ASIN entscheidet „Hörspiel“ im Titel. Bei Hörspielen bevorzugt der Server Hörspiel-Releases, „ungekürzt“ spielt keine Rolle, und Hörspiel-, Lesungs-, Radio- und Kinder-Fassungen werden nicht aussortiert. Folgen von Reihen wie Hörspielserien passen auch nur über Reihenname und Folgennummer, ohne Titel. „???“ und „!!!“ zählen als „Fragezeichen“ bzw. „Ausrufezeichen“. Verlustfreie Releases (FLAC) sind erlaubt, bei gleicher Eignung kommen aber kleinere Fassungen zuerst.
 
 Gesucht wird in Prowlarr in der Hörbuch-Kategorie mit „Autor Titel“. Findet das nichts, probiert der Server Varianten, z. B. ohne Untertitel oder mit Reihe und Teil.
 
