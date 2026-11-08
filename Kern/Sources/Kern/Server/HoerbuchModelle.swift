@@ -66,6 +66,8 @@ public struct BuchTreffer: Decodable, Hashable, Identifiable, Sendable {
     public let description: String?
     public let publisher: String?
     public let publishedYear: String?
+    /// Nur bei „Entdecken“: warum der Titel vorgeschlagen wird.
+    public let grund: String?
 
     /// Beschreibung ohne HTML (Audible liefert sie mit Absätzen und Formatierung).
     public var beschreibung: String? {
@@ -92,7 +94,7 @@ public struct BuchTreffer: Decodable, Hashable, Identifiable, Sendable {
 
     public var id: String { asin ?? "\(title ?? "")|\(author ?? "")" }
 
-    enum CodingKeys: String, CodingKey { case title, subtitle, author, narrator, cover, asin, language, duration, series, description, publisher, publishedYear }
+    enum CodingKeys: String, CodingKey { case title, subtitle, author, narrator, cover, asin, language, duration, series, description, publisher, publishedYear, grund }
 
     public init(from decoder: Decoder) throws {
         // Die Anbieter liefern Felder mal als Zahl, mal als Text; nichts davon darf die Suche scheitern lassen.
@@ -109,6 +111,7 @@ public struct BuchTreffer: Decodable, Hashable, Identifiable, Sendable {
         description = try? c.decode(String.self, forKey: .description)
         publisher = try? c.decode(String.self, forKey: .publisher)
         publishedYear = (try? c.decode(String.self, forKey: .publishedYear)) ?? (try? c.decode(Int.self, forKey: .publishedYear)).map(String.init)
+        grund = try? c.decode(String.self, forKey: .grund)
     }
 }
 

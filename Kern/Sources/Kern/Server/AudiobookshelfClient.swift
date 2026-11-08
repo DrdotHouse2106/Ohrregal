@@ -88,10 +88,42 @@ public final class AudiobookshelfClient {
         return liste.libraries.filter { $0.mediaType == "book" }
     }
 
+    /// Fortschritt-ID je Hörbuch, zum Entfernen aus „Weiterhören“.
+    private var fortschritt: [String: String] = [:]
+
+    /// Angefangene Hörbücher ohne die, die in Audiobookshelf ausgeblendet oder fertig sind.
     public func angefangen() async throws -> [Hoerbuch] {
         struct Liste: Decodable { let libraryItems: [Hoerbuch] }
+        struct Ich: Decodable {
+            struct Fortschritt: Decodable {
+                let id: String
+                let libraryItemId: String
+                let hideFromContinueListening: Bool?
+                let isFinished: Bool?
+            }
+            let mediaProgress: [Fortschritt]?
+        }
         let liste: Liste = try await hole("/api/me/items-in-progress")
-        return liste.libraryItems
+        let ich: Ich? = try? await hole("/api/me")
+        var verborgen = Set<String>()
+        for f in ich?.mediaProgress ?? [] {
+            fortschritt[f.libraryItemId] = f.id
+            if f.hideFromContinueListening == true || f.isFinished == true { verborgen.insert(f.libraryItemId) }
+        }
+        return liste.libraryItems.filter { !verborgen.contains($0.id) }
+    }
+
+    /// Wie „Nicht in Weiterhören anzeigen“ in Audiobookshelf.
+    public func ausWeiterhoerenEntfernen(_ hoerbuch: String) async throws {
+        guard let id = fortschritt[hoerbuch] else { throw ServerFehler("Kein Fortschritt zu diesem Hörbuch gefunden.") }
+        let (daten, code) = try await sende("/api/me/progress/\(id)/remove-from-continue-listening")
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
+    /// Vorschläge von Audible passend zum Hörverlauf (Dienst „Hörbuchwunsch“). Leer, solange der Dienst sie nicht anbietet.
+    public func entdecken() async -> [BuchTreffer] {
+        struct Liste: Decodable { let treffer: [BuchTreffer] }
+        return ((try? await hole("/wunsch-api/entdecken")) as Liste?)?.treffer ?? []
     }
 
     /// Seitenweise; optional neueste zuerst und nach Genre gefiltert.

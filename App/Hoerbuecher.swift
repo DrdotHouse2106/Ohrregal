@@ -6,6 +6,7 @@ struct HoerbuecherView: View {
     @State private var angefangen: [Hoerbuch] = []
     @State private var bibliotheken: [Bibliothek] = []
     @State private var neu: [Hoerbuch] = []
+    @State private var entdecken: [BuchTreffer] = []
     @State private var genres: [(Bibliothek, String)] = []
     @State private var fehler: String?
 
@@ -15,7 +16,13 @@ struct HoerbuecherView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 28) {
                         if !angefangen.isEmpty {
-                            HoerbuchReihe(titel: "Weiterhören", hoerbuecher: angefangen)
+                            HoerbuchReihe(titel: "Weiterhören", hoerbuecher: angefangen) { h in
+                                angefangen.removeAll { $0.id == h.id }
+                                Task { try? await abs.ausWeiterhoerenEntfernen(h.id) }
+                            }
+                        }
+                        if !entdecken.isEmpty {
+                            EntdeckenReihe(treffer: entdecken)
                         }
                         if !neu.isEmpty {
                             HoerbuchReihe(titel: "Kürzlich hinzugefügt", hoerbuecher: neu)
@@ -82,10 +89,39 @@ struct HoerbuecherView: View {
                 }
             }
             neu = Array(neuAlle.prefix(20))
+            entdecken = await abs.entdecken()
             genres = genresAlle
             fehler = nil
         } catch {
             fehler = error.localizedDescription
+        }
+    }
+}
+
+/// Vorschläge von Audible; Antippen öffnet die Detailseite zum Wünschen.
+struct EntdeckenReihe: View {
+    let treffer: [BuchTreffer]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Entdecken").font(.title2.bold()).padding(.horizontal)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 14) {
+                    ForEach(treffer) { t in
+                        NavigationLink(value: t) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Cover(url: t.cover.flatMap(URL.init(string:)), groesse: 160)
+                                Text(t.title ?? "").font(.subheadline).lineLimit(1)
+                                Text(t.grund ?? t.author ?? "").font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(2)
+                            }
+                            .frame(width: 160, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal)
+            }
         }
     }
 }
@@ -124,6 +160,8 @@ struct HoerbuchKarte: View {
 struct HoerbuchReihe: View {
     let titel: String
     let hoerbuecher: [Hoerbuch]
+    /// Wenn gesetzt, bietet langes Drücken „Aus Weiterhören entfernen“ an.
+    var entfernen: ((Hoerbuch) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -133,6 +171,11 @@ struct HoerbuchReihe: View {
                     ForEach(hoerbuecher) { h in
                         NavigationLink(value: h) { HoerbuchKarte(hoerbuch: h) }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                if let entfernen {
+                                    Button("Aus „Weiterhören“ entfernen", systemImage: "eye.slash") { entfernen(h) }
+                                }
+                            }
                     }
                 }
                 .padding(.horizontal)
