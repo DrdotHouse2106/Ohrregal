@@ -214,9 +214,25 @@ struct WunschView: View {
     @State private var wuensche: [Wunsch] = []
     @State private var meldung: String?
     @State private var zurueckziehen: Wunsch?
+    @State private var sucht = false
 
     var body: some View {
         List {
+            // Festes Suchfeld statt .searchable: das wurde je nach iOS-Version nicht angezeigt.
+            Section {
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundStyle(Farben.textGedaempft)
+                    TextField("Titel oder Autor bei Audible suchen", text: $text)
+                        .textInputAutocapitalization(.never)
+                        .submitLabel(.search)
+                        .onSubmit { Task { await suchen() } }
+                    if sucht {
+                        ProgressView()
+                    } else if !text.isEmpty {
+                        Button("Suchen") { Task { await suchen() } }.buttonStyle(.borderless)
+                    }
+                }
+            }
             if let meldung {
                 Section { Text(meldung).font(.callout) }
             }
@@ -266,8 +282,6 @@ struct WunschView: View {
         .scrollContentBackground(.hidden)
         .background(Farben.hintergrund)
         .navigationTitle("Hörbuch wünschen")
-        .searchable(text: $text, prompt: "Titel oder Autor bei Audible suchen")
-        .onSubmit(of: .search) { Task { await suchen() } }
         .confirmationDialog("Wunsch entfernen?", isPresented: Binding(get: { zurueckziehen != nil }, set: { if !$0 { zurueckziehen = nil } }),
                             titleVisibility: .visible, presenting: zurueckziehen) { w in
             Button("Entfernen", role: .destructive) { Task { await entfernen(w) } }
@@ -287,6 +301,8 @@ struct WunschView: View {
 
     private func suchen() async {
         guard let abs = sitzung.hoerbuchClient, !text.isEmpty else { return }
+        sucht = true
+        defer { sucht = false }
         do {
             treffer = try await abs.sucheBuecher(text)
             meldung = treffer.isEmpty ? "Bei Audible nichts gefunden." : nil
