@@ -11,6 +11,7 @@ struct StartView: View {
     @State private var fehler: String?
     @State private var zugaengeOffen = false
     @State private var verlaufLoeschen = false
+    @State private var mitteilungen: String?
 
     struct Reihe: Identifiable {
         let titel: String
@@ -52,6 +53,9 @@ struct StartView: View {
         .toolbar {
             Menu {
                 Button("Zugänge", systemImage: "key") { zugaengeOffen = true }
+                Button("Mitteilungen", systemImage: "bell") {
+                    Task { mitteilungen = await Benachrichtigungen.einschaltenUndPruefen() }
+                }
                 Button("Hörverlauf löschen", systemImage: "clock.arrow.circlepath") { verlaufLoeschen = true }
                 Button("Abmelden", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { sitzung.abmelden() }
             } label: {
@@ -62,6 +66,11 @@ struct StartView: View {
             Button("Löschen", role: .destructive) { Hoerverlauf.geteilt.loeschen() }
         } message: {
             Text("Der Verlauf liegt nur auf diesem iPhone und bestimmt deine Mixe. Last.fm und Navidrome bleiben unverändert.")
+        }
+        .alert("Mitteilungen", isPresented: Binding(get: { mitteilungen != nil }, set: { if !$0 { mitteilungen = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(mitteilungen ?? "")
         }
         .sheet(isPresented: $zugaengeOffen) { Anmeldung() }
         .refreshable { await laden() }

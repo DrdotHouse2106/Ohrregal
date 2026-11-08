@@ -21,7 +21,31 @@ enum Benachrichtigungen {
 
     static func geraetMelden() async {
         guard let token = UserDefaults.standard.string(forKey: "apnsToken"), let abs = geteilteSitzung.hoerbuchClient else { return }
-        try? await abs.meldeGeraet(token, umgebung: umgebung)
+        do {
+            try await abs.meldeGeraet(token, umgebung: umgebung)
+            UserDefaults.standard.removeObject(forKey: "pushFehler")
+        } catch {
+            UserDefaults.standard.set("Anmeldung beim Wunsch-Dienst: \(error.localizedDescription)", forKey: "pushFehler")
+        }
+    }
+
+    /// Schaltet Mitteilungen ein und beschreibt den Stand in einem Satz (für „Mitteilungen“ im Profilmenü).
+    static func einschaltenUndPruefen() async -> String {
+        await erlaubnisHolen()
+        switch await UNUserNotificationCenter.current().notificationSettings().authorizationStatus {
+        case .denied: return "Mitteilungen sind für Ohrregal ausgeschaltet. Bitte unter Einstellungen → Mitteilungen → Ohrregal einschalten."
+        case .authorized, .provisional, .ephemeral: break
+        default: return "Mitteilungen sind noch nicht erlaubt."
+        }
+        // Kurz warten, bis iOS das Token geliefert hat.
+        for _ in 0..<10 where UserDefaults.standard.string(forKey: "apnsToken") == nil {
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        if let fehler = UserDefaults.standard.string(forKey: "pushFehler") { return fehler }
+        guard UserDefaults.standard.string(forKey: "apnsToken") != nil else { return "iOS hat noch keine Adresse für Mitteilungen geliefert. Bitte später noch einmal versuchen." }
+        guard geteilteSitzung.hoerbuchClient != nil else { return "Audiobookshelf ist nicht eingetragen." }
+        await geraetMelden()
+        return UserDefaults.standard.string(forKey: "pushFehler") ?? "Mitteilungen sind eingeschaltet. Du bekommst Bescheid, wenn ein Hörbuch da ist."
     }
 
     static func geraetAbmelden() async {
@@ -44,7 +68,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         UserDefaults.standard.set(deviceToken.map { String(format: "%02x", $0) }.joined(), forKey: "apnsToken")
+        UserDefaults.standard.removeObject(forKey: "pushFehler")
         Task { @MainActor in await Benachrichtigungen.geraetMelden() }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        UserDefaults.standard.set("iOS: \(error.localizedDescription)", forKey: "pushFehler")
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
