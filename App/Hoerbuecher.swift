@@ -233,6 +233,9 @@ struct HoerbuchView: View {
     @Environment(Player.self) private var player
     let hoerbuch: Hoerbuch
     @State private var startet = false
+    /// Volle Daten (Beschreibung, Sprecher …); Listen liefern nur eine gekürzte Form.
+    @State private var voll: Hoerbuch?
+    private var h: Hoerbuch { voll ?? hoerbuch }
 
     private var istGeladen: Bool {
         player.istHoerbuch && player.anzeige?.cover == sitzung.hoerbuchClient?.coverURL(hoerbuch.id)
@@ -243,15 +246,15 @@ struct HoerbuchView: View {
             VStack(spacing: 12) {
                 Cover(url: sitzung.hoerbuchClient?.coverURL(hoerbuch.id), groesse: 260)
                     .shadow(radius: 20)
-                Text(hoerbuch.titel).font(.title2.bold()).multilineTextAlignment(.center)
-                Text(hoerbuch.autor).font(.title3).foregroundStyle(Farben.blau)
-                if let sprecher = hoerbuch.media.metadata.narratorName, !sprecher.isEmpty {
+                Text(h.titel).font(.title2.bold()).multilineTextAlignment(.center)
+                Text(h.autor).font(.title3).foregroundStyle(Farben.blau)
+                if let sprecher = h.media.metadata.narratorName, !sprecher.isEmpty {
                     Text("Gelesen von \(sprecher)").font(.subheadline).foregroundStyle(Farben.textGedaempft)
                 }
-                if let reihe = hoerbuch.media.metadata.seriesName, !reihe.isEmpty {
+                if let reihe = h.media.metadata.seriesName, !reihe.isEmpty {
                     Text(reihe).font(.subheadline).foregroundStyle(Farben.textGedaempft)
                 }
-                if let dauer = hoerbuch.media.duration {
+                if let dauer = h.media.duration {
                     Text(stundenText(dauer)).font(.caption).foregroundStyle(Farben.textGedaempft)
                 }
                 Button {
@@ -279,7 +282,7 @@ struct HoerbuchView: View {
                 if let fehler = player.fehler {
                     Text(fehler).font(.caption).foregroundStyle(.red)
                 }
-                if let text = hoerbuch.media.metadata.description, !text.isEmpty {
+                if let text = h.media.metadata.description, !text.isEmpty {
                     Text(text).font(.callout).foregroundStyle(Farben.textGedaempft).padding(.top)
                 }
             }
@@ -288,6 +291,7 @@ struct HoerbuchView: View {
         .background(Farben.hintergrund)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { player.fehler = nil }
+        .task { if voll == nil { voll = try? await sitzung.hoerbuchClient?.hoerbuch(hoerbuch.id) } }
     }
 }
 
