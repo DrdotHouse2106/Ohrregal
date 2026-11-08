@@ -305,13 +305,12 @@ struct WunschView: View {
                     Text("Noch keine Wünsche.").foregroundStyle(Farben.textGedaempft)
                 }
                 ForEach(wuensche) { w in
-                    HStack(spacing: 12) {
-                        Cover(url: w.coverUrl.flatMap(URL.init(string:)), groesse: 44)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(w.titel).lineLimit(1)
-                            Text(w.statusText).font(.caption)
-                                .foregroundStyle(w.status == "da" ? Farben.blau : w.status == "fehler" ? .red : Farben.textGedaempft)
-                            if let hinweis = w.hinweis { Text(hinweis).font(.caption2).foregroundStyle(Farben.textGedaempft) }
+                    Group {
+                        // Fertige Wünsche öffnen das Hörbuch.
+                        if let id = w.absItemId, w.status == "da" {
+                            NavigationLink(value: Ziel.hoerbuch(id)) { WunschZeile(wunsch: w) }
+                        } else {
+                            WunschZeile(wunsch: w)
                         }
                     }
                     .swipeActions {
@@ -388,6 +387,48 @@ struct WunschView: View {
     }
 }
 
+struct WunschZeile: View {
+    let wunsch: Wunsch
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Cover(url: wunsch.coverUrl.flatMap(URL.init(string:)), groesse: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(wunsch.titel).lineLimit(1)
+                Text(wunsch.statusText).font(.caption)
+                    .foregroundStyle(wunsch.status == "da" ? Farben.blau : wunsch.status == "fehler" ? .red : Farben.textGedaempft)
+                if let hinweis = wunsch.hinweis { Text(hinweis).font(.caption2).foregroundStyle(Farben.textGedaempft) }
+            }
+        }
+    }
+}
+
+/// Lädt ein Hörbuch über seine ID und zeigt dann die normale Detailseite.
+struct HoerbuchLaden: View {
+    @Environment(Sitzung.self) private var sitzung
+    let id: String
+    @State private var hoerbuch: Hoerbuch?
+    @State private var fehler: String?
+
+    var body: some View {
+        Group {
+            if let hoerbuch {
+                HoerbuchView(hoerbuch: hoerbuch)
+            } else if let fehler {
+                ContentUnavailableView("Hörbuch nicht gefunden", systemImage: "books.vertical", description: Text(fehler))
+            } else {
+                ProgressView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Farben.hintergrund)
+        .task {
+            guard hoerbuch == nil, let abs = sitzung.hoerbuchClient else { return }
+            do { hoerbuch = try await abs.hoerbuch(id) } catch { fehler = error.localizedDescription }
+        }
+    }
+}
+
 extension BuchTreffer {
     var reihenText: String? {
         guard let reihe = series?.first?.series else { return nil }
@@ -424,7 +465,12 @@ struct TrefferView: View {
                     .font(.caption).foregroundStyle(Farben.textGedaempft)
 
                 VStack(spacing: 10) {
-                    if let wunsch {
+                    if let wunsch, wunsch.status == "da", let id = wunsch.absItemId {
+                        NavigationLink(value: Ziel.hoerbuch(id)) {
+                            Label("Jetzt anhören", systemImage: "play.fill").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if let wunsch {
                         Label("Gewünscht · \(wunsch.statusText)", systemImage: "checkmark.circle.fill")
                             .frame(maxWidth: .infinity).padding(.vertical, 12)
                             .background(Farben.flaeche, in: RoundedRectangle(cornerRadius: 12))

@@ -147,14 +147,8 @@ struct Hauptansicht: View {
         guard let ziel = sitzung.sprung else { return }
         sitzung.sprung = nil
         tab = 2
-        Task {
-            var pfad = NavigationPath()
-            if case .hoerbuch(let id) = ziel, let h = try? await sitzung.hoerbuchClient?.hoerbuch(id) {
-                pfad.append(h)
-            } else {
-                pfad.append(Ziel.wuensche)
-            }
-            hoerbuchPfad = pfad
-        }
+        var pfad = NavigationPath()
+        if case .hoerbuch(let id) = ziel { pfad.append(Ziel.hoerbuch(id)) } else { pfad.append(Ziel.wuensche) }
+        hoerbuchPfad = pfad
     }
 }
