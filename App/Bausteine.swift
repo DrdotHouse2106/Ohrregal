@@ -2,11 +2,12 @@ import Kern
 import SwiftUI
 
 extension View {
-    /// Ziele für Album, Künstler und Playlist in jedem Tab.
+    /// Ziele für Album, Künstler, Playlist und Hörbuch in jedem Tab.
     func ziele() -> some View {
         navigationDestination(for: Album.self) { AlbumView(album: $0) }
             .navigationDestination(for: Kuenstler.self) { KuenstlerView(kuenstler: $0) }
             .navigationDestination(for: Playlist.self) { PlaylistView(playlist: $0) }
+            .navigationDestination(for: Hoerbuch.self) { HoerbuchView(hoerbuch: $0) }
     }
 
     func miniPlayer(_ offen: Binding<Bool>) -> some View {
@@ -16,12 +17,14 @@ extension View {
 
 struct Cover: View {
     @Environment(\.client) private var client
-    let id: String?
+    var id: String?
+    /// Fertige Adresse (Hörbücher); sonst wird `id` bei Navidrome abgefragt.
+    var url: URL?
     var groesse: CGFloat = 160
     var rund = false
 
     var body: some View {
-        AsyncImage(url: client.coverURL(id, groesse: Int(groesse * 2))) { bild in
+        AsyncImage(url: url ?? client.coverURL(id, groesse: Int(groesse * 2))) { bild in
             bild.resizable().scaledToFill()
         } placeholder: {
             Farben.flaeche.overlay(Image(systemName: rund ? "music.mic" : "music.note").foregroundStyle(Farben.textGedaempft))
@@ -137,5 +140,5 @@ struct TitelZeile: View {
 
 func dauerText(_ sekunden: Int?) -> String {
     guard let s = sekunden else { return "" }
-    return String(format: "%d:%02d", s / 60, s % 60)
+    return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
 }

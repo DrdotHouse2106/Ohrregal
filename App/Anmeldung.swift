@@ -54,11 +54,18 @@ struct Anmeldung: View {
         laeuft = true
         defer { laeuft = false }
         z.speichereZusatz()
+        sitzung.ladeHoerbuch()
         do {
             try await sitzung.anmelden(server: z.server, benutzer: z.benutzer, passwort: z.passwort)
-            schliessen()
         } catch {
             fehler = "Anmeldung bei Navidrome fehlgeschlagen: \(error.localizedDescription)"
+            return
+        }
+        do {
+            try await sitzung.hoerbuchClient?.anmelden()
+            schliessen()
+        } catch {
+            fehler = "Navidrome ist verbunden, aber Audiobookshelf nicht: \(error.localizedDescription)"
         }
     }
 }

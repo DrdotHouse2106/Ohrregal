@@ -31,6 +31,7 @@ struct OhrregalApp: App {
 @MainActor @Observable
 final class Sitzung {
     var client: NavidromeClient?
+    var hoerbuchClient: AudiobookshelfClient?
 
     init() {
         let d = UserDefaults.standard
@@ -38,6 +39,20 @@ final class Sitzung {
            let benutzer = d.string(forKey: "benutzer"), let passwort = Schluesselbund.lies("navidrome") {
             client = NavidromeClient(server: url, benutzer: benutzer, passwort: passwort)
         }
+        ladeHoerbuch()
+    }
+
+    /// Audiobookshelf ist optional; ohne Zugang bleibt der Tab „Hörbücher“ leer.
+    func ladeHoerbuch() {
+        let d = UserDefaults.standard
+        hoerbuchClient = nil
+        guard var text = d.string(forKey: "absServer"), !text.isEmpty, let benutzer = d.string(forKey: "absBenutzer"),
+              let passwort = Schluesselbund.lies("audiobookshelf") else { return }
+        if !text.contains("://") { text = "https://" + text }
+        while text.hasSuffix("/") { text.removeLast() }
+        guard let url = URL(string: text) else { return }
+        hoerbuchClient = AudiobookshelfClient(server: url, benutzer: benutzer.trimmingCharacters(in: .whitespacesAndNewlines),
+                                              passwort: passwort.trimmingCharacters(in: .newlines))
     }
 
     func anmelden(server: String, benutzer: String, passwort: String) async throws {
@@ -76,6 +91,7 @@ extension EnvironmentValues {
 }
 
 struct Hauptansicht: View {
+    @Environment(Sitzung.self) private var sitzung
     @Environment(Player.self) private var player
     @Environment(\.client) private var client
     @State private var playerOffen = false
@@ -88,19 +104,17 @@ struct Hauptansicht: View {
             NavigationStack { MusikView().ziele() }
                 .miniPlayer($playerOffen)
                 .tabItem { Label("Musik", systemImage: "music.note") }
-            NavigationStack {
-                ContentUnavailableView("Hörbücher kommen bald", systemImage: "books.vertical",
-                                       description: Text("Audiobookshelf wird in Stufe 3 angebunden."))
-                    .background(Farben.hintergrund)
-                    .navigationTitle("Hörbücher")
-            }
-            .miniPlayer($playerOffen)
-            .tabItem { Label("Hörbücher", systemImage: "books.vertical.fill") }
+            NavigationStack { HoerbuecherView().ziele() }
+                .miniPlayer($playerOffen)
+                .tabItem { Label("Hörbücher", systemImage: "books.vertical.fill") }
             NavigationStack { SucheView().ziele() }
                 .miniPlayer($playerOffen)
                 .tabItem { Label("Suchen", systemImage: "magnifyingglass") }
         }
         .sheet(isPresented: $playerOffen) { VollPlayer() }
-        .task(id: client.adresse("ping")) { player.client = client }
+        .task(id: client.adresse("ping")) {
+            player.client = client
+            player.hoerbuchClient = sitzung.hoerbuchClient
+        }
     }
 }
