@@ -2,15 +2,17 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“. Der Dienst selbst ist noch in Arbeit.
+Stand: 08.11.2026, Dienst-Version 1.2.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
-- **Basis-URL:** kommt aus den App-Einstellungen, z. B. `http://<server>:8097`. Der Dienst ist nur im Heimnetz bzw. über VPN erreichbar, ohne öffentlichen Proxy.
+- **Basis-URL:** Der Dienst liegt hinter demselben Reverse-Proxy wie Audiobookshelf, unter dem Pfad `/wunsch-api`: `https://<abs-adresse>/wunsch-api`. Die App kann die Adresse also aus der ABS-Adresse ableiten. Das gilt zu Hause wie unterwegs. Direkt im Heimnetz geht auch `http://<server>:8097`.
 - **Auth:** `Authorization: Bearer <ABS-Token>`, also dasselbe Token, mit dem die App bei Audiobookshelf angemeldet ist. Der Dienst prüft es über `GET <ABS>/api/me` und speichert das Ergebnis 5 Minuten zwischen. Benutzer der Wunschliste ist der ABS-Benutzer (`abs:<ABS-Benutzer-ID>`). Wünschen dürfen nur aktive, nicht gesperrte ABS-Benutzer mit Zugriff auf die Hörbuch-Bibliothek. Ist das Token ungültig oder abgelaufen (ABS-Access-Tokens gelten standardmäßig 1 Stunde), kommt `401`. Die App holt dann bei ABS ein neues Token und versucht es noch einmal. Für Skripte kann der Server zusätzlich eigene Tokens ausgeben (`token-neu`, siehe README).
+- **Fehlversuche:** Nach 10 abgelehnten Anmeldungen in 10 Minuten antwortet der Dienst derselben IP 15 Minuten lang mit `429 zu_viele_versuche`. Die App sollte nach einem 401 also nur einmal mit frischem ABS-Token neu versuchen und nicht in einer Schleife.
+- **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "1.1.0"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "1.2.0"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 

@@ -35,7 +35,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -73,6 +73,8 @@ class Einstellungen:
         self.parallel = int(env("WUNSCH_PARALLEL", "2"))
         self.takt = int(env("WUNSCH_TAKT_SEKUNDEN", "60"))
         self.neuversuch_h = int(env("WUNSCH_NEUVERSUCH_STUNDEN", "24"))
+        # Reverse-Proxys, deren X-Forwarded-For/X-Real-IP geglaubt wird (für die Fehlversuchssperre)
+        self.proxys = {p.strip() for p in env("WUNSCH_PROXYS", "").split(",") if p.strip()}
 
 
 E = None
@@ -132,7 +134,7 @@ def als_json(z):
         d[f] = z[f]
     d["status"] = z["status"]
     if z["hinweis"]:
-        d["hinweis"] = z["hinweis"]
+        d["hinweis"] = bereinigt(z["hinweis"])
     if z["status"] == "laedt" and z["fortschritt"] is not None:
         d["fortschritt"] = z["fortschritt"]
     if z["status"] == "da" and z["absItemId"]:
@@ -693,10 +695,23 @@ class Schnittstelle(BaseHTTPRequestHandler):
     def fehler(self, code, schluessel, text, **extra):
         self.antworte(code, {"fehler": schluessel, "text": text, **extra})
 
+    def absender(self):
+        ip = self.client_address[0]
+        if ip in E.proxys:
+            weiter = self.headers.get("X-Real-IP") or \
+                (self.headers.get("X-Forwarded-For") or "").split(",")[-1].strip()
+            ip = weiter or ip
+        return ip
+
     def benutzer(self):
+        ip = self.absender()
+        if gesperrt(ip):
+            self.fehler(429, "zu_viele_versuche", "Zu viele Fehlversuche, bitte später erneut versuchen")
+            return None
         kopf = self.headers.get("Authorization", "")
         name = benutzer_zu_token(kopf[7:].strip()) if kopf.startswith("Bearer ") else None
         if not name:
+            fehlversuch(ip)
             self.fehler(401, "nicht_angemeldet", "Token fehlt oder ist ungültig")
         return name
 
@@ -831,6 +846,36 @@ class Schnittstelle(BaseHTTPRequestHandler):
                 log(f"{z['id']}: Abbruch in SABnzbd fehlgeschlagen:", f)
         log(f"{z['id']}: zurückgezogen von {name}")
         self.antworte(204)
+
+
+FEHLVERSUCHE = {}
+FEHL_SPERRE = threading.Lock()
+FEHL_GRENZE, FEHL_FENSTER, FEHL_DAUER = 10, 600, 900
+
+
+def fehlversuch(ip):
+    t = time.time()
+    with FEHL_SPERRE:
+        liste = [x for x in FEHLVERSUCHE.get(ip, []) if x > t - FEHL_FENSTER] + [t]
+        FEHLVERSUCHE[ip] = liste
+        if len(FEHLVERSUCHE) > 10000:
+            FEHLVERSUCHE.clear()
+    if len(liste) == FEHL_GRENZE:
+        log(f"Fehlversuche: {ip} für {FEHL_DAUER // 60} Minuten gesperrt")
+
+
+def gesperrt(ip):
+    with FEHL_SPERRE:
+        liste = FEHLVERSUCHE.get(ip, [])
+        return len(liste) >= FEHL_GRENZE and liste[-1] > time.time() - FEHL_DAUER
+
+
+def bereinigt(text):
+    """Keine Server-Details nach außen: Schlüssel, Adressen und Pfade entfernen."""
+    text = re.sub(r"(?i)(api_?key|token)=[^&\s'\"]+", r"\1=…", text)
+    text = re.sub(r"https?://[^\s'\"]+", "…", text)
+    text = re.sub(r"(?<![\w.])/(?:[\w.\- ]+/)+[\w.\- ]*", "…", text)
+    return re.sub(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b", "…", text)
 
 
 def sichtbarer_wunsch(v, wid, name):

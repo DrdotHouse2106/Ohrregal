@@ -30,7 +30,20 @@ cp hoerbuch-wunsch.service /etc/systemd/system/    # Pfade anpassen
 systemctl enable --now hoerbuch-wunsch
 ```
 
-Den Dienst nur im Heimnetz oder über VPN erreichbar machen, nicht öffentlich.
+Von außen erreichbar wird der Dienst am besten über denselben Reverse-Proxy wie Audiobookshelf, als Unterpfad. Beispiel für nginx:
+
+```nginx
+location /wunsch-api/ {
+    proxy_pass http://<dienst-adresse>:8097/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 100k;
+}
+```
+
+Die IP des Proxys gehört in `WUNSCH_PROXYS`, damit die Fehlversuchssperre die echte Absender-IP sieht. Jede Anfrage braucht eine gültige Audiobookshelf-Anmeldung. Nach 10 Fehlversuchen in 10 Minuten ist die IP für 15 Minuten gesperrt.
 
 ## Anmeldung
 
