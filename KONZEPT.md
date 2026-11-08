@@ -247,16 +247,7 @@ Für Hörbücher gibt es kein gepflegtes Gegenstück zu Lidarr mehr. Ohrregal be
 - Zugriff nur im Heimnetz oder über VPN, mit eigenem Token pro Benutzer (`Authorization: Bearer …`). Der Token liegt in der App im Schlüsselbund.
 - Einstellungen nur über Umgebungsvariablen, keine Adressen oder Schlüssel im Repo.
 
-**Schnittstelle für die App:**
-
-| Aufruf | Zweck |
-|---|---|
-| `GET /wunsch` | Wunschliste mit Status |
-| `POST /wunsch` | Hörbuch wünschen (asin, titel, autor, sprecher, reihe, teil, laufzeitMin, sprache, coverUrl) |
-| `DELETE /wunsch/{id}` | Wunsch zurückziehen |
-| `POST /reihe` | Reihe folgen (kann später kommen) |
-
-Die genaue Beschreibung folgt in `Dienst/API.md`.
+**Schnittstelle für die App:** siehe [`Dienst/API.md`](Dienst/API.md). Unter anderem gibt es: Wünschen, Wunschliste mit Fortschritt, Zurückziehen (die Datei bleibt dabei immer erhalten) und Erneut suchen. Reihe folgen kommt in Version 2.
 
 ## 10. TV-App (Fire TV und Android TV)
 
