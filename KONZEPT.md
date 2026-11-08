@@ -1,6 +1,6 @@
 # Ohrregal – Konzept
 
-**Ohrregal** ist eine iPhone-App für Musik und Hörbücher von den eigenen Servern:
+**Ohrregal** ist eine App für Musik und Hörbücher von den eigenen Servern, für das **iPhone** und für **Fire TV / Android TV**:
 
 - **Musik** aus **Navidrome** (Subsonic- bzw. OpenSubsonic-API)
 - **Hörbücher** aus **Audiobookshelf**
@@ -175,7 +175,26 @@ protocol Ausgabeziel {
 
 Erste Umsetzung: **Dieses iPhone**. AirPlay läuft über das System. Später kommt der **Heim-Satellit** dazu, zum Beispiel Snapcast, Music Assistant oder ein eigener Empfänger auf einem Raspberry Pi oder ESP32, als Ersatz für die HomePods.
 
-## 8. Fahrplan
+## 8. TV-App (Fire TV und Android TV)
+
+Gleicher Name, gleiche Optik, gleiche Tabs, aber für die Fernbedienung gebaut. Gedacht für Fire TV Sticks und Android-TV-Sticks, nicht für Handys.
+
+- **Bedienung mit dem Steuerkreuz:** große Cover, deutlicher Fokusrahmen in Quallen-Blau. P1 und P2 gelten genauso: Fokus und Position bleiben nach dem Zurückgehen erhalten.
+- **Start, Musik, Hörbücher, Suchen** wie auf dem iPhone, Suche auch per Sprache, sofern die Fernbedienung das kann
+- **Vollbild-Player:** großes Cover, Farbverlauf, Songtext, Bildschirmschoner mit Cover
+- **Weiterhören zwischen den Geräten:** Hörbuch-Position über Audiobookshelf, Musik-Warteschlange über `savePlayQueue`/`getPlayQueue`. Was am iPhone läuft, kann am Fernseher weiterlaufen und umgekehrt.
+- **Wiedergabe im Hintergrund**, Steuerung über die Fernbedienungstasten
+- **Später als Ausgabeziel:** Das iPhone kann den Fernseher als Lautsprecher wählen, wie einen Heim-Satelliten.
+
+**Technik:**
+
+- Kotlin, Jetpack Compose for TV, Media3 (ExoPlayer) mit `MediaSessionService`
+- Ab Android 7 (API 24), das deckt alle aktuellen Fire TV Sticks ab
+- Gleiche Farben und Wortwahl; die Server-Zugriffe folgen Kapitel 6.
+- Liegt im selben Repo im Ordner `TV/`.
+- GitHub baut die APK kostenlos. Installation per „Downloader“-App über einen festen Link zur neuesten Version, ohne Entwicklerkonto.
+
+## 9. Fahrplan
 
 | Stufe | Inhalt |
 |---|---|
@@ -183,12 +202,14 @@ Erste Umsetzung: **Dieses iPhone**. AirPlay läuft über das System. Später kom
 | **2 – Vorschläge und offline** | lokaler Hörverlauf, Mixe, „Spiel etwas für mich“, Radio, Downloads, Songtexte, Weiterhören an anderen Geräten |
 | **3 – Hörbücher** | Audiobookshelf, Hörbuch-Player, P3, Offline-Fortschritt, Hörbücher in CarPlay |
 | **4 – Apple Watch** | Steuerung, danach eigene Offline-Wiedergabe |
-| **5 – Heim-Satellit** | weitere Ausgabeziele, Raumauswahl |
+| **5 – TV-App** | Fire TV / Android TV mit Musik und Hörbüchern, Weiterhören zwischen den Geräten |
+| **6 – Heim-Satellit** | weitere Ausgabeziele, Raumauswahl |
 | **später** | Widgets, Siri-Kurzbefehle, Equalizer, Crossfade, „Wer hört?“ |
 
-## 9. Voraussetzungen
+## 10. Voraussetzungen
 
 - Mac mit aktuellem Xcode zum Bauen
 - Apple-Entwicklerkonto (für Gerät, TestFlight, CarPlay)
 - **CarPlay-Freigabe** (Audio) bei Apple beantragen, möglichst früh
+- Für die TV-App: nichts Zusätzliches; GitHub baut die APK
 - Navidrome mit Last.fm-Anbindung, optional Audiobookshelf

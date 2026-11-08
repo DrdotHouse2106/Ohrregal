@@ -1,11 +1,12 @@
 # Ohrregal
 
-Musik und Hörbücher von den eigenen Servern – in einer iPhone-App, die sich anfühlt wie Apple Music.
+Musik und Hörbücher von den eigenen Servern – auf dem iPhone mit dem Gefühl von Apple Music, und auf Fire TV / Android TV.
 
 - **Musik** aus [Navidrome](https://www.navidrome.org/) (Subsonic- bzw. OpenSubsonic-API)
 - **Hörbücher** aus [Audiobookshelf](https://www.audiobookshelf.org/)
 - **Vorschläge** aus deinem eigenen Hörverhalten, ausgewertet auf dem iPhone
 - **CarPlay** und **Apple Watch**
+- **TV-App** für Fire TV und Android TV
 - Optik und Wortwahl passend zu Quallenkino
 
 > [!NOTE]
