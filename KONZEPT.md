@@ -179,25 +179,35 @@ Erste Umsetzung: **Dieses iPhone**. AirPlay läuft über das System. Später kom
 
 Ohrregal zeigt, was in der Bibliothek fehlt, und gibt es mit einem Tipp an **Lidarr** weiter. Das ist dasselbe Prinzip wie die fehlenden Welt-Titel mit Jellyseerr in Quallenkino.
 
-- **Künstlerseite:**
-  - Reihe „Fehlt noch“ mit den Alben, die Lidarr kennt, die aber nicht in Navidrome liegen
-  - Knopf „Wünschen“ bei jedem Album
-- **Für dich – Neue Künstler:** ähnliche Künstler von Last.fm, die noch nicht in der Bibliothek sind; „Künstler hinzufügen“ legt sie in Lidarr an.
-- **Neuerscheinungen deiner Künstler:** Lidarr-Kalender, auch mit Alben, die noch nicht erschienen sind
-- **Suche:** Wird etwas nicht gefunden, zeigt die Suche „Bei Lidarr suchen“.
-- **Status:** Bei gewünschten Alben steht „gewünscht“, „wird geladen“ oder „da“.
+**Grundregel: Gewünscht werden einzelne Alben, keine ganzen Diskografien.** Lidarr selbst fügt nichts mehr automatisch hinzu; Wünsche kommen aus Ohrregal.
 
-**Schnittstellen:**
+- **Album wünschen** (Standard): überall, wo ein Album fehlt – Künstlerseite, Suche, Neuerscheinungen.
+- **Künstler folgen** (bewusste Zusatzaktion): nur künftige Alben werden überwacht, nie die ganze Diskografie.
+- **Künstlerseite:** Reihe „Fehlt noch“ mit überwachten, aber fehlenden Alben, darunter weitere Alben zum Wünschen.
+- **Für dich – Neue Künstler:** ähnliche Künstler von Last.fm, die noch nicht in der Bibliothek sind; angeboten werden ihre bekanntesten Alben zum Wünschen.
+- **Neuerscheinungen deiner Künstler:** Lidarr-Kalender
+- **Suche:** Wird etwas nicht gefunden, zeigt die Suche „Bei Lidarr suchen“. Liefert Lidarr nichts, steht dort „Bei Lidarr nicht gefunden“. Das kommt vor, weil MusicBrainz bei Nischenkünstlern Lücken hat.
+- **Status:** „gewünscht“, „wird geladen“ oder „da“.
 
-- `GET /api/v1/artist/lookup`, `GET /api/v1/album/lookup`
-- `POST /api/v1/artist` (mit `addOptions.searchForMissingAlbums`), `PUT /api/v1/album/monitor`, `POST /api/v1/command` (`AlbumSearch`)
-- `GET /api/v1/calendar`, `GET /api/v1/queue`
+**Abläufe:**
+
+| Fall | Aufrufe |
+|---|---|
+| Album suchen | `GET /api/v1/album/lookup?term=<Künstler Album>` |
+| Künstler noch nicht in Lidarr | `POST /api/v1/album` mit dem Lookup-Album, `monitored=true`, `addOptions.searchForNewAlbum=true`; im eingebetteten `artist`: Qualitäts- und Metadatenprofil, Stammordner, `monitorNewItems="none"`, `addOptions.monitor="none"`. So wird nur dieses Album überwacht und sofort gesucht. |
+| Künstler schon in Lidarr | Album über `album/lookup` bzw. `GET /api/v1/album?artistId=…` finden, dann `PUT /api/v1/album/monitor` und `POST /api/v1/command` mit `AlbumSearch` |
+| Künstler folgen | nur neue Alben überwachen (`monitorNewItems="all"`, vorhandene Alben unverändert), **nie** die ganze Diskografie |
+| Fehlt noch | `GET /api/v1/wanted/missing?monitored=true` |
+| Status | `GET /api/v1/queue`, Album-Statistik (`statistics.trackFileCount`) |
+| Neuerscheinungen | `GET /api/v1/calendar` |
+
+Profile und Stammordner sind in den Einstellungen wählbar (aus `qualityprofile`, `metadataprofile`, `rootfolder`). Die Feldnamen vor dem Einbau gegen die Lidarr-Version des Servers prüfen.
 
 **Erreichbarkeit und Sicherheit:**
 
-- Lidarr ist nur im Heimnetz erreichbar und soll das auch bleiben. Die App nutzt Lidarr deshalb nur zu Hause oder über VPN.
+- Lidarr ist nur im Heimnetz bzw. über VPN erreichbar und soll das auch bleiben.
 - Wünsche von unterwegs landen in einer **Wunschliste** und werden geschickt, sobald Lidarr erreichbar ist.
-- Der API-Schlüssel gibt vollen Zugriff auf Lidarr. Er liegt nur im Schlüsselbund und ist nur in den Einstellungen sichtbar. Ohne Schlüssel blendet die App alle Lidarr-Funktionen aus.
+- Der API-Schlüssel gibt vollen Zugriff auf Lidarr. Er liegt nur im Schlüsselbund. Ohne Schlüssel blendet die App alle Lidarr-Funktionen aus.
 
 ## 9. TV-App (Fire TV und Android TV)
 
@@ -224,7 +234,7 @@ Gleicher Name, gleiche Optik, gleiche Tabs, aber für die Fernbedienung gebaut. 
 |---|---|
 | **1 – Grundversion Musik** | Anmeldung Navidrome, Bibliothek, Suche, Player mit Sperrbildschirm und AirPlay, Startseite mit Server-Reihen, Scrobbling, P1, P2, **CarPlay** |
 | **2 – Vorschläge und offline** | lokaler Hörverlauf, Mixe, „Spiel etwas für mich“, Radio, Downloads, Songtexte, Weiterhören an anderen Geräten |
-| **2b – Lidarr** | Fehlende Alben, neue Künstler, Wunschliste |
+| **2b – Lidarr** | Einzelne Alben wünschen, Künstler folgen (nur neue Alben), Fehlt noch, Wunschliste |
 | **3 – Hörbücher** | Audiobookshelf, Hörbuch-Player, P3, Offline-Fortschritt, Hörbücher in CarPlay |
 | **4 – Apple Watch** | Steuerung, danach eigene Offline-Wiedergabe |
 | **TV-App (parallel ab Stufe 1)** | Fire TV / Android TV mit Musik und Hörbüchern, Weiterhören zwischen den Geräten |
