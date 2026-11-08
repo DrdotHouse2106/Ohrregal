@@ -22,7 +22,7 @@ extension View {
 enum Ziel: Hashable {
     case kuenstler, alben, playlists, favoriten, wuensche
     case bibliothek(Bibliothek)
-    case genre(Bibliothek, String)
+    case genre(Bibliothek, String, [String])
     /// Hörbuch, von dem nur die Audiobookshelf-ID bekannt ist (z. B. fertiger Wunsch).
     case hoerbuch(String)
     case stoebern
@@ -36,7 +36,7 @@ enum Ziel: Hashable {
         case .favoriten: FavoritenView()
         case .wuensche: WunschView()
         case .bibliothek(let b): BibliothekView(bibliothek: b)
-        case .genre(let b, let g): BibliothekView(bibliothek: b, genre: g)
+        case .genre(let b, let g, let originale): BibliothekView(bibliothek: b, genre: g, genres: originale)
         case .hoerbuch(let id): HoerbuchLaden(id: id)
         case .stoebern: StoebernView()
         case .kategorie(let k): KategorieView(kategorie: k)

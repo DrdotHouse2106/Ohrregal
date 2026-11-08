@@ -8,7 +8,8 @@ struct HoerbuecherView: View {
     @State private var bibliotheken: [Bibliothek] = []
     @State private var neu: [Hoerbuch] = []
     @State private var entdecken: [BuchTreffer] = []
-    @State private var genres: [(Bibliothek, String)] = []
+    /// Deutscher Name → Bibliothek und alle Originalnamen, die darin zusammengefasst sind.
+    @State private var genres: [(Bibliothek, String, [String])] = []
     @State private var fehler: String?
 
     var body: some View {
@@ -33,8 +34,8 @@ struct HoerbuecherView: View {
                                 Text("Genres").font(.title2.bold()).padding(.horizontal)
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     LazyHGrid(rows: [GridItem(.fixed(40)), GridItem(.fixed(40))], spacing: 10) {
-                                        ForEach(genres, id: \.1) { b, g in
-                                            NavigationLink(value: Ziel.genre(b, g)) {
+                                        ForEach(genres, id: \.1) { b, g, originale in
+                                            NavigationLink(value: Ziel.genre(b, g, originale)) {
                                                 Text(g).font(.subheadline)
                                                     .padding(.horizontal, 14).frame(height: 36)
                                                     .background(Farben.flaeche, in: Capsule())
@@ -85,16 +86,21 @@ struct HoerbuecherView: View {
             angefangen = try await abs.angefangen()
             // Neu und Genres aus allen Hörbuch-Bibliotheken.
             var neuAlle: [Hoerbuch] = []
-            var genresAlle: [(Bibliothek, String)] = []
+            var genresAlle: [(Bibliothek, String, [String])] = []
             for b in bibliotheken {
                 neuAlle += (try? await abs.hoerbuecher(in: b.id, seite: 0, anzahl: 20, neuesteZuerst: true)) ?? []
-                for g in (try? await abs.genres(in: b.id)) ?? [] where !genresAlle.contains(where: { $0.1 == g }) {
-                    genresAlle.append((b, g))
+                for original in (try? await abs.genres(in: b.id)) ?? [] {
+                    guard let name = Genres.deutsch(original) else { continue }
+                    if let i = genresAlle.firstIndex(where: { $0.1 == name }) {
+                        if genresAlle[i].0 == b { genresAlle[i].2.append(original) }
+                    } else {
+                        genresAlle.append((b, name, [original]))
+                    }
                 }
             }
             neu = Array(neuAlle.prefix(20))
             entdecken = await abs.entdecken(neu: nachladen)
-            genres = genresAlle
+            genres = genresAlle.sorted { $0.1.localizedCompare($1.1) == .orderedAscending }
             fehler = nil
         } catch {
             fehler = error.localizedDescription
@@ -191,7 +197,9 @@ struct HoerbuchReihe: View {
 struct BibliothekView: View {
     @Environment(Sitzung.self) private var sitzung
     let bibliothek: Bibliothek
+    /// Anzeigename und die Originalnamen in Audiobookshelf (mehrere, wenn zusammengefasst).
     var genre: String?
+    var genres: [String] = []
     @State private var hoerbuecher: [Hoerbuch] = []
     @State private var ende = false
     @State private var text = ""
@@ -220,10 +228,21 @@ struct BibliothekView: View {
         .task { if hoerbuecher.isEmpty { await nachladen() } }
     }
 
+    /// Nächste Seite; bei zusammengefassten Genres alle Teile auf einmal, nach Titel sortiert.
+    private func seite(_ abs: AudiobookshelfClient) async -> [Hoerbuch]? {
+        if genres.count > 1 {
+            var alle: [Hoerbuch] = []
+            for g in genres { alle += (try? await abs.hoerbuecher(in: bibliothek.id, seite: 0, anzahl: 200, genre: g)) ?? [] }
+            ende = true
+            return alle.sorted { $0.titel.localizedCompare($1.titel) == .orderedAscending }
+        }
+        return try? await abs.hoerbuecher(in: bibliothek.id, seite: hoerbuecher.count / 60, genre: genres.first)
+    }
+
     private func nachladen() async {
         guard !ende, let abs = sitzung.hoerbuchClient,
-              let neu = try? await abs.hoerbuecher(in: bibliothek.id, seite: hoerbuecher.count / 60, genre: genre) else { return }
-        ende = neu.count < 60
+              let neu = await seite(abs) else { return }
+        ende = ende || neu.count < 60
         hoerbuecher += neu.filter { n in !hoerbuecher.contains { $0.id == n.id } }
     }
 }
