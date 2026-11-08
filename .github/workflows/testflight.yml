@@ -6,6 +6,7 @@ name: TestFlight
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'TV/**']
   workflow_dispatch:
 
 concurrency: testflight
