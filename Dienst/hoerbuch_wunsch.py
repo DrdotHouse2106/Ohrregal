@@ -35,7 +35,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -63,6 +63,9 @@ class Einstellungen:
         self.sab_pfade = [p.split("=", 1) for p in env("SAB_PFADE", "").split(";") if "=" in p]
         self.bibliothek = env("BIBLIOTHEK", pflicht=True).rstrip("/")
         self.abs_db = env("ABS_DATENBANK", "")
+        # Anmeldung mit dem Audiobookshelf-Token der App (GET /api/me)
+        self.abs_url = env("ABS_URL", "").rstrip("/")
+        self.abs_bibliothek = env("ABS_BIBLIOTHEK_ID", "")
         # Pfad der Bibliothek, wie Audiobookshelf ihn sieht (für absItemId)
         self.abs_pfad = env("ABS_BIBLIOTHEK_PFAD", "").rstrip("/")
         self.ntfy = env("NTFY_URL", "")
@@ -164,6 +167,42 @@ def hash_token(t):
     return hashlib.sha256(t.encode()).hexdigest()
 
 
+ABS_CACHE = {}
+ABS_CACHE_SPERRE = threading.Lock()
+ABS_CACHE_SEKUNDEN = 300
+
+
+def abs_benutzer(token):
+    """Prüft ein Audiobookshelf-Token über /api/me; Ergebnis 5 Minuten zwischengespeichert."""
+    if not E.abs_url:
+        return None
+    h = hash_token(token)
+    with ABS_CACHE_SPERRE:
+        z = ABS_CACHE.get(h)
+        if z and z[1] > time.time():
+            return z[0]
+    try:
+        me = json.loads(hole(E.abs_url + "/api/me", kopf={"Authorization": "Bearer " + token}, zeit=10))
+    except urllib.error.HTTPError:
+        return None  # 401/403: Token ungültig oder abgelaufen
+    except Exception as f:
+        log("Audiobookshelf nicht erreichbar:", f)
+        return None
+    if not me.get("id") or me.get("isActive") is False or me.get("isLocked"):
+        return None
+    if E.abs_bibliothek:
+        rechte = me.get("permissions") or {}
+        if not rechte.get("accessAllLibraries") and \
+                E.abs_bibliothek not in (me.get("librariesAccessible") or []):
+            return None
+    name = "abs:" + me["id"]
+    with ABS_CACHE_SPERRE:
+        if len(ABS_CACHE) > 1000:
+            ABS_CACHE.clear()
+        ABS_CACHE[h] = (name, time.time() + ABS_CACHE_SEKUNDEN)
+    return name
+
+
 def benutzer_zu_token(token):
     if not token:
         return None
@@ -171,7 +210,7 @@ def benutzer_zu_token(token):
     for name, gespeichert in tokens_lesen().items():
         if secrets.compare_digest(gespeichert, h):
             return name
-    return None
+    return abs_benutzer(token)
 
 
 # ---------------------------------------------------------------- HTTP-Helfer

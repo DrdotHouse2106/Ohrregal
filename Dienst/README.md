@@ -32,15 +32,17 @@ systemctl enable --now hoerbuch-wunsch
 
 Den Dienst nur im Heimnetz oder über VPN erreichbar machen, nicht öffentlich.
 
-## Token pro Benutzer
+## Anmeldung
+
+Die App schickt ihr Audiobookshelf-Token mit. Der Dienst prüft es über `ABS_URL/api/me`. Eigene Zugangsdaten braucht es dafür nicht. Mit `ABS_BIBLIOTHEK_ID` dürfen nur Benutzer mit Zugriff auf diese Bibliothek wünschen.
+
+Für Skripte gibt es zusätzlich eigene Tokens:
 
 ```sh
 # gibt den Token einmal aus, gespeichert wird nur sein SHA-256-Hash
 env WUNSCH_TOKENS=/var/lib/hoerbuch-wunsch/tokens.json python3 hoerbuch_wunsch.py token-neu <name>
 env WUNSCH_TOKENS=/var/lib/hoerbuch-wunsch/tokens.json python3 hoerbuch_wunsch.py token-weg <name>
 ```
-
-Den Token tragen Benutzer in Ohrregal unter Einstellungen → Hörbuchwunsch zusammen mit der Adresse ein.
 
 ## Suche testen, ohne etwas zu laden
 

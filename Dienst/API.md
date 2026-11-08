@@ -7,10 +7,10 @@ Stand: 08.11.2026. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 ## Grundsätzliches
 
 - **Basis-URL:** kommt aus den App-Einstellungen, z. B. `http://<server>:8097`. Der Dienst ist nur im Heimnetz bzw. über VPN erreichbar, ohne öffentlichen Proxy.
-- **Auth:** `Authorization: Bearer <token>`, ein Token pro Benutzer. Ohne Token oder mit falschem Token kommt `401`. Die App speichert den Token im Schlüsselbund.
+- **Auth:** `Authorization: Bearer <ABS-Token>`, also dasselbe Token, mit dem die App bei Audiobookshelf angemeldet ist. Der Dienst prüft es über `GET <ABS>/api/me` und speichert das Ergebnis 5 Minuten zwischen. Benutzer der Wunschliste ist der ABS-Benutzer (`abs:<ABS-Benutzer-ID>`). Wünschen dürfen nur aktive, nicht gesperrte ABS-Benutzer mit Zugriff auf die Hörbuch-Bibliothek. Ist das Token ungültig oder abgelaufen (ABS-Access-Tokens gelten standardmäßig 1 Stunde), kommt `401`. Die App holt dann bei ABS ein neues Token und versucht es noch einmal. Für Skripte kann der Server zusätzlich eigene Tokens ausgeben (`token-neu`, siehe README).
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "1.0.0"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "1.1.0"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
