@@ -157,3 +157,10 @@ public struct GefolgteReihe: Decodable, Hashable, Identifiable, Sendable {
         return teile.joined(separator: " · ")
     }
 }
+
+/// Audible-Kategorie zum Stöbern (Dienst „Hörbuchwunsch“, `GET /kategorien`).
+public struct Kategorie: Decodable, Hashable, Identifiable, Sendable {
+    public let id: String
+    public let name: String
+    public let unter: [Kategorie]?
+}

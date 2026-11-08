@@ -52,6 +52,9 @@ struct HoerbuecherView: View {
                                     Zeile(text: b.name, symbol: "books.vertical")
                                 }
                             }
+                            NavigationLink(value: Ziel.stoebern) {
+                                Zeile(text: "Stöbern", symbol: "square.grid.2x2")
+                            }
                             NavigationLink(value: Ziel.wuensche) {
                                 Zeile(text: "Hörbuch wünschen", symbol: "sparkles")
                             }

@@ -121,6 +121,20 @@ public final class AudiobookshelfClient {
     }
 
     /// Vorschläge von Audible passend zum Hörverlauf (Dienst „Hörbuchwunsch“). Leer, solange der Dienst sie nicht anbietet.
+    public func kategorien() async throws -> [Kategorie] {
+        struct Liste: Decodable { let kategorien: [Kategorie] }
+        let liste: Liste = try await hole("/wunsch-api/kategorien")
+        return liste.kategorien
+    }
+
+    /// Beliebte oder neue Hörbücher einer Kategorie.
+    public func stoebern(_ kategorie: String, neueste: Bool, neu: Bool = false) async throws -> [BuchTreffer] {
+        struct Liste: Decodable { let treffer: [BuchTreffer] }
+        let pfad = "/wunsch-api/stoebern?kategorie=\(Self.kodiert(kategorie))&sortierung=\(neueste ? "neu" : "beliebt")" + (neu ? "&neu=1" : "")
+        let liste: Liste = try await hole(pfad)
+        return liste.treffer
+    }
+
     public func entdecken(neu: Bool = false) async -> [BuchTreffer] {
         struct Liste: Decodable { let treffer: [BuchTreffer] }
         return ((try? await hole("/wunsch-api/entdecken" + (neu ? "?neu=1" : ""))) as Liste?)?.treffer ?? []

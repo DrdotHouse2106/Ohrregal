@@ -25,6 +25,8 @@ enum Ziel: Hashable {
     case genre(Bibliothek, String)
     /// Hörbuch, von dem nur die Audiobookshelf-ID bekannt ist (z. B. fertiger Wunsch).
     case hoerbuch(String)
+    case stoebern
+    case kategorie(Kategorie)
 
     @ViewBuilder var ansicht: some View {
         switch self {
@@ -36,6 +38,8 @@ enum Ziel: Hashable {
         case .bibliothek(let b): BibliothekView(bibliothek: b)
         case .genre(let b, let g): BibliothekView(bibliothek: b, genre: g)
         case .hoerbuch(let id): HoerbuchLaden(id: id)
+        case .stoebern: StoebernView()
+        case .kategorie(let k): KategorieView(kategorie: k)
         }
     }
 }
