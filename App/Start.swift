@@ -8,6 +8,7 @@ struct StartView: View {
     @State private var reihen: [Reihe] = []
     @State private var zufallsTitel: [Titel] = []
     @State private var fehler: String?
+    @State private var zugaengeOffen = false
 
     struct Reihe: Identifiable {
         let titel: String
@@ -46,11 +47,13 @@ struct StartView: View {
         .navigationTitle("Start")
         .toolbar {
             Menu {
+                Button("Zugänge", systemImage: "key") { zugaengeOffen = true }
                 Button("Abmelden", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { sitzung.abmelden() }
             } label: {
                 Image(systemName: "person.crop.circle")
             }
         }
+        .sheet(isPresented: $zugaengeOffen) { Anmeldung() }
         .refreshable { await laden() }
         .task { if reihen.isEmpty { await laden() } }
         .overlay {

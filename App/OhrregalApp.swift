@@ -95,6 +95,6 @@ struct Hauptansicht: View {
                 .tabItem { Label("Suchen", systemImage: "magnifyingglass") }
         }
         .sheet(isPresented: $playerOffen) { VollPlayer() }
-        .task { player.client = client }
+        .task(id: client.adresse("ping")) { player.client = client }
     }
 }
