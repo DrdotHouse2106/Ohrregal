@@ -1,0 +1,7 @@
+*.env
+!beispiel.env
+*.sqlite
+*.sqlite-*
+tokens.json
+__pycache__/
+*.log

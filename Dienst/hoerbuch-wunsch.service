@@ -1,0 +1,22 @@
+[Unit]
+Description=Hörbuchwunsch für Ohrregal
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Benutzer mit Schreibrecht auf die Bibliothek (meist dieselbe UID wie Audiobookshelf)
+User=medien
+Group=medien
+EnvironmentFile=/etc/hoerbuch-wunsch/zugang.env
+ExecStart=/usr/bin/python3 -u /opt/hoerbuch-wunsch/hoerbuch_wunsch.py dienst
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Bibliothek und fertiger Download-Ordner von SABnzbd anpassen
+ReadWritePaths=/var/lib/hoerbuch-wunsch /pfad/zur/hoerbuch-bibliothek /pfad/zu/sabnzbd/complete
+
+[Install]
+WantedBy=multi-user.target
