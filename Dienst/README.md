@@ -6,7 +6,7 @@ Ein kleiner Dienst für den eigenen Server. Er nimmt in Ohrregal gewünschte Hö
 2. **Bewerten:** Titel und Autor müssen passen. „Ungekürzt“ zählt mehr als „gekürzt“. Hörspiel-, Kinder- und Lesungsfassungen werden aussortiert. Die Größe muss zur Laufzeit passen, die Sprache zum Wunsch. Sammelpakete gelten nur als Notlösung.
 3. **Laden** mit SABnzbd in eine eigene Kategorie, deren Ordner nicht in der Bibliothek liegt.
 4. **Einsortieren** als `Autor/Reihe/Teil - Titel` in die Audiobookshelf-Bibliothek, zusammen mit `metadata.json` (inkl. ASIN) und Cover. Das Buch wird erst in einem versteckten Arbeitsordner zusammengesetzt und dann in einem Schritt verschoben. So liest Audiobookshelf nie ein halbes Buch ein.
-5. **Melden:** Der Status wird `da` und es kommt eine Push-Nachricht über ntfy (optional).
+5. **Melden:** Der Status wird `da`. Über Apple Push kommt eine Nachricht direkt in Ohrregal (APNs mit .p8-Schlüssel, `APNS_*`), wahlweise zusätzlich über ntfy. Für HTTP/2 und die Signatur nutzt der Dienst `curl` und `openssl` des Systems.
 
 Was nicht gefunden wird, sucht der Dienst nach 24 Stunden erneut. Es laufen höchstens `WUNSCH_PARALLEL` Wünsche gleichzeitig. **Aus der Bibliothek wird nie etwas gelöscht.** Auch das Zurückziehen eines fertigen Wunsches entfernt nur den Listeneintrag.
 

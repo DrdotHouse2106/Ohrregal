@@ -22,6 +22,8 @@ import os
 import re
 import secrets
 import shutil
+import subprocess
+import tempfile
 import sqlite3
 import sys
 import threading
@@ -35,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -70,6 +72,11 @@ class Einstellungen:
         self.abs_pfad = env("ABS_BIBLIOTHEK_PFAD", "").rstrip("/")
         self.ntfy = env("NTFY_URL", "")
         self.ntfy_token = env("NTFY_TOKEN", "")
+        # Push direkt in die App über Apple (APNs, Token-Auth mit .p8-Schlüssel)
+        self.apns_schluessel = env("APNS_SCHLUESSEL", "")
+        self.apns_key_id = env("APNS_KEY_ID", "")
+        self.apns_team_id = env("APNS_TEAM_ID", "")
+        self.apns_topic = env("APNS_TOPIC", "")
         self.parallel = int(env("WUNSCH_PARALLEL", "2"))
         self.takt = int(env("WUNSCH_TAKT_SEKUNDEN", "60"))
         self.neuversuch_h = int(env("WUNSCH_NEUVERSUCH_STUNDEN", "24"))
@@ -116,6 +123,9 @@ def db_anlegen():
           versuche INTEGER NOT NULL DEFAULT 0,
           nzo TEXT, guid TEXT, release TEXT, ziel TEXT, fertigSeit TEXT,
           verworfen TEXT NOT NULL DEFAULT '[]', zurueckgezogen INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS geraet (
+          token TEXT PRIMARY KEY, benutzer TEXT NOT NULL, umgebung TEXT NOT NULL,
+          erstellt TEXT NOT NULL, aktualisiert TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS interesse (
           wunsch TEXT NOT NULL, benutzer TEXT NOT NULL, PRIMARY KEY (wunsch, benutzer));
         """)
@@ -242,6 +252,93 @@ def sab_pfad(p):
         if p.startswith(sab_p):
             return dienst_p + p[len(sab_p):]
     return p
+
+
+APNS_HOST = {"produktion": "https://api.push.apple.com", "sandbox": "https://api.sandbox.push.apple.com"}
+APNS_JWT = {"wert": None, "zeit": 0}
+
+
+def b64url(b):
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def der_zu_roh(der):
+    """ECDSA-Signatur von DER (openssl) in r||s (JWT ES256) umwandeln."""
+    def lies(i):
+        assert der[i] == 0x02
+        n = der[i + 1]
+        return der[i + 2:i + 2 + n], i + 2 + n
+    i = 2 if der[1] < 0x80 else 3
+    r, i = lies(i)
+    s_, _ = lies(i)
+    return r.lstrip(b"\0").rjust(32, b"\0") + s_.lstrip(b"\0").rjust(32, b"\0")
+
+
+def apns_jwt():
+    if APNS_JWT["wert"] and time.time() - APNS_JWT["zeit"] < 40 * 60:
+        return APNS_JWT["wert"]
+    kopf = b64url(json.dumps({"alg": "ES256", "kid": E.apns_key_id}).encode())
+    inhalt = b64url(json.dumps({"iss": E.apns_team_id, "iat": int(time.time())}).encode())
+    signiert = f"{kopf}.{inhalt}".encode()
+    der = subprocess.run(["openssl", "dgst", "-sha256", "-sign", E.apns_schluessel],
+                         input=signiert, capture_output=True, check=True).stdout
+    APNS_JWT.update(wert=f"{kopf}.{inhalt}.{b64url(der_zu_roh(der))}", zeit=time.time())
+    return APNS_JWT["wert"]
+
+
+def apns_senden(geraet, umgebung, nutzlast):
+    """Gibt (HTTP-Code, Grund) zurück. HTTP/2 über curl, weil Python es nicht eingebaut hat."""
+    with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
+        json.dump(nutzlast, f, ensure_ascii=False)
+        f.flush()
+        a = subprocess.run(
+            ["curl", "-s", "--http2", "-m", "20", "-w", "\n%{http_code}",
+             "-H", "authorization: bearer " + apns_jwt(), "-H", "apns-topic: " + E.apns_topic,
+             "-H", "apns-push-type: alert", "-H", "apns-priority: 10",
+             "--data-binary", "@" + f.name,
+             f"{APNS_HOST.get(umgebung, APNS_HOST['produktion'])}/3/device/{geraet}"],
+            capture_output=True, text=True)
+    *koerper, code = (a.stdout or "\n0").rsplit("\n", 1)
+    grund = ""
+    try:
+        grund = json.loads(koerper[0]).get("reason", "") if koerper and koerper[0] else ""
+    except ValueError:
+        pass
+    return int(code or 0), grund
+
+
+def melden(w, art):
+    """Push an alle Geräte der Benutzer, die diesen Wunsch haben."""
+    if art == "da":
+        titel, text = "Hörbuch ist da", f"{w['titel']} – {w['autor']}"
+    else:
+        titel, text = "Hörbuch noch nicht gefunden", f"{w['titel']} – sucht weiter"
+    push(titel, text)
+    if not (E.apns_schluessel and E.apns_key_id and E.apns_team_id and E.apns_topic):
+        return
+    with db() as v:
+        z = v.execute("SELECT absItemId FROM wunsch WHERE id=?", (w["id"],)).fetchone()
+        benutzer = [w["benutzer"]] + [r[0] for r in v.execute(
+            "SELECT benutzer FROM interesse WHERE wunsch=?", (w["id"],))]
+        geraete = v.execute("SELECT token, umgebung FROM geraet WHERE benutzer IN (%s)"
+                            % ",".join("?" * len(benutzer)), benutzer).fetchall()
+    nutzlast = {"aps": {"alert": {"title": titel, "body": text}, "sound": "default"}, "wunschId": w["id"]}
+    if z and z[0]:
+        nutzlast["absItemId"] = z[0]
+    for token, umgebung in geraete:
+        try:
+            code, grund = apns_senden(token, umgebung, nutzlast)
+        except Exception as f:
+            log(f"{w['id']}: APNs fehlgeschlagen:", f)
+            continue
+        if code == 410 or grund in ("BadDeviceToken", "Unregistered", "DeviceTokenNotForTopic"):
+            with DB_SPERRE, db() as v:
+                v.execute("DELETE FROM geraet WHERE token=?", (token,))
+            log(f"{w['id']}: Gerät abgemeldet ({grund or code})")
+        elif code != 200:
+            log(f"{w['id']}: APNs {code} {grund}")
+            if code == 403:
+                APNS_JWT["wert"] = None
 
 
 def push(titel, text, wunsch_id=None):
@@ -483,6 +580,7 @@ def bearbeite_suche(w):
     vorhanden = abs_vorhanden(w["asin"], w["titel"], w["autor"])
     if vorhanden:
         setze(wid, status="da", absItemId=vorhanden, hinweis="war schon in der Bibliothek")
+        melden(w, "da")
         return
     treffer, gruende, anzahl = suche(w)
     verworfen = set(json.loads(w["verworfen"]))
@@ -497,6 +595,8 @@ def bearbeite_suche(w):
         setze(wid, status="nicht_gefunden", hinweis=grund, versuche=versuche,
               naechsterVersuch=(jetzt() + timedelta(hours=E.neuversuch_h)).isoformat())
         log(f"{wid}: nicht gefunden – {grund}")
+        if w["status"] == "gewuenscht" and w["versuche"] == 0:
+            melden(w, "nicht_gefunden")  # nur beim ersten Mal
         return
     bester = treffer[0]
     try:
@@ -625,7 +725,7 @@ def pruefe_abs(w):
     if lid or jetzt() - seit > timedelta(hours=2) or not E.abs_db:
         hinweis = None if lid else "Liegt in der Bibliothek, Audiobookshelf hat es noch nicht eingelesen"
         setze(w["id"], status="da", absItemId=lid, hinweis=hinweis, nzo=None)
-        push("Hörbuch ist da", f"{w['titel']} – {w['autor']}", w["id"])
+        melden(w, "da")
         log(f"{w['id']}: da")
 
 
@@ -765,6 +865,21 @@ class Schnittstelle(BaseHTTPRequestHandler):
             return
         if teile[:1] == ["reihe"]:
             return self.fehler(501, "noch_nicht", "Reihen folgen kommt in Version 2")
+        if teile == ["geraet"]:
+            try:
+                d = self.koerper()
+            except (ValueError, json.JSONDecodeError):
+                return self.fehler(400, "ungueltig", "Kein gültiges JSON-Objekt")
+            token = str(d.get("apnsToken") or "").strip().lower()
+            umgebung = d.get("umgebung") or "produktion"
+            if not re.fullmatch(r"[0-9a-f]{32,200}", token) or umgebung not in APNS_HOST:
+                return self.fehler(400, "ungueltig", "apnsToken (hex) und umgebung (produktion|sandbox) nötig")
+            t = jetzt().isoformat()
+            with DB_SPERRE, db() as v:
+                v.execute("INSERT INTO geraet VALUES (?,?,?,?,?) ON CONFLICT(token) DO UPDATE SET "
+                          "benutzer=excluded.benutzer, umgebung=excluded.umgebung, aktualisiert=excluded.aktualisiert",
+                          (token, name, umgebung, t, t))
+            return self.antworte(204)
         if len(teile) == 3 and teile[0] == "wunsch" and teile[2] == "erneut":
             with db() as v:
                 z = sichtbarer_wunsch(v, teile[1], name)
@@ -822,6 +937,10 @@ class Schnittstelle(BaseHTTPRequestHandler):
             return
         if teile[:1] == ["reihe"]:
             return self.fehler(501, "noch_nicht", "Reihen folgen kommt in Version 2")
+        if len(teile) == 2 and teile[0] == "geraet":
+            with DB_SPERRE, db() as v:
+                v.execute("DELETE FROM geraet WHERE token=? AND benutzer=?", (teile[1].lower(), name))
+            return self.antworte(204)
         if len(teile) != 2 or teile[0] != "wunsch":
             return self.fehler(404, "unbekannt", "Diesen Pfad gibt es nicht")
         with DB_SPERRE, db() as v:

@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 1.2.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 1.3.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 1.2.0. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "1.2.0"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "1.3.0"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -85,6 +85,25 @@ Liefert `204` und zieht den Wunsch zurück. Ein laufender Download wird abgebroc
 ### `POST /wunsch/{id}/erneut`
 
 Liefert `202` und startet bei `nicht_gefunden` oder `fehler` sofort eine neue Suche.
+
+## Push-Nachrichten (ab 1.3.0)
+
+### `POST /geraet`
+Body: `{"apnsToken": "<hex>", "umgebung": "produktion" | "sandbox"}`. Antwort: `204`.
+Speichert das Gerät für den angemeldeten Benutzer. Ein Benutzer kann mehrere Geräte haben. Ein erneuter Aufruf mit demselben Token aktualisiert den Eintrag, auch wenn das Gerät jetzt einem anderen Benutzer gehört. TestFlight und App Store melden sich mit `produktion` an, Debug-Builds aus Xcode mit `sandbox`. Bei ungültigem Body kommt `400 ungueltig`.
+
+### `DELETE /geraet/{apnsToken}`
+Antwort: `204`. Meldet das Gerät des angemeldeten Benutzers ab.
+
+### Was der Server schickt
+- Status `da`: Titel „Hörbuch ist da“, Text „<Titel> – <Autor>“
+- erstes `nicht_gefunden` eines Wunsches: Titel „Hörbuch noch nicht gefunden“, Text „<Titel> – sucht weiter“
+
+Nutzlast:
+```json
+{"aps": {"alert": {"title": "…", "body": "…"}, "sound": "default"}, "wunschId": "w_…", "absItemId": "…"}
+```
+`absItemId` ist nur dabei, wenn das Buch schon in ABS steht. Benachrichtigt werden alle Benutzer, die den Wunsch haben. Antwortet APNs mit `410`, `BadDeviceToken`, `Unregistered` oder `DeviceTokenNotForTopic`, löscht der Server das Gerät.
 
 ## Reihen folgen (Version 2, noch nicht verfügbar)
 
