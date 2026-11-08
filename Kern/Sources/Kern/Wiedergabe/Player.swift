@@ -125,6 +125,8 @@ public final class Player {
 
     public func umschalten() { spielt ? player.pause() : player.play() }
 
+    public func pause() { player.pause() }
+
     /// Musik: nächster Titel. Hörbuch: 30 Sekunden vor.
     public func weiter() {
         if istHoerbuch { springe(zu: min(zeit + 30, dauer)); return }

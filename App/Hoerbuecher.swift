@@ -1,3 +1,4 @@
+import AVFoundation
 import Kern
 import SwiftUI
 
@@ -59,7 +60,7 @@ struct HoerbuecherView: View {
                     }
                     .padding(.vertical)
                 }
-                .refreshable { await laden(abs) }
+                .refreshable { await laden(abs, neu: true) }
                 .task { if bibliotheken.isEmpty { await laden(abs) } }
                 .overlay {
                     if let fehler, bibliotheken.isEmpty {
@@ -75,7 +76,7 @@ struct HoerbuecherView: View {
         .navigationTitle("Hörbücher")
     }
 
-    private func laden(_ abs: AudiobookshelfClient) async {
+    private func laden(_ abs: AudiobookshelfClient, neu nachladen: Bool = false) async {
         do {
             bibliotheken = try await abs.bibliotheken()
             angefangen = try await abs.angefangen()
@@ -89,7 +90,7 @@ struct HoerbuecherView: View {
                 }
             }
             neu = Array(neuAlle.prefix(20))
-            entdecken = await abs.entdecken()
+            entdecken = await abs.entdecken(neu: nachladen)
             genres = genresAlle
             fehler = nil
         } catch {
@@ -482,7 +483,10 @@ extension BuchTreffer {
 /// Details eines Audible-Treffers: erst lesen, dann wünschen oder der Reihe folgen.
 struct TrefferView: View {
     @Environment(Sitzung.self) private var sitzung
+    @Environment(Player.self) private var player
     let treffer: BuchTreffer
+    @State private var probe: AVPlayer?
+    @State private var probeLaeuft = false
     @State private var meldung: String?
     @State private var laeuft = false
     @State private var wunsch: Wunsch?
@@ -524,6 +528,13 @@ struct TrefferView: View {
                         }
                         .buttonStyle(.borderedProminent)
                     }
+                    if treffer.asin != nil {
+                        Button { Task { await hoerprobe() } } label: {
+                            Label(probeLaeuft ? "Hörprobe stoppen" : "Hörprobe", systemImage: probeLaeuft ? "stop.fill" : "headphones")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    }
                     if treffer.series?.first?.series != nil {
                         Button { Task { await folgen() } } label: {
                             Label("Ganze Reihe folgen", systemImage: "books.vertical").frame(maxWidth: .infinity)
@@ -545,6 +556,7 @@ struct TrefferView: View {
         }
         .background(Farben.hintergrund)
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { probe?.pause() }
         .task {
             // Stand eines vorhandenen Wunsches anzeigen und aktuell halten.
             guard let asin = treffer.asin, let abs = sitzung.hoerbuchClient else { return }
@@ -553,6 +565,23 @@ struct TrefferView: View {
                 try? await Task.sleep(for: .seconds(20))
             }
         }
+    }
+
+    /// Hörprobe von Audible; die eigene Wiedergabe wird dafür angehalten.
+    private func hoerprobe() async {
+        if probeLaeuft {
+            probe?.pause()
+            probeLaeuft = false
+            return
+        }
+        guard let asin = treffer.asin, let url = await AudibleKatalog.hoerprobe(asin) else {
+            meldung = "Für dieses Hörbuch gibt es keine Hörprobe."
+            return
+        }
+        player.pause()
+        probe = AVPlayer(url: url)
+        probe?.play()
+        probeLaeuft = true
     }
 
     private func wuenschen() async {

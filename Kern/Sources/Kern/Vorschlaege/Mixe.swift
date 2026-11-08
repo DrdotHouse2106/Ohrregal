@@ -24,7 +24,7 @@ public enum Mixe {
     }
 
     /// Ohne doppelte und ohne oft übersprungene Titel.
-    static func bereinigt(_ titel: [Titel]) -> [Titel] {
+    public static func bereinigt(_ titel: [Titel]) -> [Titel] {
         let unbeliebt = Hoerverlauf.geteilt.unbeliebt()
         var gesehen = Set<String>()
         return titel.filter { !unbeliebt.contains($0.id) && gesehen.insert($0.id).inserted }

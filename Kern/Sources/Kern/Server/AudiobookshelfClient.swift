@@ -121,9 +121,9 @@ public final class AudiobookshelfClient {
     }
 
     /// Vorschläge von Audible passend zum Hörverlauf (Dienst „Hörbuchwunsch“). Leer, solange der Dienst sie nicht anbietet.
-    public func entdecken() async -> [BuchTreffer] {
+    public func entdecken(neu: Bool = false) async -> [BuchTreffer] {
         struct Liste: Decodable { let treffer: [BuchTreffer] }
-        return ((try? await hole("/wunsch-api/entdecken")) as Liste?)?.treffer ?? []
+        return ((try? await hole("/wunsch-api/entdecken" + (neu ? "?neu=1" : ""))) as Liste?)?.treffer ?? []
     }
 
     /// Seitenweise; optional neueste zuerst und nach Genre gefiltert.

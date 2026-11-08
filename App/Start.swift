@@ -1,14 +1,18 @@
 import Kern
 import SwiftUI
 
+/// Startseite im Stil von Apple Music: Gruß, Mixe mit Cover-Collage, Weiterhören (Musik und Hörbücher),
+/// Schnellauswahl und die übrigen Reihen.
 struct StartView: View {
     @Environment(\.client) private var client
     @Environment(Sitzung.self) private var sitzung
     @Environment(Player.self) private var player
+    @State private var mixe: [Mix] = []
+    @State private var hoerbuecher: [Hoerbuch] = []
+    @State private var zuletzt: [Album] = []
     @State private var reihen: [Reihe] = []
-    @State private var mixKuenstler: [Kuenstler] = []
-    @State private var zufallsTitel: [Titel] = []
     @State private var fehler: String?
+    @State private var geladen = false
     @State private var zugaengeOffen = false
     @State private var verlaufLoeschen = false
     @State private var mitteilungen: String?
@@ -24,7 +28,7 @@ struct StartView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 Button {
-                    Task { player.spiele(await Mixe.deinMix(client, kuenstler: mixKuenstler)) }
+                    player.spiele(mixe.first?.titel.shuffled() ?? [])
                 } label: {
                     Label("Spiel etwas für mich", systemImage: "play.fill")
                         .font(.headline)
@@ -34,22 +38,24 @@ struct StartView: View {
                         .foregroundStyle(.white)
                 }
                 .padding(.horizontal)
+                .disabled(mixe.isEmpty)
 
-                if !mixKuenstler.isEmpty { MixReihe(kuenstler: mixKuenstler) }
+                if !mixe.isEmpty { MixReihe(mixe: mixe) }
+
+                if !hoerbuecher.isEmpty || !zuletzt.isEmpty {
+                    WeiterhoerenReihe(hoerbuecher: hoerbuecher, alben: zuletzt)
+                }
+
+                if let titel = mixe.first?.titel, titel.count > 4 {
+                    Schnellauswahl(titel: Array(titel.prefix(16)))
+                }
 
                 ForEach(reihen) { AlbenReihe(titel: $0.titel, alben: $0.alben) }
-
-                if !zufallsTitel.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Zufällige Titel").font(.title2.bold()).padding(.horizontal)
-                        TitelListe(titel: zufallsTitel)
-                    }
-                }
             }
             .padding(.vertical)
         }
         .background(Farben.hintergrund)
-        .navigationTitle("Start")
+        .navigationTitle(gruss)
         .toolbar {
             Menu {
                 Button("Zugänge", systemImage: "key") { zugaengeOffen = true }
@@ -74,100 +80,203 @@ struct StartView: View {
         }
         .sheet(isPresented: $zugaengeOffen) { Anmeldung() }
         .refreshable { await laden() }
-        .task { if reihen.isEmpty { await laden() } }
+        .task { if !geladen { await laden() } }
         .overlay {
             if let fehler, reihen.isEmpty {
                 ContentUnavailableView("Server nicht erreichbar", systemImage: "wifi.exclamationmark", description: Text(fehler))
+            } else if !geladen {
+                ProgressView()
             }
+        }
+    }
+
+    private var gruss: String {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 5..<11: "Guten Morgen"
+        case 11..<17: "Hallo"
+        case 17..<23: "Guten Abend"
+        default: "Gute Nacht"
         }
     }
 
     private func laden() async {
         do {
-            async let zuletzt = client.alben("recent", anzahl: 50)
-            async let haeufig = client.alben("frequent", anzahl: 50)
-            async let neu = client.alben("newest")
-            async let zufall = client.alben("random")
-            async let titel = client.zufaelligeTitel(anzahl: 10)
-            let zuletztGehoert = try await zuletzt
-            let oft = try await haeufig
-            // Lange nicht gehört: oft gespielt, aber nicht unter den letzten 50.
-            let kuerzlich = Set(zuletztGehoert.map(\.id))
-            let langeNicht = oft.filter { !kuerzlich.contains($0.id) }
+            async let zuletztAnfrage = client.alben("recent", anzahl: 50)
+            async let haeufigAnfrage = client.alben("frequent", anzahl: 50)
+            async let neuAnfrage = client.alben("newest")
+            async let gefaelltAnfrage = client.alben("starred")
+            async let zufallAnfrage = client.alben("random")
+            let kuerzlich = try await zuletztAnfrage
+            let oft = try await haeufigAnfrage
+            let gehoert = Set(kuerzlich.map(\.id))
+            zuletzt = Array(kuerzlich.prefix(15))
             reihen = [
-                Reihe(titel: "Weiterhören", alben: Array(zuletztGehoert.prefix(20))),
                 Reihe(titel: "Am häufigsten gespielt", alben: Array(oft.prefix(20))),
-                Reihe(titel: "Lange nicht gehört", alben: Array(langeNicht.prefix(20))),
-                Reihe(titel: "Kürzlich hinzugefügt", alben: try await neu),
-                Reihe(titel: "Zufällige Alben", alben: try await zufall),
+                // Oft gespielt, aber nicht unter den letzten 50.
+                Reihe(titel: "Lange nicht gehört", alben: Array(oft.filter { !gehoert.contains($0.id) }.prefix(20))),
+                Reihe(titel: "Kürzlich hinzugefügt", alben: try await neuAnfrage),
+                Reihe(titel: "Alben mit „Gefällt mir“", alben: (try? await gefaelltAnfrage) ?? []),
+                Reihe(titel: "Zufällige Alben", alben: try await zufallAnfrage),
             ].filter { !$0.alben.isEmpty }
-            // Mixe: meistgehörte Künstler aus dem Verlauf, sonst aus den häufig gespielten Alben.
-            var kuenstler = Hoerverlauf.geteilt.topKuenstler(anzahl: 6)
-            if kuenstler.count < 4 {
-                for a in oft where !kuenstler.contains(where: { $0.id == a.artistId }) {
-                    if let id = a.artistId, let name = a.artist { kuenstler.append(Kuenstler(id: id, name: name)) }
-                    if kuenstler.count >= 6 { break }
-                }
-            }
-            mixKuenstler = kuenstler
-            zufallsTitel = try await titel
             fehler = nil
+            geladen = true
+            hoerbuecher = (try? await sitzung.hoerbuchClient?.angefangen()) ?? []
+            mixe = await Mix.laden(client, haeufig: oft)
         } catch {
             fehler = error.localizedDescription
+            geladen = true
         }
     }
 }
 
-/// „Für dich“: Dein Mix und ein Radio pro Lieblingskünstler.
+/// Ein fertig geladener Mix; so startet er beim Antippen sofort und zeigt seine Cover.
+struct Mix: Identifiable {
+    let id: String
+    let name: String
+    let untertitel: String
+    let titel: [Titel]
+
+    /// Cover der ersten vier verschiedenen Alben für die Collage.
+    var cover: [String] {
+        var gesehen = Set<String>()
+        return titel.compactMap { t in
+            guard let c = t.coverArt, gesehen.insert(t.albumId ?? c).inserted else { return nil }
+            return c
+        }
+        .prefix(4).map { $0 }
+    }
+
+    /// „Dein Mix“ aus den Lieblingskünstlern und ein Mix pro Künstler.
+    @MainActor static func laden(_ client: NavidromeClient, haeufig: [Album]) async -> [Mix] {
+        var kuenstler = Hoerverlauf.geteilt.topKuenstler(anzahl: 6)
+        // Ohne Verlauf: Künstler der häufig gespielten Alben.
+        for a in haeufig where kuenstler.count < 6 && !kuenstler.contains(where: { $0.id == a.artistId }) {
+            if let id = a.artistId, let name = a.artist { kuenstler.append(Kuenstler(id: id, name: name)) }
+        }
+        var einzeln: [Mix] = []
+        await withTaskGroup(of: (Int, [Titel]).self) { gruppe in
+            for (i, k) in kuenstler.enumerated() {
+                gruppe.addTask { (i, (try? await client.aehnlicheTitel(k.id, anzahl: 40)) ?? []) }
+            }
+            var ergebnis: [(Int, [Titel])] = []
+            for await e in gruppe { ergebnis.append(e) }
+            for (i, titel) in ergebnis.sorted(by: { $0.0 < $1.0 }) where !titel.isEmpty {
+                einzeln.append(Mix(id: kuenstler[i].id, name: "\(kuenstler[i].name) Mix", untertitel: "Mit ähnlichen Künstlern",
+                                   titel: Mixe.bereinigt(titel).shuffled()))
+            }
+        }
+        var dein = Mixe.bereinigt(einzeln.flatMap { Array($0.titel.prefix(12)) }).shuffled()
+        if dein.count < 20 { dein += (try? await client.zufaelligeTitel(anzahl: 40)) ?? [] }
+        return [Mix(id: "dein", name: "Dein Mix", untertitel: "Aus deinen Lieblingskünstlern", titel: dein)] + einzeln
+    }
+}
+
 struct MixReihe: View {
-    @Environment(\.client) private var client
     @Environment(Player.self) private var player
-    let kuenstler: [Kuenstler]
-    @State private var laedt: String?
+    let mixe: [Mix]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Für dich").font(.title2.bold()).padding(.horizontal)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
-                    karte("Dein Mix", unter: "Aus deinen Lieblingskünstlern", id: "mix") {
-                        await Mixe.deinMix(client, kuenstler: kuenstler)
-                    }
-                    ForEach(kuenstler) { k in
-                        karte("\(k.name) Radio", unter: "Mit ähnlichen Künstlern", id: k.id) {
-                            await Mixe.radio(kuenstler: k.id, client)
+                    ForEach(mixe) { mix in
+                        Button { player.spiele(mix.titel) } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Collage(cover: mix.cover)
+                                    .overlay(alignment: .bottomLeading) {
+                                        Text(mix.name).font(.headline).foregroundStyle(.white).lineLimit(2)
+                                            .padding(10)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .background(LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .top, endPoint: .bottom))
+                                    }
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                Text(mix.untertitel).font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
+                            }
+                            .frame(width: 160, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal)
             }
         }
     }
+}
 
-    private func karte(_ titel: String, unter: String, id: String, titelLaden: @escaping @MainActor () async -> [Titel]) -> some View {
-        Button {
-            laedt = id
-            Task {
-                player.spiele(await titelLaden())
-                laedt = nil
+/// Vier Cover im Quadrat; bei weniger Covern füllt der Quallen-Verlauf.
+struct Collage: View {
+    let cover: [String]
+
+    var body: some View {
+        let raster = [GridItem(.fixed(80), spacing: 0), GridItem(.fixed(80), spacing: 0)]
+        ZStack {
+            Farben.verlauf
+            if cover.count >= 4 {
+                LazyVGrid(columns: raster, spacing: 0) {
+                    ForEach(cover, id: \.self) { Cover(id: $0, groesse: 80).clipShape(Rectangle()) }
+                }
+            } else if let erstes = cover.first {
+                Cover(id: erstes, groesse: 160)
             }
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                ZStack(alignment: .bottomLeading) {
-                    RoundedRectangle(cornerRadius: 8).fill(Farben.verlauf)
-                    if laedt == id {
-                        ProgressView().tint(.white).frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        Text(titel).font(.title3.bold()).foregroundStyle(.white).lineLimit(3).padding(12)
+        }
+        .frame(width: 160, height: 160)
+    }
+}
+
+/// Weiterhören: angefangene Hörbücher und zuletzt gehörte Alben in einer Reihe.
+struct WeiterhoerenReihe: View {
+    let hoerbuecher: [Hoerbuch]
+    let alben: [Album]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Weiterhören").font(.title2.bold()).padding(.horizontal)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 14) {
+                    ForEach(hoerbuecher) { h in
+                        NavigationLink(value: h) { HoerbuchKarte(hoerbuch: h) }.buttonStyle(.plain)
+                    }
+                    ForEach(alben) { a in
+                        NavigationLink(value: a) { AlbumKarte(album: a) }.buttonStyle(.plain)
                     }
                 }
-                .frame(width: 160, height: 160)
-                Text(unter).font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
+                .padding(.horizontal)
             }
-            .frame(width: 160, alignment: .leading)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .disabled(laedt != nil)
+    }
+}
+
+/// Schnellauswahl: Titel in Spalten zu je vier, seitlich wischbar.
+struct Schnellauswahl: View {
+    @Environment(Player.self) private var player
+    let titel: [Titel]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Schnellauswahl").font(.title2.bold()).padding(.horizontal)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHGrid(rows: Array(repeating: GridItem(.fixed(56), spacing: 6), count: 4), spacing: 16) {
+                    ForEach(Array(titel.enumerated()), id: \.offset) { i, t in
+                        Button { player.spiele(titel, ab: i) } label: {
+                            HStack(spacing: 10) {
+                                Cover(id: t.coverArt, groesse: 48)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(t.title).lineLimit(1)
+                                    Text(t.artist ?? "").font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .frame(width: 280)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu { RadioKnopf(titel: t) }
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
     }
 }
