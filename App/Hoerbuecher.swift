@@ -270,6 +270,10 @@ struct WunschView: View {
                                     if let reihe = t.reihenText {
                                         Text(reihe).font(.caption).foregroundStyle(Farben.textGedaempft)
                                     }
+                                    if let w = wunsch(zu: t) {
+                                        Label("Gewünscht · \(w.statusText)", systemImage: "checkmark.circle.fill")
+                                            .font(.caption).foregroundStyle(Farben.blau)
+                                    }
                                 }
                             }
                         }
@@ -342,6 +346,11 @@ struct WunschView: View {
         }
     }
 
+    private func wunsch(zu t: BuchTreffer) -> Wunsch? {
+        guard let asin = t.asin else { return nil }
+        return wuensche.first { $0.asin == asin }
+    }
+
     private func suchen() async {
         guard let abs = sitzung.hoerbuchClient, !text.isEmpty else { return }
         sucht = true
@@ -392,6 +401,7 @@ struct TrefferView: View {
     let treffer: BuchTreffer
     @State private var meldung: String?
     @State private var laeuft = false
+    @State private var wunsch: Wunsch?
 
     var body: some View {
         ScrollView {
@@ -414,10 +424,17 @@ struct TrefferView: View {
                     .font(.caption).foregroundStyle(Farben.textGedaempft)
 
                 VStack(spacing: 10) {
-                    Button { Task { await wuenschen() } } label: {
-                        Label("Wünschen", systemImage: "sparkles").frame(maxWidth: .infinity)
+                    if let wunsch {
+                        Label("Gewünscht · \(wunsch.statusText)", systemImage: "checkmark.circle.fill")
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Farben.flaeche, in: RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(Farben.blau)
+                    } else {
+                        Button { Task { await wuenschen() } } label: {
+                            Label("Wünschen", systemImage: "sparkles").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
                     if treffer.series?.first?.series != nil {
                         Button { Task { await folgen() } } label: {
                             Label("Ganze Reihe folgen", systemImage: "books.vertical").frame(maxWidth: .infinity)
@@ -439,6 +456,14 @@ struct TrefferView: View {
         }
         .background(Farben.hintergrund)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            // Stand eines vorhandenen Wunsches anzeigen und aktuell halten.
+            guard let asin = treffer.asin, let abs = sitzung.hoerbuchClient else { return }
+            while !Task.isCancelled {
+                if let w = (try? await abs.wuensche())?.first(where: { $0.asin == asin }) { wunsch = w }
+                try? await Task.sleep(for: .seconds(20))
+            }
+        }
     }
 
     private func wuenschen() async {
@@ -447,8 +472,9 @@ struct TrefferView: View {
         defer { laeuft = false }
         do {
             switch try await abs.wuensche(treffer) {
-            case .angenommen:
-                meldung = "Ist gewünscht. Du bekommst Bescheid, sobald es da ist."
+            case .angenommen(let w):
+                wunsch = w
+                meldung = "Du bekommst Bescheid, sobald es da ist."
                 await Benachrichtigungen.erlaubnisHolen()
             case .schonVorhanden:
                 meldung = "Ist schon in deiner Bibliothek."

@@ -115,6 +115,7 @@ public struct BuchTreffer: Decodable, Hashable, Identifiable, Sendable {
 /// Wunsch aus dem Dienst „Hörbuchwunsch“ (siehe Dienst/API.md).
 public struct Wunsch: Decodable, Hashable, Identifiable, Sendable {
     public let id: String
+    public let asin: String?
     public let titel: String
     public let autor: String?
     public let coverUrl: String?
@@ -129,7 +130,7 @@ public struct Wunsch: Decodable, Hashable, Identifiable, Sendable {
         case "nicht_gefunden": "noch nicht gefunden"
         case "laedt": "wird geladen" + (fortschritt.map { " (\($0) %)" } ?? "")
         case "einsortieren": "wird einsortiert"
-        case "da": "da"
+        case "da": "ist da"
         case "fehler": "Fehler"
         default: status
         }

@@ -22,7 +22,7 @@ final class HoerbuchTests: XCTestCase {
          "aktualisiert":"2026-11-08T13:14:56+00:00","versuche":1}
         """
         let w = try JSONDecoder().decode(Wunsch.self, from: Data(json.utf8))
-        XCTAssertEqual(w.statusText, "da")
+        XCTAssertEqual(w.statusText, "ist da")
         XCTAssertNil(w.hinweis)
     }
 
