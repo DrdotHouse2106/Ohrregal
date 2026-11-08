@@ -244,7 +244,7 @@ Für Hörbücher gibt es kein gepflegtes Gegenstück zu Lidarr mehr. Ohrregal be
 
 - Kleiner Dienst mit einer Datei und SQLite für die Wunschliste, als Docker-Container.
 - Der Code liegt im Ordner `Dienst/` in diesem Repo.
-- Zugriff nur im Heimnetz oder über VPN, mit eigenem Token pro Benutzer (`Authorization: Bearer …`). Der Token liegt in der App im Schlüsselbund.
+- Zugriff nur im Heimnetz oder über VPN. Anmeldung mit dem Audiobookshelf-Token des Benutzers (`Authorization: Bearer …`), der Dienst prüft es bei Audiobookshelf. Einen eigenen Zugang braucht es nicht.
 - Einstellungen nur über Umgebungsvariablen, keine Adressen oder Schlüssel im Repo.
 
 **Schnittstelle für die App:** siehe [`Dienst/API.md`](Dienst/API.md). Unter anderem gibt es: Wünschen, Wunschliste mit Fortschritt, Zurückziehen (die Datei bleibt dabei immer erhalten) und Erneut suchen. Reihe folgen kommt in Version 2.
