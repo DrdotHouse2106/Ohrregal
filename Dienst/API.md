@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 2.0.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.1.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 2.0.0. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.0.0"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.1.0"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -140,6 +140,26 @@ Antwort: `204`. Der Benutzer folgt der Reihe nicht mehr. Schon angelegte Wünsch
 - `teileGewuenscht`: Wunsch offen, also noch nicht `da`
 - `hinweis` ist optional, z. B. „Keine erschienenen Teile in dieser Sprache gefunden“
 - Die Wünsche aus einer Reihe erscheinen ganz normal in `GET /wunsch`, mit `reihe` und `teil`.
+
+## Entdecken (ab 2.1.0)
+
+### `GET /entdecken`
+Liefert `{"treffer": [ … ]}` mit höchstens 30 Vorschlägen, die besten zuerst. Mit `?neu=1` wird der Zwischenspeicher übergangen, sonst gilt er 6 Stunden je Benutzer.
+
+So entstehen die Vorschläge:
+- **Grundlage** ist der ABS-Hörverlauf des Benutzers, gelesen aus der ABS-Datenbank: Bücher, die fertig gehört oder mindestens 10 Minuten angehört wurden, die neuesten zuerst. Ohne Verlauf nimmt der Server die zuletzt in die Bibliothek gekommenen Bücher.
+- **Kandidaten:** Audible-„Ähnliche Titel“ (sims) zu den bis zu 6 zuletzt gehörten Büchern, dazu die Bestseller der 2 häufigsten Audible-Kategorien darunter.
+- **Ausgefiltert** wird alles, was nicht deutsch oder noch nicht erschienen ist, Sammelboxen, Titel, die schon in ABS liegen (auch nicht zugeordnete, erkannt über Ordnernamen) oder schon gewünscht sind, und doppelte Fassungen desselben Titels. Pro Autor gibt es höchstens 3 Vorschläge.
+
+Ein Treffer hat dieselben Felder wie bei ABS `/api/search/books` (Audible), dazu `grund`:
+```json
+{"title": "…", "subtitle": "…", "author": "…", "narrator": "…", "cover": "https://…", "asin": "…",
+ "language": "German", "duration": 457, "series": [{"series": "…", "sequence": "1"}],
+ "description": "<Klartext ohne HTML>", "publishedYear": "2015", "publisher": "…",
+ "grund": "Weil du „<Titel>“ gehört hast"}
+```
+Mögliche `grund`-Texte: „Weil du „<Titel>“ gehört hast“, „Weil du <Autor> hörst“ (ab 2 gehörten Büchern eines Autors), „Beliebt in <Kategorie>“ und „Passt zu deiner Bibliothek: <Titel>“, wenn es keinen Hörverlauf gibt. Bei gekürzten Fassungen steht „(gekürzte Fassung)“ dahinter.
+Fehler: `502 audible_nicht_erreichbar`. Eine leere Liste bedeutet, dass es nichts Passendes gibt.
 
 ## Bewertung der Treffer (Server)
 

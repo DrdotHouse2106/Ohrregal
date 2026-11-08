@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -389,9 +389,14 @@ def abs_vorhanden(asin, titel, autor):
             if z:
                 return z[0]
         nt, na = norm(titel), nachname(autor)
-        for lid, t, a in v.execute("SELECT id, title, authorNamesFirstLast FROM libraryItems "
-                                   "WHERE mediaType='book' AND isMissing=0"):
+        tw = set(woerter(kurztitel(titel)))
+        for lid, t, a, rel in v.execute("SELECT id, title, authorNamesFirstLast, relPath FROM libraryItems "
+                                        "WHERE mediaType='book' AND isMissing=0"):
             if norm(t or "") == nt and na and na in norm(a or ""):
+                return lid
+            # Nicht zugeordnete Bücher: Titelwörter und Autor im Ordnernamen bzw. Titel
+            alles = set(norm(f"{t} {a} {rel}").split())
+            if na and na in alles and tw and tw <= alles and len(" ".join(tw)) >= 5:
                 return lid
     except sqlite3.Error as f:
         log("ABS-Abfrage fehlgeschlagen:", f)
@@ -907,6 +912,179 @@ def reihen_pruefen():
         time.sleep(2)
 
 
+# ---------------------------------------------------------------- Entdecken (Hörverlauf + Audible)
+
+ENTDECKEN_CACHE = {}
+ENTDECKEN_SPERRE = threading.Lock()
+ENTDECKEN_STUNDEN = 6
+AUDIBLE_DETAILS = "product_desc,product_extended_attrs,product_attrs,contributors,media,series,category_ladders"
+
+
+def hoerverlauf(abs_id):
+    """Zuletzt gehörte Bücher des ABS-Benutzers mit ASIN, Autoren und Sprechern (nur lesend aus der ABS-DB)."""
+    v = abs_db()
+    if not v:
+        return []
+    try:
+        zeilen = v.execute(
+            "SELECT b.id, b.asin, b.title, b.narrators, mp.isFinished, mp.currentTime, mp.duration, mp.updatedAt "
+            "FROM mediaProgresses mp JOIN books b ON b.id=mp.mediaItemId "
+            "WHERE mp.userId=? AND mp.mediaItemType='book' AND (mp.isFinished=1 OR mp.currentTime>600) "
+            "ORDER BY mp.updatedAt DESC LIMIT 40", (abs_id,)).fetchall()
+        buecher = []
+        for bid, asin, titel, sprecher, fertig, zeit, dauer, _ in zeilen:
+            autoren = [a for (a,) in v.execute(
+                "SELECT a.name FROM bookAuthors ba JOIN authors a ON a.id=ba.authorId WHERE ba.bookId=?", (bid,))]
+            try:
+                sprecher = json.loads(sprecher or "[]")
+            except ValueError:
+                sprecher = []
+            buecher.append({"asin": asin, "titel": titel, "autoren": autoren, "sprecher": sprecher,
+                            "fertig": bool(fertig)})
+        if not buecher:  # noch nichts gehört: die zuletzt in die Bibliothek gekommenen Bücher
+            for asin, titel in v.execute(
+                    "SELECT b.asin, b.title FROM libraryItems li JOIN books b ON b.id=li.mediaId "
+                    "WHERE b.asin IS NOT NULL AND b.asin!='' AND li.isMissing=0 "
+                    "ORDER BY li.createdAt DESC LIMIT 6"):
+                buecher.append({"asin": asin, "titel": titel, "autoren": [], "sprecher": [], "neu": True})
+        return buecher
+    finally:
+        v.close()
+
+
+def ohne_html(t):
+    t = re.sub(r"<br\s*/?>|</p>", "\n", t or "")
+    t = re.sub(r"<[^>]+>", "", t)
+    for a, b in (("&amp;", "&"), ("&quot;", '"'), ("&#39;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " ")):
+        t = t.replace(a, b)
+    return re.sub(r"\n{3,}", "\n\n", t).strip()
+
+
+def als_suchtreffer(p, grund):
+    """Felder wie ABS /api/search/books (Audible-Anbieter), plus grund."""
+    jahr = (p.get("release_date") or p.get("issue_date") or "")[:4] or None
+    sprache = p.get("language") or None
+    return {
+        "title": p.get("title"), "subtitle": p.get("subtitle"),
+        "author": ", ".join(echte_autoren(p)) or None,
+        "narrator": ", ".join(a.get("name", "") for a in p.get("narrators") or []) or None,
+        "cover": (p.get("product_images") or {}).get("500"),
+        "asin": p.get("asin"), "language": sprache.capitalize() if sprache else None,
+        "duration": p.get("runtime_length_min"),
+        "series": [{"series": x.get("title"), "sequence": x.get("sequence") or None} for x in p.get("series") or []],
+        "description": ohne_html(p.get("publisher_summary") or p.get("merchandising_summary")),
+        "publishedYear": jahr, "publisher": p.get("publisher_name"),
+        "grund": grund,
+    }
+
+
+def entdecken(benutzer):
+    if not benutzer.startswith("abs:"):
+        return []
+    verlauf = hoerverlauf(benutzer[4:])
+    autoren_zahl = {}
+    for b in verlauf:
+        for a in b["autoren"]:
+            autoren_zahl[norm(a)] = (autoren_zahl.get(norm(a), (0, a))[0] + 1, a)
+    lieblingsautoren = {k: v[1] for k, v in autoren_zahl.items() if v[0] >= 2}
+    saat = [b for b in verlauf if b["asin"]][:6]
+    kandidaten = {}  # asin -> [punkte, grund, produkt]
+
+    def dazu(p, punkte, grund):
+        a = p.get("asin")
+        if not a:
+            return
+        if a in kandidaten:
+            kandidaten[a][0] += punkte
+        else:
+            kandidaten[a] = [punkte, grund, p]
+
+    kategorien = {}
+    for i, b in enumerate(saat):
+        try:
+            sims = audible(f"products/{b['asin']}/sims", similarity_type="RawSimilarities", num_results=25,
+                           response_groups="product_desc,product_attrs,contributors,series,category_ladders")
+        except Exception as f:
+            log("Audible-Ähnliche nicht abrufbar:", f)
+            continue
+        grund = ("Passt zu deiner Bibliothek: " if b.get("neu") else "Weil du „") + (b["titel"] or "")
+        grund = grund if b.get("neu") else grund + "“ gehört hast"
+        for rang, p in enumerate(sims.get("similar_products") or []):
+            dazu(p, max(1, 25 - rang) * (1.0 - i * 0.02), grund)
+            for l in p.get("category_ladders") or []:
+                if l.get("ladder"):
+                    k = l["ladder"][-1]
+                    kategorien[k["id"]] = (kategorien.get(k["id"], (0, k["name"]))[0] + 1, k["name"])
+        time.sleep(0.5)
+    for kid, (_, name) in sorted(kategorien.items(), key=lambda x: -x[1][0])[:2]:
+        try:
+            best = audible("products", category_id=kid, products_sort_by="BestSellers", num_results=25,
+                           response_groups="product_desc,product_attrs,contributors,series")
+        except Exception as f:
+            log("Audible-Bestseller nicht abrufbar:", f)
+            continue
+        for rang, p in enumerate(best.get("products") or []):
+            dazu(p, max(1, 15 - rang) * 0.6, f"Beliebt in {name}")
+        time.sleep(0.5)
+
+    heute = jetzt().date().isoformat()
+    with db() as v:
+        gewuenscht = {(z[0] or "").upper() for z in v.execute("SELECT asin FROM wunsch WHERE zurueckgezogen=0")}
+    gesehen_titel, auswahl, je_autor = set(), [], {}
+    for a, (punkte, grund, p) in sorted(kandidaten.items(), key=lambda x: -x[1][0]):
+        if (p.get("language") or "").lower() != "german" or (p.get("release_date") or "9999") > heute:
+            continue
+        if any("-" in (x.get("sequence") or "") for x in p.get("series") or []):
+            continue  # Sammelbox
+        if re.search(r"(?i)\b(sammelband|box|bundle|gesamtausgabe|teile? \d+\s*[-–]\s*\d+)\b", p.get("title") or ""):
+            continue
+        autoren = echte_autoren(p)
+        schluessel = norm(kurztitel(p.get("title"))) + "|" + (nachname(autoren[0]) if autoren else "")
+        if a.upper() in gewuenscht or schluessel in gesehen_titel:
+            continue
+        erster = nachname(autoren[0]) if autoren else ""
+        if je_autor.get(erster, 0) >= 3:
+            continue  # Abwechslung: höchstens 3 Vorschläge je Autor
+        if abs_vorhanden(a, p.get("title"), autoren[0] if autoren else ""):
+            continue
+        gesehen_titel.add(schluessel)
+        je_autor[erster] = je_autor.get(erster, 0) + 1
+        for au in autoren:
+            if norm(au) in lieblingsautoren:
+                grund = f"Weil du {lieblingsautoren[norm(au)]} hörst"
+                break
+        auswahl.append((a, grund))
+        if len(auswahl) >= 30:
+            break
+    details = {}
+    asins = [a for a, _ in auswahl]
+    for i in range(0, len(asins), 40):
+        try:
+            for p in audible("products", asins=",".join(asins[i:i + 40]),
+                             response_groups=AUDIBLE_DETAILS).get("products") or []:
+                details[p["asin"]] = p
+        except Exception as f:
+            log("Audible-Details nicht abrufbar:", f)
+    treffer = []
+    for a, grund in auswahl:
+        p = details.get(a) or kandidaten[a][2]
+        if p.get("format_type") == "abridged":
+            grund += " (gekürzte Fassung)"
+        treffer.append(als_suchtreffer(p, grund))
+    return treffer
+
+
+def entdecken_zwischengespeichert(benutzer, neu=False):
+    with ENTDECKEN_SPERRE:
+        z = ENTDECKEN_CACHE.get(benutzer)
+        if z and not neu and z[0] > time.time():
+            return z[1]
+    treffer = entdecken(benutzer)
+    with ENTDECKEN_SPERRE:
+        ENTDECKEN_CACHE[benutzer] = (time.time() + ENTDECKEN_STUNDEN * 3600, treffer)
+    return treffer
+
+
 WECKER = threading.Event()
 
 
@@ -983,6 +1161,16 @@ class Schnittstelle(BaseHTTPRequestHandler):
         teile, abfrage = self.pfad()
         if teile == ["status"]:
             return self.antworte(200, {"ok": True, "version": VERSION})
+        if teile == ["entdecken"]:
+            name = self.benutzer()
+            if not name:
+                return
+            neu = abfrage.get("neu", [""])[0] in ("1", "true")
+            try:
+                return self.antworte(200, {"treffer": entdecken_zwischengespeichert(name, neu)})
+            except Exception:
+                log("Entdecken fehlgeschlagen:", traceback.format_exc())
+                return self.fehler(502, "audible_nicht_erreichbar", "Vorschläge gerade nicht abrufbar")
         if teile == ["reihe"]:
             name = self.benutzer()
             if not name:
