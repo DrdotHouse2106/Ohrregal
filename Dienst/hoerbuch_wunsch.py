@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.3.0"
+VERSION = "2.0.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -77,6 +77,7 @@ class Einstellungen:
         self.apns_key_id = env("APNS_KEY_ID", "")
         self.apns_team_id = env("APNS_TEAM_ID", "")
         self.apns_topic = env("APNS_TOPIC", "")
+        self.audible = env("AUDIBLE_API", "https://api.audible.de").rstrip("/")
         self.parallel = int(env("WUNSCH_PARALLEL", "2"))
         self.takt = int(env("WUNSCH_TAKT_SEKUNDEN", "60"))
         self.neuversuch_h = int(env("WUNSCH_NEUVERSUCH_STUNDEN", "24"))
@@ -128,7 +129,17 @@ def db_anlegen():
           erstellt TEXT NOT NULL, aktualisiert TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS interesse (
           wunsch TEXT NOT NULL, benutzer TEXT NOT NULL, PRIMARY KEY (wunsch, benutzer));
+        CREATE TABLE IF NOT EXISTS reihe (
+          id TEXT PRIMARY KEY, benutzer TEXT NOT NULL, reiheAsin TEXT NOT NULL,
+          reihe TEXT NOT NULL, autor TEXT, sprache TEXT, erstellt TEXT NOT NULL,
+          geprueft TEXT, hinweis TEXT, zurueckgezogen INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS reihe_teil (
+          reihe TEXT NOT NULL, asin TEXT NOT NULL, teil TEXT, titel TEXT,
+          inAbs INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (reihe, asin));
         """)
+        spalten = {z[1] for z in v.execute("PRAGMA table_info(wunsch)")}
+        if "ausReihe" not in spalten:
+            v.execute("ALTER TABLE wunsch ADD COLUMN ausReihe TEXT")
 
 
 def setze(wid, **werte):
@@ -595,8 +606,8 @@ def bearbeite_suche(w):
         setze(wid, status="nicht_gefunden", hinweis=grund, versuche=versuche,
               naechsterVersuch=(jetzt() + timedelta(hours=E.neuversuch_h)).isoformat())
         log(f"{wid}: nicht gefunden – {grund}")
-        if w["status"] == "gewuenscht" and w["versuche"] == 0:
-            melden(w, "nicht_gefunden")  # nur beim ersten Mal
+        if w["status"] == "gewuenscht" and w["versuche"] == 0 and not w["ausReihe"]:
+            melden(w, "nicht_gefunden")  # nur beim ersten Mal, nicht für jeden Teil einer Reihe
         return
     bester = treffer[0]
     try:
@@ -761,6 +772,141 @@ def arbeite_einmal():
             log(f"{w['id']}: Suche fehlgeschlagen:", traceback.format_exc())
 
 
+# ---------------------------------------------------------------- Reihen folgen (Audible-Katalog)
+
+SPRACHEN = {"de": "german", "en": "english", "fr": "french", "es": "spanish", "it": "italian"}
+REIHE_PRUEFEN_STUNDEN = 24
+
+
+def audible(pfad, **param):
+    url = f"{E.audible}/1.0/catalog/{pfad}?" + urllib.parse.urlencode(param)
+    return json.loads(hole(url, kopf={"Accept": "application/json"}, zeit=30))
+
+
+def echte_autoren(p):
+    rollen = re.compile(r"(?i)translat|übersetz|uebersetz|illustr|herausgeb|editor|bearbeit|adapt")
+    namen = [a.get("name", "") for a in p.get("authors") or []]
+    echt = [re.sub(r"\s*[-–—]\s*$", "", n).strip() for n in namen if n and not rollen.search(n)]
+    return echt or [n for n in namen if n][:1]
+
+
+def reihe_von_asin(asin, reihe_name):
+    """Audible-ASIN der Reihe zu einem Teil (bei mehreren die mit passendem Namen)."""
+    p = audible(f"products/{asin}", response_groups="series").get("product") or {}
+    reihen = p.get("series") or []
+    if not reihen:
+        return None, None
+    passend = [x for x in reihen if norm(x.get("title")) == norm(reihe_name)] or reihen
+    return passend[0].get("asin"), passend[0].get("title")
+
+
+def reihe_teile(reihe_asin, sprache):
+    """Erschienene Teile der Reihe in der gewünschten Sprache, je Teilnummer einer."""
+    rel = (audible(f"products/{reihe_asin}", response_groups="relationships").get("product") or {}) \
+        .get("relationships") or []
+    kinder = [x for x in rel if x.get("relationship_type") == "series"
+              and x.get("relationship_to_product") == "child" and x.get("asin")]
+    produkte = []
+    for i in range(0, len(kinder), 40):
+        asins = ",".join(x["asin"] for x in kinder[i:i + 40])
+        produkte += audible("products", asins=asins, response_groups=
+                            "product_desc,contributors,media,product_attrs,series").get("products") or []
+    nummer = {x["asin"]: (x.get("sequence") or "").strip() for x in kinder}
+    sprache_lang = SPRACHEN.get((sprache or "de")[:2], "")
+    heute = jetzt().date().isoformat()
+    beste = {}
+    for p in produkte:
+        teil = nummer.get(p.get("asin"), "")
+        if not re.fullmatch(r"\d+(\.\d+)?", teil):
+            continue  # Sammelboxen wie „1-3“ und Teile ohne Nummer überspringen
+        if sprache_lang and (p.get("language") or "").lower() != sprache_lang:
+            continue
+        if (p.get("release_date") or "9999") > heute:
+            continue  # noch nicht erschienen, kommt bei einer späteren Prüfung
+        rang = (p.get("format_type") == "unabridged", p.get("runtime_length_min") or 0)
+        if teil not in beste or rang > beste[teil][0]:
+            beste[teil] = (rang, p)
+    teile = []
+    for teil, (_, p) in sorted(beste.items(), key=lambda x: float(x[0])):
+        teile.append({
+            "asin": p["asin"], "teil": teil, "titel": p.get("title"),
+            "autor": ", ".join(echte_autoren(p)),
+            "sprecher": ", ".join(a.get("name", "") for a in p.get("narrators") or []) or None,
+            "laufzeitMin": p.get("runtime_length_min"), "sprache": (sprache or "de")[:2],
+            "coverUrl": (p.get("product_images") or {}).get("500"),
+        })
+    return teile
+
+
+def reihe_abgleichen(r):
+    """Legt fehlende Teile als Wünsche an; Teile in ABS werden übersprungen."""
+    try:
+        teile = reihe_teile(r["reiheAsin"], r["sprache"])
+    except Exception as f:
+        with DB_SPERRE, db() as v:
+            v.execute("UPDATE reihe SET geprueft=?, hinweis=? WHERE id=?",
+                      (jetzt().isoformat(), "Audible gerade nicht erreichbar", r["id"]))
+        log(f"{r['id']}: Audible-Abfrage fehlgeschlagen:", f)
+        return
+    neu = 0
+    for t in teile:
+        in_abs = 1 if abs_vorhanden(t["asin"], t["titel"], t["autor"]) else 0
+        with DB_SPERRE, db() as v:
+            v.execute("INSERT INTO reihe_teil VALUES (?,?,?,?,?) ON CONFLICT(reihe, asin) DO UPDATE SET "
+                      "teil=excluded.teil, titel=excluded.titel, inAbs=excluded.inAbs",
+                      (r["id"], t["asin"], t["teil"], t["titel"], in_abs))
+            if in_abs:
+                continue
+            z = v.execute("SELECT id, benutzer FROM wunsch WHERE upper(asin)=upper(?) AND zurueckgezogen=0",
+                          (t["asin"],)).fetchone()
+            if z:
+                if z["benutzer"] != r["benutzer"]:
+                    v.execute("INSERT OR IGNORE INTO interesse VALUES (?,?)", (z["id"], r["benutzer"]))
+                continue
+            wid, zeit = "w_" + secrets.token_hex(4), jetzt().isoformat()
+            v.execute("INSERT INTO wunsch (id, benutzer, asin, titel, autor, sprecher, reihe, teil, "
+                      "laufzeitMin, sprache, coverUrl, status, erstellt, aktualisiert, ausReihe) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,'gewuenscht',?,?,?)",
+                      (wid, r["benutzer"], t["asin"], t["titel"], t["autor"] or r["autor"], t["sprecher"],
+                       r["reihe"], t["teil"], t["laufzeitMin"], t["sprache"], t["coverUrl"],
+                       zeit, zeit, r["id"]))
+            neu += 1
+    with DB_SPERRE, db() as v:
+        v.execute("UPDATE reihe SET geprueft=?, hinweis=? WHERE id=?",
+                  (jetzt().isoformat(), None if teile else "Keine erschienenen Teile in dieser Sprache gefunden",
+                   r["id"]))
+    if neu:
+        log(f"{r['id']}: {neu} Teile neu gewünscht")
+        WECKER.set()
+
+
+def reihe_json(v, r):
+    zahlen = v.execute(
+        "SELECT count(*), "
+        " sum(CASE WHEN t.inAbs=1 OR w.status='da' THEN 1 ELSE 0 END), "
+        " sum(CASE WHEN t.inAbs=0 AND w.id IS NOT NULL AND w.status!='da' THEN 1 ELSE 0 END) "
+        "FROM reihe_teil t LEFT JOIN wunsch w ON upper(w.asin)=upper(t.asin) AND w.zurueckgezogen=0 "
+        "WHERE t.reihe=?", (r["id"],)).fetchone()
+    d = {"id": r["id"], "reihe": r["reihe"], "autor": r["autor"], "sprache": r["sprache"],
+         "erstellt": iso(datetime.fromisoformat(r["erstellt"])),
+         "teileGesamt": zahlen[0] or 0, "teileDa": zahlen[1] or 0, "teileGewuenscht": zahlen[2] or 0}
+    if r["geprueft"]:
+        d["geprueft"] = iso(datetime.fromisoformat(r["geprueft"]))
+    if r["hinweis"]:
+        d["hinweis"] = r["hinweis"]
+    return d
+
+
+def reihen_pruefen():
+    grenze = (jetzt() - timedelta(hours=REIHE_PRUEFEN_STUNDEN)).isoformat()
+    with db() as v:
+        faellig = v.execute("SELECT * FROM reihe WHERE zurueckgezogen=0 AND (geprueft IS NULL OR geprueft<?) "
+                            "ORDER BY geprueft LIMIT 5", (grenze,)).fetchall()
+    for r in faellig:  # gedrosselt: höchstens 5 Reihen pro Lauf
+        reihe_abgleichen(r)
+        time.sleep(2)
+
+
 WECKER = threading.Event()
 
 
@@ -770,6 +916,10 @@ def arbeiter():
             arbeite_einmal()
         except Exception:
             log("Arbeitslauf fehlgeschlagen:", traceback.format_exc())
+        try:
+            reihen_pruefen()
+        except Exception:
+            log("Reihen-Prüfung fehlgeschlagen:", traceback.format_exc())
         WECKER.wait(E.takt)
         WECKER.clear()
 
@@ -833,10 +983,14 @@ class Schnittstelle(BaseHTTPRequestHandler):
         teile, abfrage = self.pfad()
         if teile == ["status"]:
             return self.antworte(200, {"ok": True, "version": VERSION})
-        if teile[:1] == ["reihe"]:
-            if not self.benutzer():
+        if teile == ["reihe"]:
+            name = self.benutzer()
+            if not name:
                 return
-            return self.fehler(501, "noch_nicht", "Reihen folgen kommt in Version 2")
+            with db() as v:
+                reihen = v.execute("SELECT * FROM reihe WHERE benutzer=? AND zurueckgezogen=0 "
+                                   "ORDER BY erstellt DESC", (name,)).fetchall()
+                return self.antworte(200, {"reihen": [reihe_json(v, r) for r in reihen]})
         if teile[:1] != ["wunsch"] or len(teile) > 2:
             return self.fehler(404, "unbekannt", "Diesen Pfad gibt es nicht")
         name = self.benutzer()
@@ -863,8 +1017,8 @@ class Schnittstelle(BaseHTTPRequestHandler):
         name = self.benutzer()
         if not name:
             return
-        if teile[:1] == ["reihe"]:
-            return self.fehler(501, "noch_nicht", "Reihen folgen kommt in Version 2")
+        if teile == ["reihe"]:
+            return self.reihe_folgen(name)
         if teile == ["geraet"]:
             try:
                 d = self.koerper()
@@ -930,13 +1084,49 @@ class Schnittstelle(BaseHTTPRequestHandler):
         WECKER.set()
         self.antworte(201, als_json(z))
 
+    def reihe_folgen(self, name):
+        try:
+            d = self.koerper()
+        except (ValueError, json.JSONDecodeError):
+            return self.fehler(400, "ungueltig", "Kein gültiges JSON-Objekt")
+        asin = str(d.get("asin") or "").strip().upper()
+        reihe_name = str(d.get("reihe") or "").strip()[:300]
+        sprache = (str(d.get("sprache") or "de").strip().lower() or "de")[:2]
+        if not re.fullmatch(r"[A-Z0-9]{10}", asin) or not reihe_name:
+            return self.fehler(400, "ungueltig", "reihe und asin (eines Teils) sind Pflicht")
+        try:
+            reihe_asin, audible_name = reihe_von_asin(asin, reihe_name)
+        except Exception as f:
+            log("Audible nicht erreichbar:", f)
+            return self.fehler(502, "audible_nicht_erreichbar", "Audible ist gerade nicht erreichbar")
+        if not reihe_asin:
+            return self.fehler(422, "reihe_unbekannt", "Audible kennt zu diesem Hörbuch keine Reihe")
+        with DB_SPERRE, db() as v:
+            z = v.execute("SELECT * FROM reihe WHERE benutzer=? AND reiheAsin=? AND zurueckgezogen=0",
+                          (name, reihe_asin)).fetchone()
+            if z:
+                return self.antworte(200, reihe_json(v, z))
+            rid = "r_" + secrets.token_hex(4)
+            v.execute("INSERT INTO reihe (id, benutzer, reiheAsin, reihe, autor, sprache, erstellt) "
+                      "VALUES (?,?,?,?,?,?,?)",
+                      (rid, name, reihe_asin, audible_name or reihe_name,
+                       str(d.get("autor") or "").strip()[:300] or None, sprache, jetzt().isoformat()))
+            r_ = v.execute("SELECT * FROM reihe WHERE id=?", (rid,)).fetchone()
+        log(f"{rid}: {name} folgt einer Reihe")
+        reihe_abgleichen(r_)
+        with db() as v:
+            r_ = v.execute("SELECT * FROM reihe WHERE id=?", (rid,)).fetchone()
+            return self.antworte(201, reihe_json(v, r_))
+
     def do_DELETE(self):
         teile, _ = self.pfad()
         name = self.benutzer()
         if not name:
             return
-        if teile[:1] == ["reihe"]:
-            return self.fehler(501, "noch_nicht", "Reihen folgen kommt in Version 2")
+        if len(teile) == 2 and teile[0] == "reihe":
+            with DB_SPERRE, db() as v:
+                v.execute("UPDATE reihe SET zurueckgezogen=1 WHERE id=? AND benutzer=?", (teile[1], name))
+            return self.antworte(204)  # bereits angelegte Wünsche bleiben bestehen
         if len(teile) == 2 and teile[0] == "geraet":
             with DB_SPERRE, db() as v:
                 v.execute("DELETE FROM geraet WHERE token=? AND benutzer=?", (teile[1].lower(), name))

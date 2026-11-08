@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 1.3.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.0.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 1.3.0. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "1.3.0"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.0.0"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -105,13 +105,41 @@ Nutzlast:
 ```
 `absItemId` ist nur dabei, wenn das Buch schon in ABS steht. Benachrichtigt werden alle Benutzer, die den Wunsch haben. Antwortet APNs mit `410`, `BadDeviceToken`, `Unregistered` oder `DeviceTokenNotForTopic`, löscht der Server das Gerät.
 
-## Reihen folgen (Version 2, noch nicht verfügbar)
+## Reihen folgen (ab 2.0.0)
 
-Bis dahin antworten diese Endpunkte mit `501 noch_nicht`.
+### `POST /reihe`
+Body: `{"reihe": "<Name>", "autor": "<Autor>", "asin": "<ASIN eines Teils>", "sprache": "de"}`. Pflicht sind `reihe` und `asin`.
+- Der Server sucht über den Audible-Katalog die Reihe zu dieser ASIN. Hat der Teil mehrere Reihen, nimmt er die mit passendem Namen.
+- Er legt sofort alle **schon erschienenen** Teile mit Nummer und in der gewünschten Sprache als Wünsche an. Pro Nummer nimmt er eine Fassung, „ungekürzt“ vor „gekürzt“. Sammelboxen wie „1-3“ lässt er aus.
+- Teile, die schon in ABS liegen, werden übersprungen. Ist ein Teil schon gewünscht, auch von jemand anderem, kommt der Benutzer als Interessent dazu. Doppelt geladen wird nichts.
+- Danach prüft der Server die Reihe alle 24 Stunden und wünscht neu erschienene Teile automatisch. Vorbestellungen kommen erst ab dem Erscheinungstag dazu.
+- Für Teile aus einer Reihe gibt es keine Push-Nachricht „noch nicht gefunden“. „Hörbuch ist da“ kommt wie gewohnt.
 
-- `POST /reihe` mit `{reihe, autor, asin (eines Teils), sprache}` liefert `201 {"id": "r_…", "reihe": …, "autor": …, "erstellt": …}`. Der Server prüft dann täglich, ob es bei Audible neue Teile gibt, und legt sie als Wunsch an.
-- `GET /reihe` liefert `{"reihen": […]}`.
-- `DELETE /reihe/{id}` liefert `204`.
+Antworten:
+- `201` Reihen-Objekt (siehe unten)
+- `200` der Benutzer folgt der Reihe schon, bestehendes Objekt
+- `400 ungueltig` bei fehlender oder ungültiger ASIN bzw. Reihe
+- `422 reihe_unbekannt`, wenn Audible zu dieser ASIN keine Reihe kennt
+- `502 audible_nicht_erreichbar`
+
+### `GET /reihe`
+Liefert `{"reihen": [ … ]}`, nur die des eigenen Benutzers, neueste zuerst.
+
+### `DELETE /reihe/{id}`
+Antwort: `204`. Der Benutzer folgt der Reihe nicht mehr. Schon angelegte Wünsche bleiben bestehen und lassen sich einzeln zurückziehen.
+
+### Reihen-Objekt
+```json
+{"id": "r_1a2b3c4d", "reihe": "<Name laut Audible>", "autor": "…", "sprache": "de",
+ "erstellt": "…", "geprueft": "…",
+ "teileGesamt": 5, "teileDa": 4, "teileGewuenscht": 1,
+ "hinweis": "…"}
+```
+- `teileGesamt`: erschienene Teile in dieser Sprache
+- `teileDa`: in ABS vorhanden oder Wunsch mit Status `da`
+- `teileGewuenscht`: Wunsch offen, also noch nicht `da`
+- `hinweis` ist optional, z. B. „Keine erschienenen Teile in dieser Sprache gefunden“
+- Die Wünsche aus einer Reihe erscheinen ganz normal in `GET /wunsch`, mit `reihe` und `teil`.
 
 ## Bewertung der Treffer (Server)
 
