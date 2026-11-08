@@ -17,11 +17,11 @@ struct HoerbuecherView: View {
                         }
                         VStack(spacing: 0) {
                             ForEach(bibliotheken) { b in
-                                NavigationLink { BibliothekView(bibliothek: b) } label: {
+                                NavigationLink(value: Ziel.bibliothek(b)) {
                                     Zeile(text: b.name, symbol: "books.vertical")
                                 }
                             }
-                            NavigationLink { WunschView() } label: {
+                            NavigationLink(value: Ziel.wuensche) {
                                 Zeile(text: "Hörbuch wünschen", symbol: "sparkles")
                             }
                         }

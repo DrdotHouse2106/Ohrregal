@@ -8,10 +8,29 @@ extension View {
             .navigationDestination(for: Kuenstler.self) { KuenstlerView(kuenstler: $0) }
             .navigationDestination(for: Playlist.self) { PlaylistView(playlist: $0) }
             .navigationDestination(for: Hoerbuch.self) { HoerbuchView(hoerbuch: $0) }
+            .navigationDestination(for: Ziel.self) { $0.ansicht }
     }
 
     func miniPlayer(_ offen: Binding<Bool>) -> some View {
         safeAreaInset(edge: .bottom) { MiniPlayer(offen: offen) }
+    }
+}
+
+/// Alle übrigen Seiten. Jeder Link im Stapel arbeitet mit Werten; gemischt mit Links auf feste Ansichten
+/// springt SwiftUI sonst gelegentlich zurück, statt die Seite zu öffnen.
+enum Ziel: Hashable {
+    case kuenstler, alben, playlists, favoriten, wuensche
+    case bibliothek(Bibliothek)
+
+    @ViewBuilder var ansicht: some View {
+        switch self {
+        case .kuenstler: KuenstlerListe()
+        case .alben: AlbenListe()
+        case .playlists: PlaylistListe()
+        case .favoriten: FavoritenView()
+        case .wuensche: WunschView()
+        case .bibliothek(let b): BibliothekView(bibliothek: b)
+        }
     }
 }
 

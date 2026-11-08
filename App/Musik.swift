@@ -4,10 +4,10 @@ import SwiftUI
 struct MusikView: View {
     var body: some View {
         List {
-            NavigationLink { KuenstlerListe() } label: { Label("Künstler", systemImage: "music.mic") }
-            NavigationLink { AlbenListe() } label: { Label("Alben", systemImage: "square.stack") }
-            NavigationLink { PlaylistListe() } label: { Label("Playlists", systemImage: "music.note.list") }
-            NavigationLink { FavoritenView() } label: { Label("Gefällt mir", systemImage: "heart") }
+            NavigationLink(value: Ziel.kuenstler) { Label("Künstler", systemImage: "music.mic") }
+            NavigationLink(value: Ziel.alben) { Label("Alben", systemImage: "square.stack") }
+            NavigationLink(value: Ziel.playlists) { Label("Playlists", systemImage: "music.note.list") }
+            NavigationLink(value: Ziel.favoriten) { Label("Gefällt mir", systemImage: "heart") }
         }
         .scrollContentBackground(.hidden)
         .background(Farben.hintergrund)
