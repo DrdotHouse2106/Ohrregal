@@ -27,14 +27,7 @@ struct Anmeldung: View {
                 } header: {
                     Text("Audiobookshelf (Hörbücher)")
                 } footer: {
-                    Text("Optional. Wird genutzt, sobald die Hörbücher in Ohrregal da sind.")
-                }
-                Section {
-                    Feld("Adresse, z. B. http://server:8097", text: $z.wunschServer)
-                } header: {
-                    Text("Hörbuch-Wünsche")
-                } footer: {
-                    Text("Optional. Nutzt die Anmeldung von Audiobookshelf und funktioniert nur zu Hause oder über VPN. Die Zugangsdaten bleiben auf diesem iPhone, Passwörter liegen im Schlüsselbund.")
+                    Text("Optional. Für Hörbücher und Hörbuch-Wünsche, sobald sie in Ohrregal da sind. Die Zugangsdaten bleiben auf diesem iPhone, Passwörter liegen im Schlüsselbund.")
                 }
                 if let fehler {
                     Section { Text(fehler).foregroundStyle(.red) }
@@ -90,7 +83,6 @@ private struct Feld: View {
 struct Zugaenge {
     var server = "", benutzer = "", passwort = ""
     var absServer = "", absBenutzer = "", absPasswort = ""
-    var wunschServer = ""
 
     static func geladen() -> Zugaenge {
         let d = UserDefaults.standard
@@ -98,16 +90,16 @@ struct Zugaenge {
             server: d.string(forKey: "server") ?? "", benutzer: d.string(forKey: "benutzer") ?? "",
             passwort: Schluesselbund.lies("navidrome") ?? "",
             absServer: d.string(forKey: "absServer") ?? "", absBenutzer: d.string(forKey: "absBenutzer") ?? "",
-            absPasswort: Schluesselbund.lies("audiobookshelf") ?? "",
-            wunschServer: d.string(forKey: "wunschServer") ?? "")
+            absPasswort: Schluesselbund.lies("audiobookshelf") ?? "")
     }
 
     func speichereZusatz() {
         let d = UserDefaults.standard
         d.set(absServer.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "absServer")
         d.set(absBenutzer, forKey: "absBenutzer")
-        d.set(wunschServer.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "wunschServer")
         if absPasswort.isEmpty { Schluesselbund.loesche("audiobookshelf") } else { Schluesselbund.speichere(absPasswort, fuer: "audiobookshelf") }
-        Schluesselbund.loesche("hoerbuchwunsch") // früherer eigener Token, wird nicht mehr gebraucht
+        // Hörbuch-Wünsche: Adresse = Audiobookshelf-Adresse + "/wunsch-api", Anmeldung mit dem Audiobookshelf-Token.
+        d.removeObject(forKey: "wunschServer")
+        Schluesselbund.loesche("hoerbuchwunsch")
     }
 }
