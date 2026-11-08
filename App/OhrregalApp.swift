@@ -1,10 +1,14 @@
 import Kern
 import SwiftUI
 
+/// Gemeinsam für iPhone und CarPlay; CarPlay kann die App auch ohne iPhone-Oberfläche starten.
+@MainActor let geteilterPlayer = Player()
+@MainActor let geteilteSitzung = Sitzung()
+
 @main
 struct OhrregalApp: App {
-    @State private var sitzung = Sitzung()
-    @State private var player = Player()
+    @State private var sitzung = geteilteSitzung
+    @State private var player = geteilterPlayer
 
     init() {
         URLCache.shared = URLCache(memoryCapacity: 64 << 20, diskCapacity: 512 << 20)
@@ -30,8 +34,8 @@ struct OhrregalApp: App {
 /// Angemeldeter Server; Zugangsdaten in UserDefaults, Passwort im Schlüsselbund.
 @MainActor @Observable
 final class Sitzung {
-    var client: NavidromeClient?
-    var hoerbuchClient: AudiobookshelfClient?
+    var client: NavidromeClient? { didSet { geteilterPlayer.client = client } }
+    var hoerbuchClient: AudiobookshelfClient? { didSet { geteilterPlayer.hoerbuchClient = hoerbuchClient } }
 
     init() {
         let d = UserDefaults.standard
@@ -40,6 +44,9 @@ final class Sitzung {
             client = NavidromeClient(server: url, benutzer: benutzer, passwort: passwort)
         }
         ladeHoerbuch()
+        // Beobachter greifen im eigenen init nicht; daher hier ausdrücklich.
+        geteilterPlayer.client = client
+        geteilterPlayer.hoerbuchClient = hoerbuchClient
     }
 
     /// Audiobookshelf ist optional; ohne Zugang bleibt der Tab „Hörbücher“ leer.

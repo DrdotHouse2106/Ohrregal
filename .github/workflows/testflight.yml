@@ -50,6 +50,10 @@ jobs:
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" -quiet
           # Unsigniert archivieren; signiert wird erst beim Export mit dem von Apple verwalteten
           # Distributionszertifikat. So legt nicht jeder Lauf ein neues Entwicklungszertifikat an.
+          # Vorläufige Signatur nur, damit die Berechtigungen (CarPlay) beim Export erhalten bleiben.
+          APP="$RUNNER_TEMP/Ohrregal.xcarchive/Products/Applications/Ohrregal.app"
+          codesign --force --sign - --entitlements App/Ohrregal.entitlements "$APP"
+          codesign -d --entitlements - "$APP"
 
           cat > "$RUNNER_TEMP/export.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
