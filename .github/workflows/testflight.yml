@@ -12,7 +12,7 @@ concurrency: testflight
 
 jobs:
   hochladen:
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       TEAM: ${{ secrets.APPLE_TEAM_ID }}
       KEY_ID: ${{ secrets.ASC_KEY_ID }}
