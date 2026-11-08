@@ -126,7 +126,21 @@ struct TitelListe: View {
             ForEach(Array(titel.enumerated()), id: \.offset) { i, t in
                 Button { player.spiele(titel, ab: i) } label: { TitelZeile(titel: t, mitCover: mitCover) }
                     .buttonStyle(.plain)
+                    .contextMenu { RadioKnopf(titel: t) }
             }
+        }
+    }
+}
+
+/// „Radio ab diesem Song“: der Titel und danach ähnliche (über Last.fm).
+struct RadioKnopf: View {
+    @Environment(\.client) private var client
+    @Environment(Player.self) private var player
+    let titel: Titel
+
+    var body: some View {
+        Button("Radio ab diesem Song", systemImage: "dot.radiowaves.left.and.right") {
+            Task { player.spiele(await Mixe.radio(ab: titel, client)) }
         }
     }
 }

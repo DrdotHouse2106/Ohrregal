@@ -102,6 +102,11 @@ struct VollPlayer: View {
                         Text(tempoText(player.tempo)).font(.headline).frame(width: 60, height: 44)
                     }
                 }
+                if let titel = player.aktuell {
+                    Menu { RadioKnopf(titel: titel) } label: {
+                        Image(systemName: "ellipsis.circle").font(.title3).frame(width: 60, height: 44)
+                    }
+                }
                 Spacer()
                 AirPlayKnopf().frame(width: 44, height: 44)
                 Spacer()

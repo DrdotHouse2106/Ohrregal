@@ -34,3 +34,22 @@ final class HoerbuchTests: XCTestCase {
         XCTAssertNil(t.last?.asin)
     }
 }
+
+@MainActor
+final class HoerverlaufTests: XCTestCase {
+    private func titel(_ id: String, kuenstler: String) -> Titel {
+        try! JSONDecoder().decode(Titel.self, from: Data(#"{"id":"\#(id)","title":"T\#(id)","artist":"\#(kuenstler)","artistId":"ar-\#(kuenstler)"}"#.utf8))
+    }
+
+    func testTopKuenstlerUndUnbeliebt() {
+        let verlauf = Hoerverlauf(datei: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
+        for _ in 0..<3 { verlauf.merke(titel("1", kuenstler: "A"), uebersprungen: false) }
+        verlauf.merke(titel("2", kuenstler: "B"), uebersprungen: false)
+        verlauf.merke(titel("3", kuenstler: "C"), uebersprungen: true)
+        verlauf.merke(titel("3", kuenstler: "C"), uebersprungen: true)
+        XCTAssertEqual(verlauf.topKuenstler().map(\.id), ["ar-A", "ar-B"])
+        XCTAssertEqual(verlauf.unbeliebt(), ["3"])
+        verlauf.merke(titel("3", kuenstler: "C"), uebersprungen: false)
+        XCTAssertTrue(verlauf.unbeliebt().isEmpty)
+    }
+}

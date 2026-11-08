@@ -129,6 +129,8 @@ public final class Player {
     public func weiter() {
         if istHoerbuch { springe(zu: min(zeit + 30, dauer)); return }
         guard index + 1 < warteschlange.count else { return }
+        // Früh weitergeschaltet zählt als „übersprungen“ und wirkt auf die Mixe.
+        if let titel = aktuell, zeit < 30 { Hoerverlauf.geteilt.merke(titel, uebersprungen: true) }
         player.advanceToNextItem()
     }
 
@@ -223,8 +225,9 @@ public final class Player {
 
     private func gehoert(_ schluessel: ObjectIdentifier) {
         guard let i = stellen.removeValue(forKey: schluessel), !istHoerbuch, let client, warteschlange.indices.contains(i) else { return }
-        let id = warteschlange[i].id
-        Task { try? await client.scrobble(id, fertig: true) }
+        let titel = warteschlange[i]
+        Hoerverlauf.geteilt.merke(titel, uebersprungen: false)
+        Task { try? await client.scrobble(titel.id, fertig: true) }
     }
 
     /// Meldet die Hörposition an Audiobookshelf (alle 15 s, beim Pausieren und am Ende).
