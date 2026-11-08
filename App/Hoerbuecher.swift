@@ -5,6 +5,8 @@ struct HoerbuecherView: View {
     @Environment(Sitzung.self) private var sitzung
     @State private var angefangen: [Hoerbuch] = []
     @State private var bibliotheken: [Bibliothek] = []
+    @State private var neu: [Hoerbuch] = []
+    @State private var genres: [(Bibliothek, String)] = []
     @State private var fehler: String?
 
     var body: some View {
@@ -14,6 +16,27 @@ struct HoerbuecherView: View {
                     VStack(alignment: .leading, spacing: 28) {
                         if !angefangen.isEmpty {
                             HoerbuchReihe(titel: "Weiterhören", hoerbuecher: angefangen)
+                        }
+                        if !neu.isEmpty {
+                            HoerbuchReihe(titel: "Kürzlich hinzugefügt", hoerbuecher: neu)
+                        }
+                        if !genres.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Genres").font(.title2.bold()).padding(.horizontal)
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    LazyHGrid(rows: [GridItem(.fixed(40)), GridItem(.fixed(40))], spacing: 10) {
+                                        ForEach(genres, id: \.1) { b, g in
+                                            NavigationLink(value: Ziel.genre(b, g)) {
+                                                Text(g).font(.subheadline)
+                                                    .padding(.horizontal, 14).frame(height: 36)
+                                                    .background(Farben.flaeche, in: Capsule())
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
                         }
                         VStack(spacing: 0) {
                             ForEach(bibliotheken) { b in
@@ -49,6 +72,17 @@ struct HoerbuecherView: View {
         do {
             bibliotheken = try await abs.bibliotheken()
             angefangen = try await abs.angefangen()
+            // Neu und Genres aus allen Hörbuch-Bibliotheken.
+            var neuAlle: [Hoerbuch] = []
+            var genresAlle: [(Bibliothek, String)] = []
+            for b in bibliotheken {
+                neuAlle += (try? await abs.hoerbuecher(in: b.id, seite: 0, anzahl: 20, neuesteZuerst: true)) ?? []
+                for g in (try? await abs.genres(in: b.id)) ?? [] where !genresAlle.contains(where: { $0.1 == g }) {
+                    genresAlle.append((b, g))
+                }
+            }
+            neu = Array(neuAlle.prefix(20))
+            genres = genresAlle
             fehler = nil
         } catch {
             fehler = error.localizedDescription
@@ -110,6 +144,7 @@ struct HoerbuchReihe: View {
 struct BibliothekView: View {
     @Environment(Sitzung.self) private var sitzung
     let bibliothek: Bibliothek
+    var genre: String?
     @State private var hoerbuecher: [Hoerbuch] = []
     @State private var ende = false
     @State private var text = ""
@@ -127,7 +162,7 @@ struct BibliothekView: View {
             .padding()
         }
         .background(Farben.hintergrund)
-        .navigationTitle(bibliothek.name)
+        .navigationTitle(genre ?? bibliothek.name)
         .safeAreaInset(edge: .top) { Suchfeld(prompt: "Titel, Autor, Sprecher", text: $text) }
         .task(id: text) {
             guard text.count >= 2, let abs = sitzung.hoerbuchClient else { treffer = nil; return }
@@ -140,7 +175,7 @@ struct BibliothekView: View {
 
     private func nachladen() async {
         guard !ende, let abs = sitzung.hoerbuchClient,
-              let neu = try? await abs.hoerbuecher(in: bibliothek.id, seite: hoerbuecher.count / 60) else { return }
+              let neu = try? await abs.hoerbuecher(in: bibliothek.id, seite: hoerbuecher.count / 60, genre: genre) else { return }
         ende = neu.count < 60
         hoerbuecher += neu.filter { n in !hoerbuecher.contains { $0.id == n.id } }
     }

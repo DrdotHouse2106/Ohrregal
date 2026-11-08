@@ -22,6 +22,7 @@ extension View {
 enum Ziel: Hashable {
     case kuenstler, alben, playlists, favoriten, wuensche
     case bibliothek(Bibliothek)
+    case genre(Bibliothek, String)
 
     @ViewBuilder var ansicht: some View {
         switch self {
@@ -31,6 +32,7 @@ enum Ziel: Hashable {
         case .favoriten: FavoritenView()
         case .wuensche: WunschView()
         case .bibliothek(let b): BibliothekView(bibliothek: b)
+        case .genre(let b, let g): BibliothekView(bibliothek: b, genre: g)
         }
     }
 }

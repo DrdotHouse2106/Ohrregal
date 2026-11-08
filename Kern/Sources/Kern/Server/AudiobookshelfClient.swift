@@ -94,10 +94,24 @@ public final class AudiobookshelfClient {
         return liste.libraryItems
     }
 
-    public func hoerbuecher(in bibliothek: String, seite: Int) async throws -> [Hoerbuch] {
+    /// Seitenweise; optional neueste zuerst und nach Genre gefiltert.
+    public func hoerbuecher(in bibliothek: String, seite: Int, anzahl: Int = 60, neuesteZuerst: Bool = false, genre: String? = nil) async throws -> [Hoerbuch] {
         struct Liste: Decodable { let results: [Hoerbuch] }
-        let liste: Liste = try await hole("/api/libraries/\(bibliothek)/items?limit=60&page=\(seite)&minified=1&sort=media.metadata.title")
+        var pfad = "/api/libraries/\(bibliothek)/items?limit=\(anzahl)&page=\(seite)&minified=1"
+        pfad += neuesteZuerst ? "&sort=addedAt&desc=1" : "&sort=media.metadata.title"
+        if let genre {
+            // Audiobookshelf erwartet den Filterwert Base64-kodiert.
+            let wert = Data(genre.utf8).base64EncodedString().addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            pfad += "&filter=genres.\(wert)"
+        }
+        let liste: Liste = try await hole(pfad)
         return liste.results
+    }
+
+    public func genres(in bibliothek: String) async throws -> [String] {
+        struct Filter: Decodable { let genres: [String]? }
+        let filter: Filter = try await hole("/api/libraries/\(bibliothek)/filterdata")
+        return (filter.genres ?? []).sorted { $0.localizedCompare($1) == .orderedAscending }
     }
 
     public func suche(in bibliothek: String, nach text: String) async throws -> [Hoerbuch] {
