@@ -63,15 +63,36 @@ public struct BuchTreffer: Decodable, Hashable, Identifiable, Sendable {
     public let language: String?
     public let duration: Double?
     public let series: [Reihe]?
+    public let description: String?
+    public let publisher: String?
+    public let publishedYear: String?
+
+    /// Beschreibung ohne HTML (Audible liefert sie mit Absätzen und Formatierung).
+    public var beschreibung: String? {
+        description?
+            .replacingOccurrences(of: "<br\\s*/?>|</p>", with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     public struct Reihe: Decodable, Hashable, Sendable {
         public let series: String?
         public let sequence: String?
+
+        enum CodingKeys: String, CodingKey { case series, sequence }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            series = try? c.decode(String.self, forKey: .series)
+            sequence = (try? c.decode(String.self, forKey: .sequence)) ?? (try? c.decode(Double.self, forKey: .sequence)).map { $0 == $0.rounded() ? String(Int($0)) : String($0) }
+        }
     }
 
     public var id: String { asin ?? "\(title ?? "")|\(author ?? "")" }
 
-    enum CodingKeys: String, CodingKey { case title, subtitle, author, narrator, cover, asin, language, duration, series }
+    enum CodingKeys: String, CodingKey { case title, subtitle, author, narrator, cover, asin, language, duration, series, description, publisher, publishedYear }
 
     public init(from decoder: Decoder) throws {
         // Die Anbieter liefern Felder mal als Zahl, mal als Text; nichts davon darf die Suche scheitern lassen.
@@ -85,6 +106,9 @@ public struct BuchTreffer: Decodable, Hashable, Identifiable, Sendable {
         language = try? c.decode(String.self, forKey: .language)
         duration = (try? c.decode(Double.self, forKey: .duration)) ?? (try? c.decode(String.self, forKey: .duration)).flatMap(Double.init)
         series = try? c.decode([Reihe].self, forKey: .series)
+        description = try? c.decode(String.self, forKey: .description)
+        publisher = try? c.decode(String.self, forKey: .publisher)
+        publishedYear = (try? c.decode(String.self, forKey: .publishedYear)) ?? (try? c.decode(Int.self, forKey: .publishedYear)).map(String.init)
     }
 }
 
@@ -110,4 +134,13 @@ public struct Wunsch: Decodable, Hashable, Identifiable, Sendable {
         default: status
         }
     }
+}
+
+/// Reihe, der der Benutzer folgt (Dienst „Hörbuchwunsch“, `GET /reihe`).
+public struct GefolgteReihe: Decodable, Hashable, Identifiable, Sendable {
+    public let id: String
+    public let reihe: String
+    public let autor: String?
+    public let teileDa: Int?
+    public let teileGewuenscht: Int?
 }

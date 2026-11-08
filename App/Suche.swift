@@ -9,7 +9,7 @@ struct SucheView: View {
     var body: some View {
         ErgebnisAnsicht(ergebnis: ergebnis)
             .navigationTitle("Suchen")
-            .searchable(text: $text, prompt: "Künstler, Alben, Titel")
+            .safeAreaInset(edge: .top) { Suchfeld(prompt: "Künstler, Alben, Titel", text: $text) }
             .task(id: text) {
                 guard text.count >= 2 else { ergebnis = nil; return }
                 try? await Task.sleep(for: .milliseconds(300))

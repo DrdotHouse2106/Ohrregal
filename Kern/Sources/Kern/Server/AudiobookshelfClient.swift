@@ -195,6 +195,26 @@ public final class AudiobookshelfClient {
         guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
     }
 
+    /// Reihe folgen: fehlende und künftige Teile werden automatisch gewünscht.
+    public func folgeReihe(_ treffer: BuchTreffer) async throws {
+        guard let reihe = treffer.series?.first?.series else { throw ServerFehler("Dieses Hörbuch gehört zu keiner Reihe.") }
+        var json: [String: Any] = ["reihe": reihe, "autor": treffer.author ?? "", "sprache": "de"]
+        json["asin"] = treffer.asin
+        let (daten, code) = try await sende("/wunsch-api/reihe", methode: "POST", json: json)
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
+    public func reihen() async throws -> [GefolgteReihe] {
+        struct Liste: Decodable { let reihen: [GefolgteReihe] }
+        let liste: Liste = try await hole("/wunsch-api/reihe")
+        return liste.reihen
+    }
+
+    public func reiheEntfolgen(_ id: String) async throws {
+        let (daten, code) = try await sende("/wunsch-api/reihe/\(id)", methode: "DELETE")
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
     public func zurueckziehen(_ id: String) async throws {
         let (daten, code) = try await sende("/wunsch-api/wunsch/\(id)", methode: "DELETE")
         guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }

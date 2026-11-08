@@ -8,6 +8,7 @@ extension View {
             .navigationDestination(for: Kuenstler.self) { KuenstlerView(kuenstler: $0) }
             .navigationDestination(for: Playlist.self) { PlaylistView(playlist: $0) }
             .navigationDestination(for: Hoerbuch.self) { HoerbuchView(hoerbuch: $0) }
+            .navigationDestination(for: BuchTreffer.self) { TrefferView(treffer: $0) }
             .navigationDestination(for: Ziel.self) { $0.ansicht }
     }
 
@@ -31,6 +32,38 @@ enum Ziel: Hashable {
         case .wuensche: WunschView()
         case .bibliothek(let b): BibliothekView(bibliothek: b)
         }
+    }
+}
+
+/// Immer sichtbares Suchfeld oben auf der Seite (statt des von iOS versteckten Felds).
+struct Suchfeld: View {
+    let prompt: String
+    @Binding var text: String
+    var laeuft = false
+    var suchen: (() -> Void)?
+
+    var body: some View {
+        HStack {
+            Image(systemName: "magnifyingglass").foregroundStyle(Farben.textGedaempft)
+            TextField(prompt, text: $text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit { suchen?() }
+            if laeuft {
+                ProgressView()
+            } else if !text.isEmpty {
+                Button { text = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(Farben.textGedaempft)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(10)
+        .background(Farben.flaeche, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal)
+        .padding(.vertical, 6)
+        .background(Farben.hintergrund)
     }
 }
 

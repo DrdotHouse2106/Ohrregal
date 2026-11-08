@@ -128,7 +128,7 @@ struct BibliothekView: View {
         }
         .background(Farben.hintergrund)
         .navigationTitle(bibliothek.name)
-        .searchable(text: $text, prompt: "Titel, Autor, Sprecher")
+        .safeAreaInset(edge: .top) { Suchfeld(prompt: "Titel, Autor, Sprecher", text: $text) }
         .task(id: text) {
             guard text.count >= 2, let abs = sitzung.hoerbuchClient else { treffer = nil; return }
             try? await Task.sleep(for: .milliseconds(300))
@@ -212,46 +212,51 @@ struct WunschView: View {
     @State private var text = ""
     @State private var treffer: [BuchTreffer] = []
     @State private var wuensche: [Wunsch] = []
+    @State private var reihen: [GefolgteReihe] = []
     @State private var meldung: String?
     @State private var zurueckziehen: Wunsch?
     @State private var sucht = false
 
     var body: some View {
         List {
-            // Festes Suchfeld statt .searchable: das wurde je nach iOS-Version nicht angezeigt.
-            Section {
-                HStack {
-                    Image(systemName: "magnifyingglass").foregroundStyle(Farben.textGedaempft)
-                    TextField("Titel oder Autor bei Audible suchen", text: $text)
-                        .textInputAutocapitalization(.never)
-                        .submitLabel(.search)
-                        .onSubmit { Task { await suchen() } }
-                    if sucht {
-                        ProgressView()
-                    } else if !text.isEmpty {
-                        Button("Suchen") { Task { await suchen() } }.buttonStyle(.borderless)
-                    }
-                }
-            }
             if let meldung {
                 Section { Text(meldung).font(.callout) }
             }
             if !treffer.isEmpty {
                 Section("Treffer bei Audible") {
+                    // Antippen öffnet die Details; erst dort wird gewünscht oder der Reihe gefolgt.
                     ForEach(treffer) { t in
-                        HStack(spacing: 12) {
-                            Cover(url: t.cover.flatMap(URL.init(string:)), groesse: 56)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(t.title ?? "").lineLimit(2)
-                                Text(t.author ?? "").font(.caption).foregroundStyle(Farben.textGedaempft)
-                                if let reihe = t.series?.first?.series {
-                                    Text([reihe, t.series?.first?.sequence].compactMap { $0 }.joined(separator: " – "))
-                                        .font(.caption).foregroundStyle(Farben.textGedaempft)
+                        NavigationLink(value: t) {
+                            HStack(spacing: 12) {
+                                Cover(url: t.cover.flatMap(URL.init(string:)), groesse: 56)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(t.title ?? "").lineLimit(2)
+                                    Text(t.author ?? "").font(.caption).foregroundStyle(Farben.textGedaempft)
+                                    if let reihe = t.reihenText {
+                                        Text(reihe).font(.caption).foregroundStyle(Farben.textGedaempft)
+                                    }
                                 }
                             }
-                            Spacer()
-                            Button("Wünschen") { Task { await wuenschen(t) } }
-                                .buttonStyle(.bordered)
+                        }
+                    }
+                }
+            }
+            if !reihen.isEmpty {
+                Section("Reihen, denen du folgst") {
+                    ForEach(reihen) { r in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(r.reihe)
+                            Text([r.autor, r.teileDa.map { "\($0) da" }, r.teileGewuenscht.map { "\($0) gewünscht" }]
+                                .compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(Farben.textGedaempft)
+                        }
+                        .swipeActions {
+                            Button("Nicht mehr folgen", role: .destructive) {
+                                Task {
+                                    try? await sitzung.hoerbuchClient?.reiheEntfolgen(r.id)
+                                    await liste()
+                                }
+                            }
                         }
                     }
                 }
@@ -281,6 +286,9 @@ struct WunschView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Farben.hintergrund)
+        .safeAreaInset(edge: .top) {
+            Suchfeld(prompt: "Titel oder Autor bei Audible suchen", text: $text, laeuft: sucht) { Task { await suchen() } }
+        }
         .navigationTitle("Hörbuch wünschen")
         .confirmationDialog("Wunsch entfernen?", isPresented: Binding(get: { zurueckziehen != nil }, set: { if !$0 { zurueckziehen = nil } }),
                             titleVisibility: .visible, presenting: zurueckziehen) { w in
@@ -311,21 +319,6 @@ struct WunschView: View {
         }
     }
 
-    private func wuenschen(_ t: BuchTreffer) async {
-        guard let abs = sitzung.hoerbuchClient else { return }
-        do {
-            switch try await abs.wuensche(t) {
-            case .angenommen:
-                meldung = "„\(t.title ?? "")“ ist gewünscht. Du bekommst Bescheid, sobald es da ist."
-                await Benachrichtigungen.erlaubnisHolen()
-            case .schonVorhanden: meldung = "„\(t.title ?? "")“ ist schon in deiner Bibliothek."
-            }
-            await liste()
-        } catch {
-            meldung = "Wünschen fehlgeschlagen: \(error.localizedDescription)"
-        }
-    }
-
     private func liste() async {
         guard let abs = sitzung.hoerbuchClient else { return }
         do {
@@ -333,6 +326,7 @@ struct WunschView: View {
         } catch {
             meldung = "Wunsch-Dienst nicht erreichbar: \(error.localizedDescription)"
         }
+        reihen = (try? await abs.reihen()) ?? []
     }
 
     private func entfernen(_ w: Wunsch) async {
@@ -347,5 +341,98 @@ struct WunschView: View {
             meldung = error.localizedDescription
         }
         await liste()
+    }
+}
+
+extension BuchTreffer {
+    var reihenText: String? {
+        guard let reihe = series?.first?.series else { return nil }
+        return [reihe, series?.first?.sequence.map { "Teil \($0)" }].compactMap { $0 }.joined(separator: " – ")
+    }
+}
+
+/// Details eines Audible-Treffers: erst lesen, dann wünschen oder der Reihe folgen.
+struct TrefferView: View {
+    @Environment(Sitzung.self) private var sitzung
+    let treffer: BuchTreffer
+    @State private var meldung: String?
+    @State private var laeuft = false
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 10) {
+                Cover(url: treffer.cover.flatMap(URL.init(string:)), groesse: 220)
+                    .shadow(radius: 20)
+                Text(treffer.title ?? "").font(.title2.bold()).multilineTextAlignment(.center)
+                if let untertitel = treffer.subtitle, !untertitel.isEmpty {
+                    Text(untertitel).font(.subheadline).multilineTextAlignment(.center)
+                }
+                Text(treffer.author ?? "").font(.title3).foregroundStyle(Farben.blau)
+                if let sprecher = treffer.narrator, !sprecher.isEmpty {
+                    Text("Gelesen von \(sprecher)").font(.subheadline).foregroundStyle(Farben.textGedaempft)
+                }
+                if let reihe = treffer.reihenText {
+                    Text(reihe).font(.subheadline).foregroundStyle(Farben.textGedaempft)
+                }
+                Text([treffer.duration.map { stundenText($0 * 60) }, treffer.publishedYear, treffer.publisher]
+                    .compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(Farben.textGedaempft)
+
+                VStack(spacing: 10) {
+                    Button { Task { await wuenschen() } } label: {
+                        Label("Wünschen", systemImage: "sparkles").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    if treffer.series?.first?.series != nil {
+                        Button { Task { await folgen() } } label: {
+                            Label("Ganze Reihe folgen", systemImage: "books.vertical").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .controlSize(.large)
+                .disabled(laeuft)
+                .padding(.top, 6)
+
+                if let meldung { Text(meldung).font(.callout).multilineTextAlignment(.center) }
+
+                if let text = treffer.beschreibung, !text.isEmpty {
+                    Text(text).font(.callout).foregroundStyle(Farben.textGedaempft).padding(.top)
+                }
+            }
+            .padding()
+        }
+        .background(Farben.hintergrund)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func wuenschen() async {
+        guard let abs = sitzung.hoerbuchClient else { return }
+        laeuft = true
+        defer { laeuft = false }
+        do {
+            switch try await abs.wuensche(treffer) {
+            case .angenommen:
+                meldung = "Ist gewünscht. Du bekommst Bescheid, sobald es da ist."
+                await Benachrichtigungen.erlaubnisHolen()
+            case .schonVorhanden:
+                meldung = "Ist schon in deiner Bibliothek."
+            }
+        } catch {
+            meldung = "Wünschen fehlgeschlagen: \(error.localizedDescription)"
+        }
+    }
+
+    private func folgen() async {
+        guard let abs = sitzung.hoerbuchClient else { return }
+        laeuft = true
+        defer { laeuft = false }
+        do {
+            try await abs.folgeReihe(treffer)
+            meldung = "Du folgst der Reihe. Fehlende und neue Teile werden automatisch gewünscht."
+            await Benachrichtigungen.erlaubnisHolen()
+        } catch {
+            meldung = error.localizedDescription
+        }
     }
 }

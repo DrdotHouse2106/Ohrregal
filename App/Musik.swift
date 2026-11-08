@@ -33,7 +33,7 @@ struct KuenstlerListe: View {
         .scrollContentBackground(.hidden)
         .background(Farben.hintergrund)
         .navigationTitle("Künstler")
-        .searchable(text: $filter, prompt: "Künstler filtern")
+        .safeAreaInset(edge: .top) { Suchfeld(prompt: "Künstler filtern", text: $filter) }
         .task { if alle.isEmpty { alle = (try? await client.kuenstlerListe()) ?? [] } }
     }
 }
