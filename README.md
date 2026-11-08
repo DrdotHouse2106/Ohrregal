@@ -12,3 +12,13 @@ Musik und Hörbücher von den eigenen Servern – in einer iPhone-App, die sich 
 > Das Projekt steht am Anfang. Was die App können soll und in welcher Reihenfolge, steht in [KONZEPT.md](KONZEPT.md).
 >
 > English version: [README.en.md](README.en.md)
+
+## Bauen
+
+GitHub baut und testet bei jedem Push automatisch (Reiter **Actions**). Lokal auf dem Mac:
+
+```sh
+brew install xcodegen
+xcodegen          # erzeugt Ohrregal.xcodeproj
+open Ohrregal.xcodeproj
+```

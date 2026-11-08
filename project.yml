@@ -1,0 +1,26 @@
+# Xcode-Projekt wird mit XcodeGen erzeugt: `xcodegen` im Repo-Ordner ausführen.
+name: Ohrregal
+options:
+  bundleIdPrefix: de.drdothouse
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  Kern:
+    path: Kern
+targets:
+  Ohrregal:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: Kern
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Ohrregal
+        UILaunchScreen: {}
+        UIBackgroundModes: [audio]
+    settings:
+      base:
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"

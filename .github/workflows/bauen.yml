@@ -1,0 +1,24 @@
+name: Bauen und testen
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  bauen:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kern testen
+        run: swift test --package-path Kern
+
+      - name: Xcode-Projekt erzeugen
+        run: brew install xcodegen && xcodegen
+
+      - name: App bauen (Simulator)
+        run: |
+          xcodebuild build -project Ohrregal.xcodeproj -scheme Ohrregal \
+            -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet

@@ -1,0 +1,5 @@
+Ohrregal.xcodeproj/
+App/Info.plist
+.build/
+DerivedData/
+.swiftpm/
