@@ -46,5 +46,31 @@ class Bewertung(unittest.TestCase):
         self.assertEqual(h.nachname("Lena Brückmann, Tom Weller"), "brueckmann")
 
 
+class Hoerspiel(unittest.TestCase):
+    W = {"titel": "Die vier ??? und das Nebelschiff", "autor": "Mara Quell", "reihe": "Die vier ???",
+         "teil": "42", "sprache": "de", "laufzeitMin": 70, "hoerspiel": 1}
+
+    def test_hoerspiel_wird_bevorzugt(self):
+        hs, _ = h.bewerte(r("Die.vier.Fragezeichen.042.und.das.Nebelschiff.Hoerspiel", mb=70), self.W)
+        normal, _ = h.bewerte(r("Die.vier.Fragezeichen.042.und.das.Nebelschiff", mb=70), self.W)
+        self.assertIsNotNone(hs)
+        self.assertGreater(hs, normal)
+
+    def test_folge_nur_mit_nummer(self):
+        p, _ = h.bewerte(r("Die vier Fragezeichen - Folge 42 - Hoerspiel", mb=70), self.W)
+        self.assertIsNotNone(p)
+
+    def test_falsche_folge(self):
+        p, _ = h.bewerte(r("Die vier Fragezeichen - Folge 41 - Hoerspiel", mb=70), self.W)
+        self.assertIsNone(p)
+
+    def test_buch_wunsch_lehnt_hoerspiel_weiter_ab(self):
+        p, _ = h.bewerte(r("Lena Brueckmann - Die Glocken von Morhaven - Hoerspiel"), W)
+        self.assertIsNone(p)
+
+    def test_fragezeichen_werden_wort(self):
+        self.assertEqual(h.norm("Die vier ???"), "die vier fragezeichen")
+
+
 if __name__ == "__main__":
     unittest.main()

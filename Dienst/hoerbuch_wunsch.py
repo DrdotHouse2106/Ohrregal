@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -140,6 +140,8 @@ def db_anlegen():
         spalten = {z[1] for z in v.execute("PRAGMA table_info(wunsch)")}
         if "ausReihe" not in spalten:
             v.execute("ALTER TABLE wunsch ADD COLUMN ausReihe TEXT")
+        if "hoerspiel" not in spalten:
+            v.execute("ALTER TABLE wunsch ADD COLUMN hoerspiel INTEGER")
 
 
 def setze(wid, **werte):
@@ -427,7 +429,7 @@ FUELLWOERTER = {"der", "die", "das", "und", "ein", "eine", "the", "a", "of", "vo
 
 
 def norm(s):
-    s = (s or "").translate(UMLAUTE)
+    s = (s or "").replace("???", " fragezeichen ").replace("!!!", " ausrufezeichen ").translate(UMLAUTE)
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
     return " ".join(re.sub(r"[^a-z0-9]+", " ", s).split())
 
@@ -452,25 +454,40 @@ def bewerte(r, w):
     """Gibt (punkte, hinweis) zurück; punkte None = passt nicht."""
     name = norm(r.get("title", ""))
     nw = set(name.split())
+    zahlen = re.findall(r"\b0*(\d{1,4})\b", name)
+    hoerspiel = bool(w["hoerspiel"]) if "hoerspiel" in w.keys() else False
     tw = woerter(kurztitel(w["titel"]))
-    if not tw or not all(x in nw for x in tw):
+    titel_ok = bool(tw) and all(x in nw for x in tw)
+    teil = str(w["teil"] or "").strip()
+    rw = woerter(w["reihe"]) if w["reihe"] else []
+    # Folgen einer Reihe (z. B. Hörspielserien): Reihenname + Folgennummer genügen
+    reihe_ok = bool(rw and teil and all(x in nw for x in rw) and teil.lstrip("0") in zahlen)
+    if not titel_ok and not reihe_ok:
         return None, "Titel passt nicht"
     na = nachname(w["autor"])
     autor_da = na and na in nw
-    punkte = 50 if autor_da else 0
+    punkte = 50 if autor_da else (40 if reihe_ok else 0)
     hinweis = []
-    if not autor_da:
+    if not autor_da and not reihe_ok:
         # ohne Autor nur, wenn Titel lang genug und eindeutig ist
         if len(tw) < 3:
             return None, "Autor fehlt im Namen"
         punkte -= 15
     wunsch_text = norm(" ".join(str(w[k] or "") for k in ("titel", "reihe")))
-    if re.search(r"\bungekuerzt\b|\bunabridged\b", name):
+    if hoerspiel:
+        # Laut Audible ein Hörspiel: Hörspiel-Fassungen bevorzugen, „ungekürzt“ spielt keine Rolle
+        if "hoerspiel" in nw:
+            punkte += 20
+        if titel_ok and reihe_ok:
+            punkte += 10
+    elif re.search(r"\bungekuerzt\b|\bunabridged\b", name):
         punkte += 30
     elif re.search(r"\bgekuerzt\b|\babridged\b", name):
         punkte -= 25
         hinweis.append("gekürzte Fassung")
-    for verbot in ("hoerspiel", "kids", "kinder", "lesung", "leseprobe", "sample", "radio"):
+    verbote = ("kids", "leseprobe", "sample") if hoerspiel else \
+        ("hoerspiel", "kids", "kinder", "lesung", "leseprobe", "sample", "radio")
+    for verbot in verbote:
         if verbot in nw and verbot not in wunsch_text:
             return None, f"{verbot} passt nicht zum Wunsch"
     sprache = (w["sprache"] or "").lower()[:2]
@@ -482,11 +499,8 @@ def bewerte(r, w):
     elif sprache == "en":
         if nw & {"german", "deutsch", "de", "ger", "ungekuerzt", "gekuerzt"}:
             return None, "deutsche Fassung"
-    teil = str(w["teil"] or "").strip()
-    if teil:
-        zahlen = re.findall(r"\b0*(\d{1,3})\b", name)
-        if teil.lstrip("0") in zahlen:
-            punkte += 10
+    if teil and teil.lstrip("0") in zahlen:
+        punkte += 10
     if re.search(r"\b\d{1,2} ?(bis|-) ?\d{1,2}\b|\b(box|sammlung|collection|komplett|gesamtausgabe)\b", name):
         punkte -= 20
         hinweis.append("Sammelpaket")
@@ -529,6 +543,7 @@ def suche(w):
     anfragen = [f"{nachname(w['autor'])} {titel_k}", titel_k]
     if w["reihe"] and w["teil"]:
         anfragen.append(f"{w['reihe']} {w['teil']}")
+        anfragen.append(f"{norm(w['reihe'])} {w['teil']}")
     ids = indexer_ids()
     gesehen, treffer, gruende = set(), [], {}
     for q in dict.fromkeys(a.strip() for a in anfragen if a.strip()):
@@ -593,6 +608,11 @@ def nzb_laden(w, treffer):
 
 def bearbeite_suche(w):
     wid = w["id"]
+    if w["hoerspiel"] is None:
+        hs = audible_hoerspiel(w["asin"], w["titel"])
+        setze(wid, hoerspiel=hs)
+        with db() as v:
+            w = v.execute("SELECT * FROM wunsch WHERE id=?", (wid,)).fetchone()
     vorhanden = abs_vorhanden(w["asin"], w["titel"], w["autor"])
     if vorhanden:
         setze(wid, status="da", absItemId=vorhanden, hinweis="war schon in der Bibliothek")
@@ -795,6 +815,24 @@ def echte_autoren(p):
     return echt or [n for n in namen if n][:1]
 
 
+def ist_hoerspiel(p):
+    """Audible kennzeichnet Hörspiele als content_type „Performance“ bzw. format „original_recording“."""
+    return int((p.get("content_type") or "").lower() == "performance"
+               or (p.get("format_type") or "").lower() == "original_recording"
+               or "hoerspiel" in norm(f"{p.get('title')} {p.get('subtitle')}").split())
+
+
+def audible_hoerspiel(asin, titel):
+    if asin:
+        try:
+            p = audible(f"products/{asin}", response_groups="product_attrs,product_desc").get("product") or {}
+            if p:
+                return ist_hoerspiel(p)
+        except Exception as f:
+            log("Audible-Format nicht abrufbar:", f)
+    return int("hoerspiel" in norm(titel).split())
+
+
 def reihe_von_asin(asin, reihe_name):
     """Audible-ASIN der Reihe zu einem Teil (bei mehreren die mit passendem Namen)."""
     p = audible(f"products/{asin}", response_groups="series").get("product") or {}
@@ -839,6 +877,7 @@ def reihe_teile(reihe_asin, sprache):
             "sprecher": ", ".join(a.get("name", "") for a in p.get("narrators") or []) or None,
             "laufzeitMin": p.get("runtime_length_min"), "sprache": (sprache or "de")[:2],
             "coverUrl": (p.get("product_images") or {}).get("500"),
+            "hoerspiel": ist_hoerspiel(p),
         })
     return teile
 
@@ -870,11 +909,11 @@ def reihe_abgleichen(r):
                 continue
             wid, zeit = "w_" + secrets.token_hex(4), jetzt().isoformat()
             v.execute("INSERT INTO wunsch (id, benutzer, asin, titel, autor, sprecher, reihe, teil, "
-                      "laufzeitMin, sprache, coverUrl, status, erstellt, aktualisiert, ausReihe) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,'gewuenscht',?,?,?)",
+                      "laufzeitMin, sprache, coverUrl, status, erstellt, aktualisiert, ausReihe, hoerspiel) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,'gewuenscht',?,?,?,?)",
                       (wid, r["benutzer"], t["asin"], t["titel"], t["autor"] or r["autor"], t["sprecher"],
                        r["reihe"], t["teil"], t["laufzeitMin"], t["sprache"], t["coverUrl"],
-                       zeit, zeit, r["id"]))
+                       zeit, zeit, r["id"], t["hoerspiel"]))
             neu += 1
     with DB_SPERRE, db() as v:
         v.execute("UPDATE reihe SET geprueft=?, hinweis=? WHERE id=?",
@@ -1085,6 +1124,97 @@ def entdecken_zwischengespeichert(benutzer, neu=False):
     return treffer
 
 
+# ---------------------------------------------------------------- Stöbern nach Kategorie
+
+KATEGORIEN = {"zeit": 0, "daten": None}
+STOEBERN_CACHE = {}
+HOERSPIELE_ID = "hoerspiele"
+
+
+def kategorien():
+    if KATEGORIEN["daten"] and time.time() - KATEGORIEN["zeit"] < 3 * 86400:
+        return KATEGORIEN["daten"]
+    roh = audible("categories", categories_num_levels=2).get("categories") or []
+    daten = [{"id": HOERSPIELE_ID, "name": "Hörspiele", "unter": []}]
+    for k in sorted(roh, key=lambda x: x.get("name") or ""):
+        daten.append({"id": k["id"], "name": k.get("name"),
+                      "unter": sorted(({"id": u["id"], "name": u.get("name")} for u in k.get("children") or []),
+                                      key=lambda x: x["name"] or "")})
+    KATEGORIEN.update(zeit=time.time(), daten=daten)
+    return daten
+
+
+def kategorie_name(kid):
+    for k in kategorien():
+        if k["id"] == kid:
+            return k["name"]
+        for u in k["unter"]:
+            if u["id"] == kid:
+                return u["name"]
+    return None
+
+
+def stoebern(kid, sortierung):
+    name = kategorie_name(kid)
+    if not name:
+        return None
+    sortiert = {"beliebt": "BestSellers", "neu": "-ReleaseDate"}[sortierung]
+    heute = jetzt().date().isoformat()
+    with db() as v:
+        gewuenscht = {(z[0] or "").upper() for z in v.execute("SELECT asin FROM wunsch WHERE zurueckgezogen=0")}
+    treffer, gesehen = [], set()
+    # Audible kann nicht nach Sprache filtern, und „neu“ beginnt mit Vorbestellungen: mehrere Seiten
+    for seite in range(1, 6 if sortierung == "beliebt" else 21):
+        param = dict(products_sort_by=sortiert, num_results=50, page=seite,
+                     response_groups="product_attrs,product_desc,contributors,series")
+        if kid == HOERSPIELE_ID:
+            param["keywords"] = "Hörspiel"
+        else:
+            param["category_id"] = kid
+        produkte = audible("products", **param).get("products") or []
+        for p in produkte:
+            if (p.get("language") or "").lower() != "german" or (p.get("release_date") or "9999") > heute:
+                continue
+            if p.get("is_adult_product") and "erotik" not in norm(name):
+                continue
+            if kid == HOERSPIELE_ID and not ist_hoerspiel(p):
+                continue
+            if any("-" in (x.get("sequence") or "") for x in p.get("series") or []):
+                continue
+            autoren = echte_autoren(p)
+            schluessel = norm(kurztitel(p.get("title"))) + "|" + (nachname(autoren[0]) if autoren else "")
+            if (p.get("asin") or "").upper() in gewuenscht or schluessel in gesehen:
+                continue
+            gesehen.add(schluessel)
+            if abs_vorhanden(p.get("asin"), p.get("title"), autoren[0] if autoren else ""):
+                continue
+            treffer.append(p["asin"])
+            if len(treffer) >= 30:
+                break
+        if len(treffer) >= 30 or len(produkte) < 50:
+            break
+        time.sleep(0.3)
+    details = {}
+    if treffer:
+        for p in audible("products", asins=",".join(treffer), response_groups=AUDIBLE_DETAILS).get("products") or []:
+            details[p["asin"]] = p
+    grund = ("Bestseller in " if sortierung == "beliebt" else "Neu in ") + name
+    return [als_suchtreffer(details[a], grund) for a in treffer if a in details]
+
+
+def stoebern_zwischengespeichert(kid, sortierung, neu=False):
+    schluessel = (kid, sortierung)
+    z = STOEBERN_CACHE.get(schluessel)
+    if z and not neu and z[0] > time.time():
+        return z[1]
+    t = stoebern(kid, sortierung)
+    if t is not None:
+        if len(STOEBERN_CACHE) > 300:
+            STOEBERN_CACHE.clear()
+        STOEBERN_CACHE[schluessel] = (time.time() + 6 * 3600, t)
+    return t
+
+
 WECKER = threading.Event()
 
 
@@ -1161,6 +1291,25 @@ class Schnittstelle(BaseHTTPRequestHandler):
         teile, abfrage = self.pfad()
         if teile == ["status"]:
             return self.antworte(200, {"ok": True, "version": VERSION})
+        if teile in (["kategorien"], ["stoebern"]):
+            name = self.benutzer()
+            if not name:
+                return
+            try:
+                if teile == ["kategorien"]:
+                    return self.antworte(200, {"kategorien": kategorien()})
+                kid = abfrage.get("kategorie", [""])[0]
+                sortierung = abfrage.get("sortierung", ["beliebt"])[0]
+                if sortierung not in ("beliebt", "neu") or not re.fullmatch(r"[a-z0-9]{1,20}", kid):
+                    return self.fehler(400, "ungueltig", "kategorie und sortierung (beliebt|neu) nötig")
+                neu = abfrage.get("neu", [""])[0] in ("1", "true")
+                t = stoebern_zwischengespeichert(kid, sortierung, neu)
+                if t is None:
+                    return self.fehler(404, "unbekannt", "Diese Kategorie gibt es nicht")
+                return self.antworte(200, {"treffer": t})
+            except Exception:
+                log("Stöbern fehlgeschlagen:", traceback.format_exc())
+                return self.fehler(502, "audible_nicht_erreichbar", "Audible ist gerade nicht erreichbar")
         if teile == ["entdecken"]:
             name = self.benutzer()
             if not name:

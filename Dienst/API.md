@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 2.1.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.2.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 2.1.0. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.1.0"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.2.0"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -161,7 +161,19 @@ Ein Treffer hat dieselben Felder wie bei ABS `/api/search/books` (Audible), dazu
 Mögliche `grund`-Texte: „Weil du „<Titel>“ gehört hast“, „Weil du <Autor> hörst“ (ab 2 gehörten Büchern eines Autors), „Beliebt in <Kategorie>“ und „Passt zu deiner Bibliothek: <Titel>“, wenn es keinen Hörverlauf gibt. Bei gekürzten Fassungen steht „(gekürzte Fassung)“ dahinter.
 Fehler: `502 audible_nicht_erreichbar`. Eine leere Liste bedeutet, dass es nichts Passendes gibt.
 
+## Stöbern nach Kategorie (ab 2.2.0)
+
+### `GET /kategorien`
+Liefert `{"kategorien": [{"id": "…", "name": "…", "unter": [{"id": "…", "name": "…"}]}]}` mit den obersten zwei Ebenen des Audible-Katalogs, alphabetisch sortiert und 3 Tage zwischengespeichert. Ganz vorne steht immer die Pseudo-Kategorie `{"id": "hoerspiele", "name": "Hörspiele", "unter": []}`. Audible hat keine eigene Hörspiel-Kategorie, deshalb sucht der Server dafür nach „Hörspiel“ und behält nur Titel, die Audible als Hörspiel führt.
+
+### `GET /stoebern?kategorie=<id>&sortierung=beliebt|neu[&neu=1]`
+Liefert `{"treffer": [ … ]}` mit höchstens 30 Treffern, Format wie bei `/entdecken`. Der grund lautet „Bestseller in <Kategorie>“ bzw. „Neu in <Kategorie>“. Es kommen nur deutsche, schon erschienene Titel, keine Sammelboxen, keine Erotik außerhalb der Kategorie Erotik. Was in ABS liegt oder gewünscht ist, fällt raus. Zwischengespeichert wird 6 Stunden je Kategorie und Sortierung, `neu=1` umgeht den Zwischenspeicher.
+Fehler: `400 ungueltig`, `404 unbekannt` (Kategorie gibt es nicht), `502 audible_nicht_erreichbar`.
+Hinweis: „neu“ braucht beim ersten Aufruf bis zu 5 Sekunden, weil Audible zuerst Vorbestellungen liefert.
+
 ## Bewertung der Treffer (Server)
+
+**Hörspiele (ab 2.2.0):** Ob ein Wunsch ein Hörspiel ist, entscheidet Audible (content_type „Performance“ oder format_type „original_recording“). Ohne ASIN entscheidet „Hörspiel“ im Titel. Bei Hörspielen bevorzugt der Server Hörspiel-Releases, „ungekürzt“ spielt keine Rolle, und Hörspiel-, Lesungs-, Radio- und Kinder-Fassungen werden nicht aussortiert. Folgen von Reihen wie Hörspielserien passen auch nur über Reihenname und Folgennummer, ohne Titel. „???“ und „!!!“ zählen als „Fragezeichen“ bzw. „Ausrufezeichen“.
 
 Gesucht wird in Prowlarr in der Hörbuch-Kategorie mit „Autor Titel“. Findet das nichts, probiert der Server Varianten, z. B. ohne Untertitel oder mit Reihe und Teil.
 
