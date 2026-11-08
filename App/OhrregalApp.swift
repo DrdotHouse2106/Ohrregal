@@ -3,30 +3,98 @@ import SwiftUI
 
 @main
 struct OhrregalApp: App {
+    @State private var sitzung = Sitzung()
+    @State private var player = Player()
+
+    init() {
+        URLCache.shared = URLCache(memoryCapacity: 64 << 20, diskCapacity: 512 << 20)
+    }
+
     var body: some Scene {
         WindowGroup {
-            TabView {
-                Platzhalter(titel: "Start").tabItem { Label("Start", systemImage: "house.fill") }
-                Platzhalter(titel: "Musik").tabItem { Label("Musik", systemImage: "music.note") }
-                Platzhalter(titel: "Hörbücher").tabItem { Label("Hörbücher", systemImage: "books.vertical.fill") }
-                Platzhalter(titel: "Suchen").tabItem { Label("Suchen", systemImage: "magnifyingglass") }
+            Group {
+                if let client = sitzung.client {
+                    Hauptansicht().environment(\.client, client)
+                } else {
+                    Anmeldung()
+                }
             }
+            .environment(sitzung)
+            .environment(player)
             .tint(Farben.blau)
             .preferredColorScheme(.dark)
         }
     }
 }
 
-private struct Platzhalter: View {
-    let titel: String
+/// Angemeldeter Server; Zugangsdaten in UserDefaults, Passwort im Schlüsselbund.
+@MainActor @Observable
+final class Sitzung {
+    var client: NavidromeClient?
+
+    init() {
+        let d = UserDefaults.standard
+        if let text = d.string(forKey: "server"), let url = URL(string: text),
+           let benutzer = d.string(forKey: "benutzer"), let passwort = Schluesselbund.lies("navidrome") {
+            client = NavidromeClient(server: url, benutzer: benutzer, passwort: passwort)
+        }
+    }
+
+    func anmelden(server: String, benutzer: String, passwort: String) async throws {
+        var text = server.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.contains("://") { text = "https://" + text }
+        guard let url = URL(string: text) else { throw ServerFehler("Die Adresse ist ungültig.") }
+        let neu = NavidromeClient(server: url, benutzer: benutzer, passwort: passwort)
+        try await neu.ping()
+        UserDefaults.standard.set(text, forKey: "server")
+        UserDefaults.standard.set(benutzer, forKey: "benutzer")
+        Schluesselbund.speichere(passwort, fuer: "navidrome")
+        client = neu
+    }
+
+    func abmelden() {
+        Schluesselbund.loesche("navidrome")
+        client = nil
+    }
+}
+
+private struct ClientSchluessel: EnvironmentKey {
+    static let defaultValue = NavidromeClient(server: URL(string: "http://localhost")!, benutzer: "", passwort: "")
+}
+
+extension EnvironmentValues {
+    var client: NavidromeClient {
+        get { self[ClientSchluessel.self] }
+        set { self[ClientSchluessel.self] = newValue }
+    }
+}
+
+struct Hauptansicht: View {
+    @Environment(Player.self) private var player
+    @Environment(\.client) private var client
+    @State private var playerOffen = false
 
     var body: some View {
-        NavigationStack {
-            Text("Kommt bald")
-                .foregroundStyle(Farben.textGedaempft)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Farben.hintergrund)
-                .navigationTitle(titel)
+        TabView {
+            NavigationStack { StartView().ziele() }
+                .miniPlayer($playerOffen)
+                .tabItem { Label("Start", systemImage: "house.fill") }
+            NavigationStack { MusikView().ziele() }
+                .miniPlayer($playerOffen)
+                .tabItem { Label("Musik", systemImage: "music.note") }
+            NavigationStack {
+                ContentUnavailableView("Hörbücher kommen bald", systemImage: "books.vertical",
+                                       description: Text("Audiobookshelf wird in Stufe 3 angebunden."))
+                    .background(Farben.hintergrund)
+                    .navigationTitle("Hörbücher")
+            }
+            .miniPlayer($playerOffen)
+            .tabItem { Label("Hörbücher", systemImage: "books.vertical.fill") }
+            NavigationStack { SucheView().ziele() }
+                .miniPlayer($playerOffen)
+                .tabItem { Label("Suchen", systemImage: "magnifyingglass") }
         }
+        .sheet(isPresented: $playerOffen) { VollPlayer() }
+        .task { player.client = client }
     }
 }
