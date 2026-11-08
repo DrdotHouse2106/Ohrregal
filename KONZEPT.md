@@ -209,7 +209,50 @@ Profile und Stammordner sind in den Einstellungen wählbar (aus `qualityprofile`
 - Wünsche von unterwegs landen in einer **Wunschliste** und werden geschickt, sobald Lidarr erreichbar ist.
 - Der API-Schlüssel gibt vollen Zugriff auf Lidarr. Er liegt nur im Schlüsselbund. Ohne Schlüssel blendet die App alle Lidarr-Funktionen aus.
 
-## 9. TV-App (Fire TV und Android TV)
+## 9. Hörbücher wünschen (Hörbuchwunsch)
+
+Für Hörbücher gibt es kein gepflegtes Gegenstück zu Lidarr mehr. Ohrregal bekommt deshalb einen kleinen eigenen Dienst: **Hörbuchwunsch**. Er läuft als Container im Media-Stack.
+
+**Ablauf:**
+
+1. **Suchen (in der App):** Audiobookshelf fragt seine Metadatendienste ab: `GET /api/search/books?provider=audible.de&title=…&author=…`, alternativ Google Books oder iTunes. Die App zeigt Cover, Titel, Autor, Sprecher, Länge, Serie und Teil. Was schon in Audiobookshelf liegt, ist als „da“ markiert.
+2. **Wünschen:** Die App schickt den Treffer mit ASIN, Titel, Autor, Serie und Sprache an Hörbuchwunsch.
+3. **Finden:** Hörbuchwunsch sucht über **Prowlarr** in der Hörbuch-Kategorie (3030) und bewertet die Ergebnisse:
+   - Titel und Autor müssen passen.
+   - Bevorzugt werden Deutsch, M4B oder MP3, eine plausible Größe zur Länge und neuere Releases.
+4. **Laden:** Der beste Treffer geht an **SABnzbd**, in eine eigene Kategorie für Hörbücher.
+5. **Einsortieren:**
+   - Nach dem Download legt Hörbuchwunsch die Dateien im Audiobookshelf-Ordner als `Autor/Serie/Teil – Titel/` ab.
+   - Dazu schreibt er eine `metadata.json` mit der ASIN.
+   - Danach stößt er einen Scan der Bibliothek an.
+6. **Melden:** Eine Push-Nachricht „Dein Hörbuch ist da“ geht über ntfy. In der App wechselt der Status.
+
+**Wunschliste:** Was noch nicht zu finden ist, bleibt auf der Liste. Hörbuchwunsch sucht regelmäßig erneut, zum Beispiel alle 12 Stunden. Bei Serien kann man „Serie folgen“ wählen, dann kommen neue Teile automatisch auf die Wunschliste.
+
+**Status in der App:** „gewünscht“, „gesucht, noch nicht gefunden“, „wird geladen“, „wird einsortiert“ und „da“. Fehlgeschlagene Downloads werden mit dem nächstbesten Treffer erneut versucht.
+
+**Warum ein eigener Dienst statt nur der App:**
+
+- Die API-Schlüssel für Prowlarr und SABnzbd bleiben auf dem Server.
+- Wiederholte Suche und Einsortieren funktionieren auch, wenn das iPhone aus ist.
+- Die TV-App und das iPhone nutzen dieselbe Wunschliste.
+
+**Technik:**
+
+- Kleiner Dienst mit einer Datei und SQLite für die Wunschliste, als Docker-Container.
+- Der Code liegt im Ordner `Dienst/` in diesem Repo.
+- Zugriff nur im Heimnetz oder über VPN, mit eigenem Schlüssel.
+
+**Schnittstelle für die App:**
+
+| Aufruf | Zweck |
+|---|---|
+| `GET /wuensche` | Wunschliste mit Status |
+| `POST /wuensche` | Hörbuch wünschen (ASIN, Titel, Autor, Serie, Teil, Sprache) |
+| `POST /serien` | Serie folgen |
+| `DELETE /wuensche/{id}` | Wunsch zurückziehen |
+
+## 10. TV-App (Fire TV und Android TV)
 
 Gleicher Name, gleiche Optik, gleiche Tabs, aber für die Fernbedienung gebaut. Gedacht für Fire TV Sticks und Android-TV-Sticks, nicht für Handys.
 
@@ -228,7 +271,7 @@ Gleicher Name, gleiche Optik, gleiche Tabs, aber für die Fernbedienung gebaut. 
 - Liegt im selben Repo im Ordner `TV/`.
 - GitHub baut die APK kostenlos. Installation per „Downloader“-App über einen festen Link zur neuesten Version, ohne Entwicklerkonto.
 
-## 10. Fahrplan
+## 11. Fahrplan
 
 | Stufe | Inhalt |
 |---|---|
@@ -237,15 +280,17 @@ Gleicher Name, gleiche Optik, gleiche Tabs, aber für die Fernbedienung gebaut. 
 | **2b – Lidarr** | Einzelne Alben wünschen, Künstler folgen (nur neue Alben), Fehlt noch, Wunschliste |
 | **3 – Hörbücher** | Audiobookshelf, Hörbuch-Player, P3, Offline-Fortschritt, Hörbücher in CarPlay |
 | **4 – Apple Watch** | Steuerung, danach eigene Offline-Wiedergabe |
+| **3b – Hörbuchwunsch** | Dienst im Media-Stack, Hörbücher suchen und wünschen, Serie folgen |
 | **TV-App (parallel ab Stufe 1)** | Fire TV / Android TV mit Musik und Hörbüchern, Weiterhören zwischen den Geräten |
 | **6 – Heim-Satellit** | weitere Ausgabeziele, Raumauswahl |
 | **später** | Widgets, Siri-Kurzbefehle, Equalizer, Crossfade, „Wer hört?“ |
 
-## 11. Voraussetzungen
+## 12. Voraussetzungen
 
 - Mac mit aktuellem Xcode zum Bauen
 - Apple-Entwicklerkonto (vorhanden; für Gerät, TestFlight, CarPlay)
 - **CarPlay-Freigabe** (Audio) bei Apple beantragen, möglichst früh
 - Für die TV-App: nichts Zusätzliches; GitHub baut die APK. Amazon- und Google-Play-Entwicklerkonto sind vorhanden, falls die App später in die Stores soll.
 - Optional: Lidarr-API-Schlüssel
+- Für Hörbuchwunsch: Prowlarr mit Usenet-Indexern, die Hörbücher führen; SABnzbd mit eigener Kategorie; Schreibzugriff auf den Audiobookshelf-Ordner
 - Navidrome mit Last.fm-Anbindung, optional Audiobookshelf
