@@ -172,8 +172,9 @@ public final class Player {
         haengeAn(ab: start)
         let versatz = ziel - spuren[start].start
         if versatz > 0.5 { player.seek(to: CMTime(seconds: versatz, preferredTimescale: 600)) }
-        zeit = ziel
         eintragGewechselt()
+        zeit = ziel
+        zeitInfo()
     }
 
     /// Hängt die nächsten Dateien an; immer nur ein Stück, damit lange Mixe schnell starten.
@@ -188,8 +189,11 @@ public final class Player {
     private func eintragGewechselt() {
         guard let eintrag = player.currentItem, let i = stellen[ObjectIdentifier(eintrag)] else { return }
         spur = i
+        // Neue Datei beginnt vorn; sonst zeigt der Sperrbildschirm noch die Zeit der vorherigen.
+        let sekunden = player.currentTime().seconds
+        zeit = spuren[i].start + (sekunden.isFinite ? sekunden : 0)
         if let letzte = stellen.values.max(), letzte < i + 3, letzte + 1 < spuren.count { haengeAn(ab: letzte + 1) }
-        guard !istHoerbuch else { return }
+        guard !istHoerbuch else { zeitInfo(); return }
         index = i
         if let titel = aktuell {
             anzeige = Anzeige(titel: titel.title, untertitel: titel.artist ?? "",
