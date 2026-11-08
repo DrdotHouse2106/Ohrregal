@@ -211,7 +211,9 @@ Profile und Stammordner sind in den Einstellungen wählbar (aus `qualityprofile`
 
 ## 9. Hörbücher wünschen (Hörbuchwunsch)
 
-Für Hörbücher gibt es kein gepflegtes Gegenstück zu Lidarr mehr. Ohrregal bekommt deshalb einen kleinen eigenen Dienst: **Hörbuchwunsch**. Er läuft als Container im Media-Stack.
+Für Hörbücher gibt es kein gepflegtes Gegenstück zu Lidarr mehr. Ohrregal bekommt deshalb einen kleinen eigenen Dienst: **Hörbuchwunsch**. Er läuft als Container im Media-Stack. Audiobookshelf hat kein Plugin-System, eine Erweiterung direkt darin geht also nicht.
+
+**Aufteilung:** Den Dienst baut die Server-Sitzung „Heimnetz“, die App-Seite entsteht hier. Beschlossen am 08.11.2026.
 
 **Ablauf:**
 
@@ -219,17 +221,18 @@ Für Hörbücher gibt es kein gepflegtes Gegenstück zu Lidarr mehr. Ohrregal be
 2. **Wünschen:** Die App schickt den Treffer mit ASIN, Titel, Autor, Serie und Sprache an Hörbuchwunsch.
 3. **Finden:** Hörbuchwunsch sucht über **Prowlarr** in der Hörbuch-Kategorie (3030) und bewertet die Ergebnisse:
    - Titel und Autor müssen passen.
-   - Bevorzugt werden Deutsch, M4B oder MP3, eine plausible Größe zur Länge und neuere Releases.
-4. **Laden:** Der beste Treffer geht an **SABnzbd**, in eine eigene Kategorie für Hörbücher.
+   - Bevorzugt werden „Ungekürzt“, Deutsch und eine plausible Größe zur Laufzeit.
+   - Verwechslungen mit Hörspiel- oder Kinderfassungen werden aussortiert.
+4. **Laden:** Der beste Treffer geht an **SABnzbd**, in die Kategorie für Hörbücher.
 5. **Einsortieren:**
-   - Nach dem Download legt Hörbuchwunsch die Dateien im Audiobookshelf-Ordner als `Autor/Serie/Teil – Titel/` ab.
-   - Dazu schreibt er eine `metadata.json` mit der ASIN.
+   - Nach dem Download legt Hörbuchwunsch die Dateien im Audiobookshelf-Ordner als `Autor/Reihe/Titel/` ab.
+   - Dazu speichert er die ASIN in den Metadaten, damit Audiobookshelf das Buch sicher zuordnet.
    - Danach stößt er einen Scan der Bibliothek an.
 6. **Melden:** Eine Push-Nachricht „Dein Hörbuch ist da“ geht über ntfy. In der App wechselt der Status.
 
-**Wunschliste:** Was noch nicht zu finden ist, bleibt auf der Liste. Hörbuchwunsch sucht regelmäßig erneut, zum Beispiel alle 12 Stunden. Bei Serien kann man „Serie folgen“ wählen, dann kommen neue Teile automatisch auf die Wunschliste.
+**Wunschliste:** Was noch nicht zu finden ist, bleibt auf der Liste. Hörbuchwunsch sucht täglich erneut. Bei Serien kann man „Serie folgen“ wählen, dann kommen neue Teile automatisch auf die Wunschliste.
 
-**Status in der App:** „gewünscht“, „gesucht, noch nicht gefunden“, „wird geladen“, „wird einsortiert“ und „da“. Fehlgeschlagene Downloads werden mit dem nächstbesten Treffer erneut versucht.
+**Status in der App:** `gewuenscht`, `nicht_gefunden`, `laedt`, `einsortieren`, `da` und `fehler`, jeweils mit Datum und bei Bedarf einem Hinweis, warum nichts gepasst hat. Fehlgeschlagene Downloads werden mit dem nächstbesten Treffer erneut versucht.
 
 **Warum ein eigener Dienst statt nur der App:**
 
@@ -241,16 +244,19 @@ Für Hörbücher gibt es kein gepflegtes Gegenstück zu Lidarr mehr. Ohrregal be
 
 - Kleiner Dienst mit einer Datei und SQLite für die Wunschliste, als Docker-Container.
 - Der Code liegt im Ordner `Dienst/` in diesem Repo.
-- Zugriff nur im Heimnetz oder über VPN, mit eigenem Schlüssel.
+- Zugriff nur im Heimnetz oder über VPN, mit eigenem Token pro Benutzer (`Authorization: Bearer …`). Der Token liegt in der App im Schlüsselbund.
+- Einstellungen nur über Umgebungsvariablen, keine Adressen oder Schlüssel im Repo.
 
 **Schnittstelle für die App:**
 
 | Aufruf | Zweck |
 |---|---|
-| `GET /wuensche` | Wunschliste mit Status |
-| `POST /wuensche` | Hörbuch wünschen (ASIN, Titel, Autor, Serie, Teil, Sprache) |
-| `POST /serien` | Serie folgen |
-| `DELETE /wuensche/{id}` | Wunsch zurückziehen |
+| `GET /wunsch` | Wunschliste mit Status |
+| `POST /wunsch` | Hörbuch wünschen (asin, titel, autor, sprecher, reihe, teil, laufzeitMin, sprache, coverUrl) |
+| `DELETE /wunsch/{id}` | Wunsch zurückziehen |
+| `POST /reihe` | Reihe folgen (kann später kommen) |
+
+Die genaue Beschreibung folgt in `Dienst/API.md`.
 
 ## 10. TV-App (Fire TV und Android TV)
 
