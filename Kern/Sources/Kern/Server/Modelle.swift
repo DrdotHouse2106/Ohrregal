@@ -66,7 +66,7 @@ public struct ServerFehler: LocalizedError, Sendable {
 
 /// Inhalt von `subsonic-response`; je nach Aufruf ist ein anderes Feld gefüllt.
 struct Antwort: Decodable {
-    struct Fehler: Decodable { let message: String? }
+    struct Fehler: Decodable { let code: Int?; let message: String? }
     struct Alben: Decodable { let album: [Album]? }
     struct Titelliste: Decodable { let song: [Titel]? }
     struct Index: Decodable { let artist: [Kuenstler]? }

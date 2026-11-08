@@ -40,7 +40,13 @@ public struct NavidromeClient: Sendable {
 
     static func lies(_ daten: Data) throws -> Antwort {
         let antwort = try JSONDecoder().decode(Antwort.Huelle.self, from: daten).antwort
-        guard antwort.status == "ok" else { throw ServerFehler(antwort.error?.message ?? "Unbekannter Serverfehler") }
+        guard antwort.status == "ok" else {
+            switch antwort.error?.code {
+            case 40: throw ServerFehler("Benutzername oder Passwort falsch.")
+            case 41: throw ServerFehler("Dieser Server erlaubt keine Anmeldung per Token.")
+            default: throw ServerFehler(antwort.error?.message ?? "Unbekannter Serverfehler")
+            }
+        }
         return antwort
     }
 

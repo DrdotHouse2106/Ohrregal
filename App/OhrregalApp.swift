@@ -41,8 +41,14 @@ final class Sitzung {
     }
 
     func anmelden(server: String, benutzer: String, passwort: String) async throws {
+        // Leerzeichen am Rand fügt die iPhone-Tastatur gern selbst an (Wortvorschläge, Einfügen) – sie führen zu „falsches Passwort“.
+        let benutzer = benutzer.trimmingCharacters(in: .whitespacesAndNewlines)
+        let passwort = passwort.trimmingCharacters(in: .newlines)
         var text = server.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.contains("://") { text = "https://" + text }
+        // Adresse der Weboberfläche (…/app) wird auf die Server-Adresse gekürzt.
+        while text.hasSuffix("/") { text.removeLast() }
+        if text.hasSuffix("/app") { text.removeLast(4) }
         guard let url = URL(string: text) else { throw ServerFehler("Die Adresse ist ungültig.") }
         let neu = NavidromeClient(server: url, benutzer: benutzer, passwort: passwort)
         try await neu.ping()

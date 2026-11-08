@@ -58,7 +58,7 @@ struct Anmeldung: View {
             try await sitzung.anmelden(server: z.server, benutzer: z.benutzer, passwort: z.passwort)
             schliessen()
         } catch {
-            fehler = "Navidrome nicht erreichbar: \(error.localizedDescription)"
+            fehler = "Anmeldung bei Navidrome fehlgeschlagen: \(error.localizedDescription)"
         }
     }
 }

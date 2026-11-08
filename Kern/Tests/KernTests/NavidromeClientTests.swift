@@ -37,7 +37,7 @@ final class NavidromeClientTests: XCTestCase {
     func testFehlerWirdGemeldet() {
         let json = #"{"subsonic-response":{"status":"failed","error":{"code":40,"message":"Wrong username or password"}}}"#
         XCTAssertThrowsError(try NavidromeClient.lies(Data(json.utf8))) { fehler in
-            XCTAssertEqual(fehler.localizedDescription, "Wrong username or password")
+            XCTAssertEqual(fehler.localizedDescription, "Benutzername oder Passwort falsch.")
         }
     }
 }
