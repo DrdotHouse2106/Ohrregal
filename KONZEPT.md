@@ -227,7 +227,7 @@ Gleicher Name, gleiche Optik, gleiche Tabs, aber für die Fernbedienung gebaut. 
 | **2b – Lidarr** | Fehlende Alben, neue Künstler, Wunschliste |
 | **3 – Hörbücher** | Audiobookshelf, Hörbuch-Player, P3, Offline-Fortschritt, Hörbücher in CarPlay |
 | **4 – Apple Watch** | Steuerung, danach eigene Offline-Wiedergabe |
-| **5 – TV-App** | Fire TV / Android TV mit Musik und Hörbüchern, Weiterhören zwischen den Geräten |
+| **TV-App (parallel ab Stufe 1)** | Fire TV / Android TV mit Musik und Hörbüchern, Weiterhören zwischen den Geräten |
 | **6 – Heim-Satellit** | weitere Ausgabeziele, Raumauswahl |
 | **später** | Widgets, Siri-Kurzbefehle, Equalizer, Crossfade, „Wer hört?“ |
 

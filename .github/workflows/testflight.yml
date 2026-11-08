@@ -1,0 +1,66 @@
+name: TestFlight
+
+# Baut die iPhone-App, signiert sie automatisch und lädt sie zu TestFlight hoch.
+# Benötigte Secrets: APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (Inhalt der .p8-Datei).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: testflight
+
+jobs:
+  hochladen:
+    runs-on: macos-15
+    env:
+      TEAM: ${{ secrets.APPLE_TEAM_ID }}
+      KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+      KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - name: Secrets vorhanden?
+        id: pruefen
+        run: |
+          if [ -z "$TEAM" ] || [ -z "$KEY_ID" ] || [ -z "$ISSUER" ] || [ -z "$KEY_P8" ]; then
+            echo "Secrets fehlen noch – TestFlight wird übersprungen." >> "$GITHUB_STEP_SUMMARY"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.pruefen.outputs.ok == 'true'
+
+      - name: Bauen und hochladen
+        if: steps.pruefen.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          KEY="$RUNNER_TEMP/AuthKey_$KEY_ID.p8"
+          printf '%s\n' "$KEY_P8" > "$KEY"
+          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER")
+
+          brew install xcodegen
+          xcodegen
+
+          xcodebuild archive -project Ohrregal.xcodeproj -scheme Ohrregal \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Ohrregal.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" "${AUTH[@]}" -quiet
+
+          cat > "$RUNNER_TEMP/export.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict></plist>
+          EOF
+
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Ohrregal.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/export.plist" -exportPath "$RUNNER_TEMP/export" "${AUTH[@]}"
+
+          echo "Build $GITHUB_RUN_NUMBER ist bei App Store Connect. Nach der Verarbeitung (meist 5–15 Minuten) erscheint er in TestFlight." >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$KEY"
