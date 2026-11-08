@@ -281,9 +281,9 @@ struct WunschView: View {
                     ForEach(reihen) { r in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.reihe)
-                            Text([r.autor, r.teileDa.map { "\($0) da" }, r.teileGewuenscht.map { "\($0) gewünscht" }]
-                                .compactMap { $0 }.joined(separator: " · "))
+                            Text([r.autor, r.stand].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                                 .font(.caption).foregroundStyle(Farben.textGedaempft)
+                            if let hinweis = r.hinweis { Text(hinweis).font(.caption2).foregroundStyle(Farben.textGedaempft) }
                         }
                         .swipeActions {
                             Button("Nicht mehr folgen", role: .destructive) {
@@ -464,7 +464,7 @@ struct TrefferView: View {
         defer { laeuft = false }
         do {
             try await abs.folgeReihe(treffer)
-            meldung = "Du folgst der Reihe. Fehlende und neue Teile werden automatisch gewünscht."
+            meldung = "Du folgst der Reihe. Fehlende Teile sind gewünscht, neue kommen automatisch dazu. Es laden höchstens zwei gleichzeitig."
             await Benachrichtigungen.erlaubnisHolen()
         } catch {
             meldung = error.localizedDescription

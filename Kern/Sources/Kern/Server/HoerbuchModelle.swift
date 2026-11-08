@@ -141,6 +141,15 @@ public struct GefolgteReihe: Decodable, Hashable, Identifiable, Sendable {
     public let id: String
     public let reihe: String
     public let autor: String?
+    public let teileGesamt: Int?
     public let teileDa: Int?
     public let teileGewuenscht: Int?
+    public let hinweis: String?
+
+    public var stand: String {
+        var teile: [String] = []
+        if let da = teileDa { teile.append(teileGesamt.map { "\(da) von \($0) da" } ?? "\(da) da") }
+        if let g = teileGewuenscht, g > 0 { teile.append("\(g) gewünscht") }
+        return teile.joined(separator: " · ")
+    }
 }
