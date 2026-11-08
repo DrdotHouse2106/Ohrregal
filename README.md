@@ -7,6 +7,7 @@ Musik und Hörbücher von den eigenen Servern – auf dem iPhone mit dem Gefühl
 - **Vorschläge** aus deinem eigenen Hörverhalten, ausgewertet auf dem iPhone
 - **CarPlay** und **Apple Watch**
 - **TV-App** für Fire TV und Android TV
+- **Musik wünschen** über Lidarr
 - Optik und Wortwahl passend zu Quallenkino
 
 > [!NOTE]

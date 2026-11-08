@@ -175,7 +175,31 @@ protocol Ausgabeziel {
 
 Erste Umsetzung: **Dieses iPhone**. AirPlay läuft über das System. Später kommt der **Heim-Satellit** dazu, zum Beispiel Snapcast, Music Assistant oder ein eigener Empfänger auf einem Raspberry Pi oder ESP32, als Ersatz für die HomePods.
 
-## 8. TV-App (Fire TV und Android TV)
+## 8. Lidarr – Musik wünschen
+
+Ohrregal zeigt, was in der Bibliothek fehlt, und gibt es mit einem Tipp an **Lidarr** weiter. Das ist dasselbe Prinzip wie die fehlenden Welt-Titel mit Jellyseerr in Quallenkino.
+
+- **Künstlerseite:**
+  - Reihe „Fehlt noch“ mit den Alben, die Lidarr kennt, die aber nicht in Navidrome liegen
+  - Knopf „Wünschen“ bei jedem Album
+- **Für dich – Neue Künstler:** ähnliche Künstler von Last.fm, die noch nicht in der Bibliothek sind; „Künstler hinzufügen“ legt sie in Lidarr an.
+- **Neuerscheinungen deiner Künstler:** Lidarr-Kalender, auch mit Alben, die noch nicht erschienen sind
+- **Suche:** Wird etwas nicht gefunden, zeigt die Suche „Bei Lidarr suchen“.
+- **Status:** Bei gewünschten Alben steht „gewünscht“, „wird geladen“ oder „da“.
+
+**Schnittstellen:**
+
+- `GET /api/v1/artist/lookup`, `GET /api/v1/album/lookup`
+- `POST /api/v1/artist` (mit `addOptions.searchForMissingAlbums`), `PUT /api/v1/album/monitor`, `POST /api/v1/command` (`AlbumSearch`)
+- `GET /api/v1/calendar`, `GET /api/v1/queue`
+
+**Erreichbarkeit und Sicherheit:**
+
+- Lidarr ist nur im Heimnetz erreichbar und soll das auch bleiben. Die App nutzt Lidarr deshalb nur zu Hause oder über VPN.
+- Wünsche von unterwegs landen in einer **Wunschliste** und werden geschickt, sobald Lidarr erreichbar ist.
+- Der API-Schlüssel gibt vollen Zugriff auf Lidarr. Er liegt nur im Schlüsselbund und ist nur in den Einstellungen sichtbar. Ohne Schlüssel blendet die App alle Lidarr-Funktionen aus.
+
+## 9. TV-App (Fire TV und Android TV)
 
 Gleicher Name, gleiche Optik, gleiche Tabs, aber für die Fernbedienung gebaut. Gedacht für Fire TV Sticks und Android-TV-Sticks, nicht für Handys.
 
@@ -194,22 +218,24 @@ Gleicher Name, gleiche Optik, gleiche Tabs, aber für die Fernbedienung gebaut. 
 - Liegt im selben Repo im Ordner `TV/`.
 - GitHub baut die APK kostenlos. Installation per „Downloader“-App über einen festen Link zur neuesten Version, ohne Entwicklerkonto.
 
-## 9. Fahrplan
+## 10. Fahrplan
 
 | Stufe | Inhalt |
 |---|---|
 | **1 – Grundversion Musik** | Anmeldung Navidrome, Bibliothek, Suche, Player mit Sperrbildschirm und AirPlay, Startseite mit Server-Reihen, Scrobbling, P1, P2, **CarPlay** |
 | **2 – Vorschläge und offline** | lokaler Hörverlauf, Mixe, „Spiel etwas für mich“, Radio, Downloads, Songtexte, Weiterhören an anderen Geräten |
+| **2b – Lidarr** | Fehlende Alben, neue Künstler, Wunschliste |
 | **3 – Hörbücher** | Audiobookshelf, Hörbuch-Player, P3, Offline-Fortschritt, Hörbücher in CarPlay |
 | **4 – Apple Watch** | Steuerung, danach eigene Offline-Wiedergabe |
 | **5 – TV-App** | Fire TV / Android TV mit Musik und Hörbüchern, Weiterhören zwischen den Geräten |
 | **6 – Heim-Satellit** | weitere Ausgabeziele, Raumauswahl |
 | **später** | Widgets, Siri-Kurzbefehle, Equalizer, Crossfade, „Wer hört?“ |
 
-## 10. Voraussetzungen
+## 11. Voraussetzungen
 
 - Mac mit aktuellem Xcode zum Bauen
-- Apple-Entwicklerkonto (für Gerät, TestFlight, CarPlay)
+- Apple-Entwicklerkonto (vorhanden; für Gerät, TestFlight, CarPlay)
 - **CarPlay-Freigabe** (Audio) bei Apple beantragen, möglichst früh
-- Für die TV-App: nichts Zusätzliches; GitHub baut die APK
+- Für die TV-App: nichts Zusätzliches; GitHub baut die APK. Amazon- und Google-Play-Entwicklerkonto sind vorhanden, falls die App später in die Stores soll.
+- Optional: Lidarr-API-Schlüssel
 - Navidrome mit Last.fm-Anbindung, optional Audiobookshelf
