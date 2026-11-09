@@ -653,7 +653,7 @@ struct TrefferView: View {
         defer { laeuft = false }
         do {
             try await abs.folgeReihe(treffer)
-            meldung = "Du folgst der Reihe. Fehlende Teile sind gewünscht, neue kommen automatisch dazu. Es laden höchstens zwei gleichzeitig."
+            meldung = "Du folgst der Reihe. Fehlende Teile sind gewünscht und werden nachts geladen, wenn der Server Ruhe hat. Neue Teile kommen automatisch dazu."
             await Benachrichtigungen.erlaubnisHolen()
         } catch {
             meldung = error.localizedDescription

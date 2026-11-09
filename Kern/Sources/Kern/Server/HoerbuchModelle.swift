@@ -163,7 +163,7 @@ public struct GefolgteReihe: Decodable, Hashable, Identifiable, Sendable {
     public var stand: String {
         var teile: [String] = []
         if let da = teileDa { teile.append(teileGesamt.map { "\(da) von \($0) da" } ?? "\(da) da") }
-        if let g = teileGewuenscht, g > 0 { teile.append("\(g) gewünscht") }
+        if let g = teileGewuenscht, g > 0 { teile.append("\(g) gewünscht, lädt nachts") }
         return teile.joined(separator: " · ")
     }
 }
