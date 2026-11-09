@@ -272,7 +272,7 @@ struct Schnellauswahl: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .contextMenu { RadioKnopf(titel: t) }
+                        .contextMenu { TitelMenue(titel: t) }
                     }
                 }
                 .padding(.horizontal)

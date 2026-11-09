@@ -162,27 +162,21 @@ struct TitelListe: View {
     @Environment(Player.self) private var player
     let titel: [Titel]
     var mitCover = true
+    /// Wenn gesetzt, bietet das Menü „Aus Playlist entfernen“ an (Stelle des Titels).
+    var entfernen: ((Int) -> Void)?
 
     var body: some View {
         LazyVStack(spacing: 0) {
             ForEach(Array(titel.enumerated()), id: \.offset) { i, t in
                 Button { player.spiele(titel, ab: i) } label: { TitelZeile(titel: t, mitCover: mitCover) }
                     .buttonStyle(.plain)
-                    .contextMenu { RadioKnopf(titel: t) }
+                    .contextMenu {
+                        TitelMenue(titel: t)
+                        if let entfernen {
+                            Button("Aus Playlist entfernen", systemImage: "minus.circle", role: .destructive) { entfernen(i) }
+                        }
+                    }
             }
-        }
-    }
-}
-
-/// „Radio ab diesem Song“: der Titel und danach ähnliche (über Last.fm).
-struct RadioKnopf: View {
-    @Environment(\.client) private var client
-    @Environment(Player.self) private var player
-    let titel: Titel
-
-    var body: some View {
-        Button("Radio ab diesem Song", systemImage: "dot.radiowaves.left.and.right") {
-            Task { player.spiele(await Mixe.radio(ab: titel, client)) }
         }
     }
 }
@@ -205,6 +199,7 @@ struct TitelZeile: View {
                 Text(titel.artist ?? "").font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
             }
             Spacer()
+            if Favoriten.geteilt.ist(titel) { Image(systemName: "heart.fill").font(.caption).foregroundStyle(Farben.violett) }
             Text(dauerText(titel.duration)).font(.caption).foregroundStyle(Farben.textGedaempft)
         }
         .padding(.horizontal)

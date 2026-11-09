@@ -22,19 +22,19 @@ public struct NavidromeClient: Sendable {
     }
 
     /// Adresse für einen API-Aufruf, z. B. `adresse("getAlbumList2", ["type": "frequent"])`.
-    public func adresse(_ methode: String, _ parameter: [String: String] = [:], salt: String? = nil) -> URL {
+    public func adresse(_ methode: String, _ parameter: [String: String] = [:], mehrfach: [(String, String)] = [], salt: String? = nil) -> URL {
         let salt = salt ?? self.salt
         var teile = URLComponents(url: server.appending(path: "rest/\(methode)"), resolvingAgainstBaseURL: false)!
         let basis = ["u": benutzer, "t": Self.token(passwort: passwort, salt: salt), "s": salt,
                      "v": "1.16.1", "c": "Ohrregal", "f": "json"]
         teile.queryItems = basis.merging(parameter) { _, neu in neu }
             .sorted { $0.key < $1.key }
-            .map { URLQueryItem(name: $0.key, value: $0.value) }
+            .map { URLQueryItem(name: $0.key, value: $0.value) } + mehrfach.map { URLQueryItem(name: $0.0, value: $0.1) }
         return teile.url!
     }
 
-    func hole(_ methode: String, _ parameter: [String: String] = [:]) async throws -> Antwort {
-        let (daten, _) = try await URLSession.shared.data(from: adresse(methode, parameter))
+    func hole(_ methode: String, _ parameter: [String: String] = [:], mehrfach: [(String, String)] = []) async throws -> Antwort {
+        let (daten, _) = try await URLSession.shared.data(from: adresse(methode, parameter, mehrfach: mehrfach))
         return try Self.lies(daten)
     }
 
@@ -89,6 +89,37 @@ public struct NavidromeClient: Sendable {
     /// Meldet „läuft gerade“ (`fertig: false`) oder „gehört“ (`fertig: true`) an Navidrome und damit an Last.fm.
     public func scrobble(_ id: String, fertig: Bool) async throws {
         _ = try await hole("scrobble", ["id": id, "submission": fertig ? "true" : "false"])
+    }
+
+    // MARK: Gefällt mir und Playlists
+
+    public func gefaelltMir(_ id: String, _ an: Bool) async throws {
+        _ = try await hole(an ? "star" : "unstar", ["id": id])
+    }
+
+    @discardableResult
+    public func neuePlaylist(_ name: String, titel: [String] = []) async throws -> Playlist? {
+        try await hole("createPlaylist", ["name": name], mehrfach: titel.map { ("songId", $0) }).playlist
+    }
+
+    public func zurPlaylist(_ playlist: String, titel: [String]) async throws {
+        _ = try await hole("updatePlaylist", ["playlistId": playlist], mehrfach: titel.map { ("songIdToAdd", $0) })
+    }
+
+    /// Entfernt Einträge über ihre Stelle in der Playlist.
+    public func ausPlaylist(_ playlist: String, stellen: [Int]) async throws {
+        _ = try await hole("updatePlaylist", ["playlistId": playlist], mehrfach: stellen.map { ("songIndexToRemove", String($0)) })
+    }
+
+    public func loeschePlaylist(_ id: String) async throws {
+        _ = try await hole("deletePlaylist", ["id": id])
+    }
+
+    /// Songtext (OpenSubsonic); synchronisierte Fassung bevorzugt.
+    public func songtext(_ id: String) async throws -> [Textzeile] {
+        let alle = try await hole("getLyricsBySongId", ["id": id]).lyricsList?.structuredLyrics ?? []
+        guard let text = alle.first(where: { $0.synced == true }) ?? alle.first else { return [] }
+        return (text.line ?? []).map { Textzeile(start: text.synced == true ? $0.start.map { Double($0) / 1000 } : nil, text: $0.value) }
     }
 
     public func coverURL(_ id: String?, groesse: Int) -> URL? {

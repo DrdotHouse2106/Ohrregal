@@ -39,6 +39,8 @@ final class Sitzung {
     var hoerbuchClient: AudiobookshelfClient? { didSet { geteilterPlayer.hoerbuchClient = hoerbuchClient } }
     /// Ziel nach dem Antippen einer Push-Nachricht.
     var sprung: Sprung?
+    /// Titel, für die gerade eine Playlist gewählt wird.
+    var playlistFuer: [Titel]?
 
     enum Sprung: Equatable {
         case hoerbuch(String)
@@ -134,6 +136,9 @@ struct Hauptansicht: View {
                 .tag(3)
         }
         .sheet(isPresented: $playerOffen) { VollPlayer() }
+        .sheet(isPresented: Binding(get: { sitzung.playlistFuer != nil }, set: { if !$0 { sitzung.playlistFuer = nil } })) {
+            PlaylistAuswahl(titel: sitzung.playlistFuer ?? [])
+        }
         .onChange(of: sitzung.sprung) { springen() }
         .onAppear { springen() }
         .task(id: client.adresse("ping")) {

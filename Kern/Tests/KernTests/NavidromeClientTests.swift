@@ -34,6 +34,19 @@ final class NavidromeClientTests: XCTestCase {
         XCTAssertEqual(alben?.first?.year, 1984)
     }
 
+    func testMehrfachParameter() {
+        let client = NavidromeClient(server: URL(string: "https://musik.example")!, benutzer: "ich", passwort: "x")
+        let url = client.adresse("updatePlaylist", ["playlistId": "p1"], mehrfach: [("songIdToAdd", "a"), ("songIdToAdd", "b")]).absoluteString
+        XCTAssertTrue(url.contains("songIdToAdd=a&songIdToAdd=b"))
+    }
+
+    func testSongtext() throws {
+        let json = #"{"subsonic-response":{"status":"ok","lyricsList":{"structuredLyrics":[{"synced":true,"line":[{"start":1500,"value":"Erste Zeile"},{"start":4000,"value":"Zweite"}]}]}}}"#
+        let text = try NavidromeClient.lies(Data(json.utf8)).lyricsList?.structuredLyrics?.first?.line
+        XCTAssertEqual(text?.first?.value, "Erste Zeile")
+        XCTAssertEqual(text?.last?.start, 4000)
+    }
+
     func testFehlerWirdGemeldet() {
         let json = #"{"subsonic-response":{"status":"failed","error":{"code":40,"message":"Wrong username or password"}}}"#
         XCTAssertThrowsError(try NavidromeClient.lies(Data(json.utf8))) { fehler in

@@ -23,6 +23,8 @@ public struct Titel: Codable, Hashable, Identifiable, Sendable {
     public let coverArt: String?
     public let duration: Int?
     public let track: Int?
+    /// Datum von „Gefällt mir“, nil wenn nicht markiert.
+    public let starred: String?
 }
 
 /// Künstler (Subsonic `ArtistID3`).
@@ -85,9 +87,25 @@ struct Antwort: Decodable {
     let starred2: Suchergebnis?
     let playlists: Playlists?
     let playlist: Playlist?
+    let lyricsList: Liedtexte?
+
+    struct Liedtexte: Decodable {
+        struct Strukturiert: Decodable {
+            struct Zeile: Decodable { let start: Int?; let value: String }
+            let synced: Bool?
+            let line: [Zeile]?
+        }
+        let structuredLyrics: [Strukturiert]?
+    }
 
     struct Huelle: Decodable {
         let antwort: Antwort
         enum CodingKeys: String, CodingKey { case antwort = "subsonic-response" }
     }
+}
+
+/// Eine Zeile Songtext; `start` in Sekunden, nil bei nicht synchronisierten Texten.
+public struct Textzeile: Hashable, Sendable {
+    public let start: Double?
+    public let text: String
 }

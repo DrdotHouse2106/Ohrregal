@@ -45,8 +45,12 @@ struct MiniPlayer: View {
 
 struct VollPlayer: View {
     @Environment(Player.self) private var player
+    @Environment(\.client) private var client
+    @Environment(Sitzung.self) private var sitzung
     @State private var ziehen: Double?
     @State private var kapitelOffen = false
+    @State private var songtextOffen = false
+    @State private var warteschlangeOffen = false
 
     var body: some View {
         @Bindable var player = player
@@ -103,8 +107,19 @@ struct VollPlayer: View {
                     }
                 }
                 if let titel = player.aktuell {
-                    Menu { RadioKnopf(titel: titel) } label: {
-                        Image(systemName: "ellipsis.circle").font(.title3).frame(width: 60, height: 44)
+                    Button { Favoriten.geteilt.umschalten(titel, client) } label: {
+                        Image(systemName: Favoriten.geteilt.ist(titel) ? "heart.fill" : "heart")
+                            .font(.title3).frame(width: 44, height: 44)
+                            .foregroundStyle(Favoriten.geteilt.ist(titel) ? Farben.violett : Farben.text)
+                    }
+                    Button { songtextOffen = true } label: {
+                        Image(systemName: "quote.bubble").font(.title3).frame(width: 44, height: 44)
+                    }
+                    Button { warteschlangeOffen = true } label: {
+                        Image(systemName: "list.bullet").font(.title3).frame(width: 44, height: 44)
+                    }
+                    Menu { TitelMenue(titel: titel) } label: {
+                        Image(systemName: "ellipsis.circle").font(.title3).frame(width: 44, height: 44)
                     }
                 }
                 Spacer()
@@ -129,6 +144,12 @@ struct VollPlayer: View {
         .background(LinearGradient(colors: [Farben.violett.opacity(0.45), Farben.hintergrund], startPoint: .top, endPoint: .bottom))
         .presentationDragIndicator(.visible)
         .sheet(isPresented: $kapitelOffen) { KapitelListe() }
+        .sheet(isPresented: $warteschlangeOffen) { WarteschlangeView() }
+        .sheet(isPresented: $songtextOffen) { if let t = player.aktuell { SongtextView(titel: t) } }
+        // Auch hier, weil der Player selbst ein Blatt ist und darüber nur er etwas öffnen kann.
+        .sheet(isPresented: Binding(get: { sitzung.playlistFuer != nil }, set: { if !$0 { sitzung.playlistFuer = nil } })) {
+            PlaylistAuswahl(titel: sitzung.playlistFuer ?? [])
+        }
     }
 
     private func tempoText(_ t: Float) -> String {

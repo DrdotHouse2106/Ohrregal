@@ -161,26 +161,47 @@ struct KuenstlerView: View {
 struct PlaylistListe: View {
     @Environment(\.client) private var client
     @State private var playlists: [Playlist] = []
+    @State private var neuOffen = false
+    @State private var name = ""
+    @State private var loeschen: Playlist?
 
     var body: some View {
-        List(playlists) { p in
-            NavigationLink(value: p) {
-                HStack(spacing: 12) {
-                    Cover(id: p.coverArt, groesse: 52)
-                    VStack(alignment: .leading) {
-                        Text(p.name)
-                        Text("\(p.songCount ?? 0) Titel").font(.caption).foregroundStyle(Farben.textGedaempft)
+        List {
+            ForEach(playlists) { p in
+                NavigationLink(value: p) {
+                    HStack(spacing: 12) {
+                        Cover(id: p.coverArt, groesse: 52)
+                        VStack(alignment: .leading) {
+                            Text(p.name)
+                            Text("\(p.songCount ?? 0) Titel").font(.caption).foregroundStyle(Farben.textGedaempft)
+                        }
                     }
                 }
+                .swipeActions { Button("Löschen", role: .destructive) { loeschen = p } }
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Farben.hintergrund)
         .navigationTitle("Playlists")
-        .overlay { if playlists.isEmpty { ContentUnavailableView("Keine Playlists", systemImage: "music.note.list") } }
-        .task { if playlists.isEmpty { playlists = (try? await client.playlists()) ?? [] } }
+        .toolbar { Button("Neue Playlist", systemImage: "plus") { name = ""; neuOffen = true } }
+        .alert("Neue Playlist", isPresented: $neuOffen) {
+            TextField("Name", text: $name)
+            Button("Anlegen") { Task { try? await client.neuePlaylist(name); await laden() } }
+            Button("Abbrechen", role: .cancel) {}
+        }
+        .confirmationDialog("Playlist löschen?", isPresented: Binding(get: { loeschen != nil }, set: { if !$0 { loeschen = nil } }),
+                            titleVisibility: .visible, presenting: loeschen) { p in
+            Button("„\(p.name)“ löschen", role: .destructive) { Task { try? await client.loeschePlaylist(p.id); await laden() } }
+        } message: { _ in
+            Text("Die Playlist wird auch in Navidrome gelöscht. Die Titel selbst bleiben.")
+        }
+        .overlay { if playlists.isEmpty { ContentUnavailableView("Keine Playlists", systemImage: "music.note.list", description: Text("Mit + legst du eine an.")) } }
+        .refreshable { await laden() }
+        .task { await laden() }
     }
+
+    private func laden() async { playlists = (try? await client.playlists()) ?? [] }
 }
 
 struct PlaylistView: View {
@@ -196,12 +217,20 @@ struct PlaylistView: View {
                 AbspielKnoepfe(titel: titel)
             }
             .padding()
-            TitelListe(titel: titel)
+            TitelListe(titel: titel) { stelle in
+                Task {
+                    try? await client.ausPlaylist(playlist.id, stellen: [stelle])
+                    await laden()
+                }
+            }
         }
         .background(Farben.hintergrund)
         .navigationBarTitleDisplayMode(.inline)
-        .task { if titel.isEmpty { titel = (try? await client.playlist(playlist.id))?.entry ?? [] } }
+        .refreshable { await laden() }
+        .task { await laden() }
     }
+
+    private func laden() async { titel = (try? await client.playlist(playlist.id))?.entry ?? [] }
 }
 
 struct FavoritenView: View {

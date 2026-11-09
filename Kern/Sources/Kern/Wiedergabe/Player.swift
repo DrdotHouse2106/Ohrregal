@@ -156,6 +156,60 @@ public final class Player {
         zeitInfo()
     }
 
+    // MARK: Warteschlange (Musik)
+
+    /// Spielt den Titel direkt nach dem aktuellen.
+    public func alsNaechstes(_ titel: [Titel]) {
+        guard !istHoerbuch, !warteschlange.isEmpty else { spiele(titel); return }
+        warteschlange.insert(contentsOf: titel, at: index + 1)
+        neuAufbauen()
+    }
+
+    public func anhaengen(_ titel: [Titel]) {
+        guard !istHoerbuch, !warteschlange.isEmpty else { spiele(titel); return }
+        warteschlange.append(contentsOf: titel)
+        neuAufbauen()
+    }
+
+    public func springeZu(_ stelle: Int) {
+        guard !istHoerbuch, warteschlange.indices.contains(stelle) else { return }
+        lade(ab: stelle, zeit: 0)
+        player.play()
+    }
+
+    public func verschiebe(von: IndexSet, nach: Int) {
+        guard !istHoerbuch else { return }
+        // Der laufende Titel wird markiert, damit er nach dem Verschieben wiedergefunden wird.
+        var markiert = warteschlange.enumerated().map { ($0.element, $0.offset == index) }
+        let bewegt = von.map { markiert[$0] }
+        for i in von.sorted(by: >) { markiert.remove(at: i) }
+        markiert.insert(contentsOf: bewegt, at: nach - von.filter { $0 < nach }.count)
+        warteschlange = markiert.map(\.0)
+        index = markiert.firstIndex { $0.1 } ?? 0
+        neuAufbauen()
+    }
+
+    /// Entfernt Titel; der laufende bleibt.
+    public func entferne(_ stellen: IndexSet) {
+        guard !istHoerbuch else { return }
+        var markiert = warteschlange.enumerated().map { ($0.element, $0.offset == index) }
+        for i in stellen.sorted(by: >) where !markiert[i].1 { markiert.remove(at: i) }
+        warteschlange = markiert.map(\.0)
+        index = markiert.firstIndex { $0.1 } ?? 0
+        neuAufbauen()
+    }
+
+    /// Lässt den laufenden Titel weiterspielen und stellt alles danach neu ein.
+    private func neuAufbauen() {
+        guard let client else { return }
+        spuren = warteschlange.map { (client.streamURL($0.id), 0) }
+        guard let laufend = player.currentItem else { return }
+        for eintrag in player.items() where eintrag !== laufend { player.remove(eintrag) }
+        stellen = [ObjectIdentifier(laufend): index]
+        spur = index
+        haengeAn(ab: index + 1)
+    }
+
     /// Schlaf-Timer: nach Minuten (nil = aus).
     public func schlafen(in minuten: Int?) {
         schlafenAmKapitelende = false
