@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.2.2"
+VERSION = "2.3.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -78,6 +78,13 @@ class Einstellungen:
         self.apns_team_id = env("APNS_TEAM_ID", "")
         self.apns_topic = env("APNS_TOPIC", "")
         self.audible = env("AUDIBLE_API", "https://api.audible.de").rstrip("/")
+        # Ruhezeiten: Vorrechnen und Nebenarbeiten nur nachts und wenn niemand streamt
+        self.jellyfin = env("JELLYFIN_URL", "").rstrip("/")
+        self.jellyfin_key = env("JELLYFIN_KEY", "")
+        self.nacht_von = int(env("NACHT_VON", "3"))
+        self.nacht_bis = int(env("NACHT_BIS", "6"))
+        self.zeitzone = env("ZEITZONE", "Europe/Berlin")
+        self.vorrat = env("WUNSCH_VORRAT", os.path.join(os.path.dirname(self.datenbank), "vorrat.json"))
         self.parallel = int(env("WUNSCH_PARALLEL", "2"))
         self.takt = int(env("WUNSCH_TAKT_SEKUNDEN", "60"))
         self.neuversuch_h = int(env("WUNSCH_NEUVERSUCH_STUNDEN", "24"))
@@ -788,9 +795,14 @@ def arbeite_einmal():
         aktiv = v.execute("SELECT count(*) FROM wunsch WHERE status IN ('laedt','einsortieren') "
                           "AND zurueckgezogen=0").fetchone()[0]
         frei = max(0, E.parallel - aktiv)
-        offen = v.execute("SELECT * FROM wunsch WHERE zurueckgezogen=0 AND (status='gewuenscht' OR "
-                          "(status IN ('nicht_gefunden','fehler') AND naechsterVersuch<=?)) "
-                          "ORDER BY erstellt LIMIT ?", (jetzt().isoformat(), frei)).fetchall()
+        if ruhig():
+            offen = v.execute("SELECT * FROM wunsch WHERE zurueckgezogen=0 AND (status='gewuenscht' OR "
+                              "(status IN ('nicht_gefunden','fehler') AND naechsterVersuch<=?)) "
+                              "ORDER BY ausReihe IS NOT NULL, erstellt LIMIT ?",
+                              (jetzt().isoformat(), frei)).fetchall()
+        else:  # tagsüber oder während gestreamt wird: nur ausdrückliche, neue Wünsche
+            offen = v.execute("SELECT * FROM wunsch WHERE zurueckgezogen=0 AND status='gewuenscht' "
+                              "AND ausReihe IS NULL ORDER BY erstellt LIMIT ?", (frei,)).fetchall()
     for w in offen:  # gedrosselt: höchstens WUNSCH_PARALLEL gleichzeitig
         try:
             bearbeite_suche(w)
@@ -945,6 +957,8 @@ def reihe_json(v, r):
 
 
 def reihen_pruefen():
+    if not ruhig():
+        return
     grenze = (jetzt() - timedelta(hours=REIHE_PRUEFEN_STUNDEN)).isoformat()
     with db() as v:
         faellig = v.execute("SELECT * FROM reihe WHERE zurueckgezogen=0 AND (geprueft IS NULL OR geprueft<?) "
@@ -1131,16 +1145,15 @@ def entdecken_neu_berechnen(benutzer):
 
 
 def entdecken_zwischengespeichert(benutzer, neu=False):
-    """Abgelaufene Vorschläge werden sofort geliefert und im Hintergrund erneuert."""
+    """Vorhandene Vorschläge werden immer ausgeliefert; neu gerechnet nur, wenn keine da sind oder neu=1."""
     with ENTDECKEN_SPERRE:
         z = ENTDECKEN_CACHE.get(benutzer)
         if z and not neu:
-            if z[0] <= time.time() and benutzer not in ENTDECKEN_LAEUFT:
-                ENTDECKEN_LAEUFT.add(benutzer)
-                threading.Thread(target=entdecken_neu_berechnen, args=(benutzer,), daemon=True).start()
-            return z[1]
+            return z[1]  # tagsüber nur ausliefern, erneuert wird nachts
         ENTDECKEN_LAEUFT.add(benutzer)
-    return entdecken_neu_berechnen(benutzer)
+    t = entdecken_neu_berechnen(benutzer)
+    threading.Thread(target=vorrat_speichern, daemon=True).start()
+    return t
 
 
 def entdecken_vorwaermen():
@@ -1154,6 +1167,9 @@ def entdecken_vorwaermen():
             with ENTDECKEN_SPERRE:
                 if b in ENTDECKEN_CACHE or b in ENTDECKEN_LAEUFT:
                     continue
+            if not leerlauf():
+                return
+            with ENTDECKEN_SPERRE:
                 ENTDECKEN_LAEUFT.add(b)
             entdecken_neu_berechnen(b)
         except Exception:
@@ -1169,7 +1185,7 @@ HOERSPIELE_ID = "hoerspiele"
 
 
 def kategorien():
-    if KATEGORIEN["daten"] and time.time() - KATEGORIEN["zeit"] < 3 * 86400:
+    if KATEGORIEN["daten"] and KATEGORIEN["zeit"]:  # erneuert nur das nächtliche Vorrechnen
         return KATEGORIEN["daten"]
     roh = audible("categories", categories_num_levels=2).get("categories") or []
     daten = [{"id": HOERSPIELE_ID, "name": "Hörspiele", "unter": []}]
@@ -1242,14 +1258,145 @@ def stoebern(kid, sortierung):
 def stoebern_zwischengespeichert(kid, sortierung, neu=False):
     schluessel = (kid, sortierung)
     z = STOEBERN_CACHE.get(schluessel)
-    if z and not neu and z[0] > time.time():
+    if z and not neu:
         return z[1]
     t = stoebern(kid, sortierung)
     if t is not None:
-        if len(STOEBERN_CACHE) > 300:
+        if len(STOEBERN_CACHE) > 400:
             STOEBERN_CACHE.clear()
         STOEBERN_CACHE[schluessel] = (time.time() + 6 * 3600, t)
+        threading.Thread(target=vorrat_speichern, daemon=True).start()
     return t
+
+
+# ---------------------------------------------------------------- Ruhezeiten und Vorrat
+
+LEERLAUF = {"zeit": 0, "wert": True, "grund": ""}
+
+
+def leerlauf():
+    """Niemand streamt bei Jellyfin oder hört bei ABS, keine Aufnahme läuft (1 Minute zwischengespeichert)."""
+    if time.time() - LEERLAUF["zeit"] < 60:
+        return LEERLAUF["wert"]
+    grund = ""
+    if E.jellyfin and E.jellyfin_key:
+        kopf = {"Authorization": f'MediaBrowser Token="{E.jellyfin_key}"'}
+        try:
+            for x in json.loads(hole(E.jellyfin + "/Sessions?activeWithinSeconds=300", kopf=kopf, zeit=10)):
+                if x.get("NowPlayingItem") and not (x.get("PlayState") or {}).get("IsPaused"):
+                    grund = "Jellyfin streamt"
+            if not grund:
+                timer = json.loads(hole(E.jellyfin + "/LiveTv/Timers", kopf=kopf, zeit=10)).get("Items") or []
+                if any(t.get("Status") == "InProgress" for t in timer):
+                    grund = "Aufnahme läuft"
+        except Exception as f:
+            log("Jellyfin-Sitzungen nicht abrufbar:", f)
+    v = abs_db()
+    if v and not grund:
+        try:
+            grenze = (jetzt() - timedelta(minutes=3)).strftime("%Y-%m-%d %H:%M:%S")
+            if v.execute("SELECT count(*) FROM playbackSessions WHERE updatedAt>?", (grenze,)).fetchone()[0]:
+                grund = "Audiobookshelf spielt"
+        except sqlite3.Error:
+            pass
+        finally:
+            v.close()
+    LEERLAUF.update(zeit=time.time(), wert=not grund, grund=grund)
+    return not grund
+
+
+def nachts():
+    try:
+        from zoneinfo import ZoneInfo
+        stunde = datetime.now(ZoneInfo(E.zeitzone)).hour
+    except Exception:
+        stunde = datetime.now().hour
+    return E.nacht_von <= stunde < E.nacht_bis
+
+
+def ruhig():
+    return nachts() and leerlauf()
+
+
+VORRAT_SPERRE = threading.Lock()
+
+
+def vorrat_speichern():
+    with VORRAT_SPERRE:
+        daten = {"entdecken": ENTDECKEN_CACHE.copy(),
+                 "stoebern": {f"{k[0]}|{k[1]}": v for k, v in STOEBERN_CACHE.items()},
+                 "kategorien": KATEGORIEN, "nacht": VORRECHNEN}
+        tmp = E.vorrat + ".neu"
+        with open(tmp, "w") as f:
+            json.dump(daten, f, ensure_ascii=False)
+        os.replace(tmp, E.vorrat)
+
+
+def vorrat_laden():
+    try:
+        with open(E.vorrat) as f:
+            d = json.load(f)
+    except (FileNotFoundError, ValueError):
+        return
+    ENTDECKEN_CACHE.update({k: tuple(v) for k, v in d.get("entdecken", {}).items()})
+    for k, v in d.get("stoebern", {}).items():
+        kid, sortierung = k.split("|", 1)
+        STOEBERN_CACHE[(kid, sortierung)] = tuple(v)
+    if d.get("kategorien", {}).get("daten"):
+        KATEGORIEN.update(d["kategorien"])
+    VORRECHNEN.update(d.get("nacht", {}))
+    log(f"Vorrat geladen: {len(ENTDECKEN_CACHE)} Benutzer, {len(STOEBERN_CACHE)} Stöber-Listen")
+
+
+VORRECHNEN = {"datum": "", "erledigt": []}
+
+
+def vorrechnen():
+    """Einmal pro Nacht im Leerlauf alles neu berechnen; bei Streaming unterbrechen und später weitermachen."""
+    if not ruhig():
+        return
+    heute = jetzt().astimezone().date().isoformat()
+    if VORRECHNEN["datum"] != heute:
+        VORRECHNEN.update(datum=heute, erledigt=[], fertig=False)
+    if VORRECHNEN.get("fertig"):
+        return
+    aufgaben = [("kategorien", "")]
+    with db() as v:
+        for (b,) in v.execute("SELECT DISTINCT benutzer FROM wunsch WHERE benutzer LIKE 'abs:%' "
+                              "UNION SELECT benutzer FROM geraet UNION SELECT benutzer FROM reihe"):
+            aufgaben.append(("entdecken", b))
+    try:
+        oben = [k["id"] for k in kategorien()]
+    except Exception:
+        oben = []
+    gefragt = [k[0] for k in STOEBERN_CACHE]
+    for kid in dict.fromkeys(oben + gefragt):
+        for sortierung in ("beliebt", "neu"):
+            aufgaben.append(("stoebern", f"{kid}|{sortierung}"))
+    for art, ziel in aufgaben:
+        name = f"{art}:{ziel}"
+        if name in VORRECHNEN["erledigt"]:
+            continue
+        if not leerlauf():
+            log(f"Vorrechnen unterbrochen ({LEERLAUF['grund']}), {len(VORRECHNEN['erledigt'])} erledigt")
+            vorrat_speichern()
+            return
+        try:
+            if art == "kategorien":
+                KATEGORIEN["zeit"] = 0
+                kategorien()
+            elif art == "entdecken":
+                entdecken_neu_berechnen(ziel)
+            else:
+                kid, sortierung = ziel.split("|", 1)
+                stoebern_zwischengespeichert(kid, sortierung, neu=True)
+        except Exception as f:
+            log(f"Vorrechnen {name} fehlgeschlagen:", f)
+        VORRECHNEN["erledigt"].append(name)
+        time.sleep(2)
+    VORRECHNEN["fertig"] = True
+    vorrat_speichern()
+    log(f"Vorrechnen fertig: {len(aufgaben)} Aufgaben")
 
 
 WECKER = threading.Event()
@@ -1265,6 +1412,10 @@ def arbeiter():
             reihen_pruefen()
         except Exception:
             log("Reihen-Prüfung fehlgeschlagen:", traceback.format_exc())
+        try:
+            vorrechnen()
+        except Exception:
+            log("Vorrechnen fehlgeschlagen:", traceback.format_exc())
         WECKER.wait(E.takt)
         WECKER.clear()
 
@@ -1613,6 +1764,7 @@ def main():
         sys.exit(__doc__)
     os.umask(0o002)
     db_anlegen()
+    vorrat_laden()
     threading.Thread(target=arbeiter, daemon=True).start()
     threading.Thread(target=entdecken_vorwaermen, daemon=True).start()
     server = ThreadingHTTPServer((E.bind, E.port), Schnittstelle)

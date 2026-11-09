@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 2.2.2. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.3.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 2.2.2. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.2.2"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.3.0"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -170,6 +170,15 @@ Liefert `{"kategorien": [{"id": "…", "name": "…", "unter": [{"id": "…", "n
 Liefert `{"treffer": [ … ]}` mit höchstens 30 Treffern, Format wie bei `/entdecken`. Der grund lautet „Bestseller in <Kategorie>“ bzw. „Neu in <Kategorie>“. Es kommen nur deutsche, schon erschienene Titel, keine Sammelboxen, keine Erotik außerhalb der Kategorie Erotik. Was in ABS liegt oder gewünscht ist, fällt raus. Zwischengespeichert wird 6 Stunden je Kategorie und Sortierung, `neu=1` umgeht den Zwischenspeicher.
 Fehler: `400 ungueltig`, `404 unbekannt` (Kategorie gibt es nicht), `502 audible_nicht_erreichbar`.
 Hinweis: „neu“ braucht beim ersten Aufruf bis zu 5 Sekunden, weil Audible zuerst Vorbestellungen liefert.
+
+## Ruhezeiten und Vorrat (ab 2.3.0)
+
+Der Server rechnet nur, wenn es nicht stört, und liefert sonst aus seinem Vorrat aus:
+- **Nachtfenster** 3–6 Uhr (einstellbar). Dazu muss **Leerlauf** sein: kein laufender, nicht pausierter Jellyfin-Stream, keine Live-TV-Aufnahme, keine ABS-Wiedergabe in den letzten 3 Minuten. Wird gestreamt, unterbricht der Server und macht später weiter.
+- **Nachts neu berechnet:** `/kategorien`, `/entdecken` für alle bekannten Benutzer und `/stoebern` (beliebt und neu) für alle Hauptkategorien, „Hörspiele“ und jede Unterkategorie, die die App schon einmal abgefragt hat. Der Vorrat liegt auf der Platte und übersteht Neustarts.
+- **Tagsüber:** Vorhandenes wird immer ausgeliefert, egal wie alt. Neu gerechnet wird nur mit `neu=1` oder wenn für diese Abfrage noch nichts da ist.
+- **Wünsche:** Neue, ausdrückliche Wünsche werden sofort gesucht und geladen. Teile aus „Reihe folgen“, der tägliche Neuversuch bei `nicht_gefunden` und Neuversuche nach `fehler` laufen nur in der Ruhezeit. „Erneut suchen“ (`POST /wunsch/{id}/erneut`) gilt als ausdrücklich und läuft sofort.
+- Die tägliche Prüfung der Reihen läuft ebenfalls nur in der Ruhezeit.
 
 ## Bewertung der Treffer (Server)
 
