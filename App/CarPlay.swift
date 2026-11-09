@@ -1,4 +1,5 @@
 import CarPlay
+import Observation
 import Kern
 
 /// CarPlay: Tabs Start, Musik, Hörbücher und Radio. Gespielt wird über denselben Player wie auf dem iPhone,
@@ -10,6 +11,55 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         steuerung = interfaceController
         Task { @MainActor in Protokoll.geteilt.geraet = "CarPlay" }
         Task { @MainActor in await aufbauen() }
+        Task { @MainActor in knoepfeBeobachten() }
+    }
+
+    // MARK: Knöpfe auf „Läuft gerade“
+
+    /// Hält die Knöpfe passend zum laufenden Titel (Herz gefüllt oder leer, Musik oder Hörbuch).
+    @MainActor private func knoepfeBeobachten() {
+        withObservationTracking {
+            knoepfeSetzen()
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.knoepfeBeobachten() }
+        }
+    }
+
+    @MainActor private func knoepfeSetzen() {
+        let player = geteilterPlayer
+        if player.istHoerbuch {
+            let tempo = CPNowPlayingPlaybackRateButton { _ in
+                Task { @MainActor in
+                    let stufen: [Float] = [1, 1.25, 1.5, 2, 0.75]
+                    let i = stufen.firstIndex(of: player.tempo) ?? 0
+                    player.tempo = stufen[(i + 1) % stufen.count]
+                }
+            }
+            CPNowPlayingTemplate.shared.updateNowPlayingButtons([tempo])
+            return
+        }
+        guard let titel = player.aktuell, let client = geteilteSitzung.client else {
+            CPNowPlayingTemplate.shared.updateNowPlayingButtons([])
+            return
+        }
+        let gefaellt = Favoriten.geteilt.ist(titel)
+        let herz = CPNowPlayingImageButton(image: UIImage(systemName: gefaellt ? "heart.fill" : "heart") ?? UIImage()) { _ in
+            Task { @MainActor in Favoriten.geteilt.umschalten(titel, client) }
+        }
+        let nein = CPNowPlayingImageButton(image: UIImage(systemName: "hand.thumbsdown") ?? UIImage()) { _ in
+            Task { @MainActor in
+                Hoerverlauf.geteilt.ablehnen(titel)
+                Protokoll.geteilt.merke("gefaellt_nicht_mehr_hoeren", titel: titel, position: player.zeit)
+                player.weiter()
+            }
+        }
+        let inMediathek = Mediathek.geteilt.enthaelt(titel)
+        let mediathek = CPNowPlayingImageButton(image: UIImage(systemName: inMediathek ? "checkmark.circle" : "plus.circle") ?? UIImage()) { _ in
+            Task { @MainActor in
+                if inMediathek { await Mediathek.geteilt.entfernen([titel], client) } else { await Mediathek.geteilt.hinzufuegen([titel], client) }
+            }
+        }
+        CPNowPlayingTemplate.shared.updateNowPlayingButtons([herz, nein, mediathek])
     }
 
     func templateApplicationScene(_ scene: CPTemplateApplicationScene, didDisconnectInterfaceController interfaceController: CPInterfaceController) {

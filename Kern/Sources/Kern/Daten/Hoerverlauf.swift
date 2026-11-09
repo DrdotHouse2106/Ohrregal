@@ -53,6 +53,12 @@ public final class Hoerverlauf {
         return Set(stand.filter { $0.value >= 2 }.keys)
     }
 
+    /// „Gefällt mir nicht“: zählt sofort als unbeliebt, bis der Titel wieder ganz gehört wird.
+    public func ablehnen(_ titel: Titel) {
+        merke(titel, uebersprungen: true)
+        merke(titel, uebersprungen: true)
+    }
+
     public func loeschen() {
         ereignisse = []
         try? FileManager.default.removeItem(at: datei)
