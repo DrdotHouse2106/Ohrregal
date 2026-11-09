@@ -54,3 +54,14 @@ final class NavidromeClientTests: XCTestCase {
         }
     }
 }
+
+final class MusikwunschTests: XCTestCase {
+    func testAlbumTolerant() throws {
+        let json = #"{"alben":[{"mbid":"m1","titel":"Beispielalbum","kuenstler":"Beispielband","jahr":2003,"typ":"Album","status":"fehlt"},{"mbid":"m2","titel":"Single"}]}"#
+        struct Liste: Decodable { let alben: [LidarrAlbum] }
+        let alben = try JSONDecoder().decode(Liste.self, from: Data(json.utf8)).alben
+        XCTAssertEqual(alben.first?.jahr, "2003")
+        XCTAssertEqual(alben.last?.status, "fehlt")
+        XCTAssertEqual(alben.first?.statusText, "Fehlt")
+    }
+}

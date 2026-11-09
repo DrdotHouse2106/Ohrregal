@@ -45,6 +45,7 @@ final class Sitzung {
     enum Sprung: Equatable {
         case hoerbuch(String)
         case wuensche
+        case musikwuensche
     }
 
     init() {
@@ -117,6 +118,7 @@ struct Hauptansicht: View {
     @State private var playerOffen = false
     @State private var tab = 0
     @State private var hoerbuchPfad = NavigationPath()
+    @State private var musikPfad = NavigationPath()
 
     var body: some View {
         TabView(selection: $tab) {
@@ -124,7 +126,7 @@ struct Hauptansicht: View {
                 .miniPlayer($playerOffen)
                 .tabItem { Label("Start", systemImage: "house.fill") }
                 .tag(0)
-            NavigationStack { MusikView().ziele() }
+            NavigationStack(path: $musikPfad) { MusikView().ziele() }
                 .miniPlayer($playerOffen)
                 .tabItem { Label("Musik", systemImage: "music.note") }
                 .tag(1)
@@ -153,6 +155,11 @@ struct Hauptansicht: View {
     private func springen() {
         guard let ziel = sitzung.sprung else { return }
         sitzung.sprung = nil
+        if ziel == .musikwuensche {
+            tab = 1
+            musikPfad = NavigationPath([Ziel.musikwuensche("")])
+            return
+        }
         tab = 2
         var pfad = NavigationPath()
         if case .hoerbuch(let id) = ziel { pfad.append(Ziel.hoerbuch(id)) } else { pfad.append(Ziel.wuensche) }

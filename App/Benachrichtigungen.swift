@@ -20,9 +20,14 @@ enum Benachrichtigungen {
     }
 
     static func geraetMelden() async {
-        guard let token = UserDefaults.standard.string(forKey: "apnsToken"), let abs = geteilteSitzung.hoerbuchClient else { return }
+        guard let token = UserDefaults.standard.string(forKey: "apnsToken") else { return }
         do {
-            try await abs.meldeGeraet(token, umgebung: umgebung)
+            // Mit Audiobookshelf-Konto über dieses, sonst mit der Navidrome-Anmeldung.
+            if let abs = geteilteSitzung.hoerbuchClient {
+                try await abs.meldeGeraet(token, umgebung: umgebung)
+            } else if let dienst = geteilteSitzung.musikwunsch {
+                try await dienst.meldeGeraet(token, umgebung: umgebung)
+            } else { return }
             UserDefaults.standard.removeObject(forKey: "pushFehler")
         } catch {
             UserDefaults.standard.set("Anmeldung beim Wunsch-Dienst: \(error.localizedDescription)", forKey: "pushFehler")
@@ -43,7 +48,7 @@ enum Benachrichtigungen {
         }
         if let fehler = UserDefaults.standard.string(forKey: "pushFehler") { return fehler }
         guard UserDefaults.standard.string(forKey: "apnsToken") != nil else { return "iOS hat noch keine Adresse für Mitteilungen geliefert. Bitte später noch einmal versuchen." }
-        guard geteilteSitzung.hoerbuchClient != nil else { return "Audiobookshelf ist nicht eingetragen." }
+        guard geteilteSitzung.hoerbuchClient != nil || geteilteSitzung.client != nil else { return "Es ist kein Server eingetragen." }
         await geraetMelden()
         return UserDefaults.standard.string(forKey: "pushFehler") ?? "Mitteilungen sind eingeschaltet. Du bekommst Bescheid, wenn ein Hörbuch da ist."
     }
@@ -89,7 +94,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        let id = response.notification.request.content.userInfo["absItemId"] as? String
-        await MainActor.run { geteilteSitzung.sprung = id.map { .hoerbuch($0) } ?? .wuensche }
+        let info = response.notification.request.content.userInfo
+        let id = info["absItemId"] as? String
+        let musik = info["musikWunschId"] != nil
+        await MainActor.run { geteilteSitzung.sprung = musik ? Sitzung.Sprung.musikwuensche : id.map { Sitzung.Sprung.hoerbuch($0) } ?? .wuensche }
     }
 }

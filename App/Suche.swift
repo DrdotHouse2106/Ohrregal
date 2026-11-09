@@ -8,6 +8,18 @@ struct SucheView: View {
 
     var body: some View {
         ErgebnisAnsicht(ergebnis: ergebnis)
+            .safeAreaInset(edge: .bottom) {
+                // Nichts gefunden? Direkt bei Lidarr weitersuchen und wünschen.
+                if text.count >= 2 {
+                    NavigationLink(value: Ziel.musikwuensche(text)) {
+                        Label("„\(text)“ bei Lidarr suchen und wünschen", systemImage: "sparkles")
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.horizontal)
+                    .padding(.bottom, 6)
+                }
+            }
             .navigationTitle("Suchen")
             .safeAreaInset(edge: .top) { Suchfeld(prompt: "Künstler, Alben, Titel", text: $text) }
             .task(id: text) {

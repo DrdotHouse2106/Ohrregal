@@ -9,6 +9,7 @@ struct MusikView: View {
             NavigationLink(value: Ziel.playlists) { Label("Playlists", systemImage: "music.note.list") }
             NavigationLink(value: Ziel.favoriten) { Label("Gefällt mir", systemImage: "heart") }
             NavigationLink(value: Ziel.geladen) { Label("Geladen", systemImage: "arrow.down.circle") }
+            NavigationLink(value: Ziel.musikwuensche("")) { Label("Musik wünschen", systemImage: "sparkles") }
         }
         .scrollContentBackground(.hidden)
         .background(Farben.hintergrund)
@@ -149,6 +150,10 @@ struct KuenstlerView: View {
                 }
             }
             .padding()
+            if !alben.isEmpty {
+                FehltNoch(name: kuenstler.name, vorhanden: Set(alben.map(\.name)))
+                    .padding(.bottom)
+            }
         }
         .background(Farben.hintergrund)
         .navigationBarTitleDisplayMode(.inline)
