@@ -44,7 +44,8 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         // Mixe aus dem Vorrat der Startseite, sonst „Dein Mix“ frisch.
         let mixe = StartVorrat.laden()?.mixe ?? []
         let spiel = abspielen("Spiel etwas für mich", nil, bild: nil) {
-            let titel = mixe.first?.titel.shuffled() ?? (try? await client.zufaelligeTitel()) ?? []
+            var titel = mixe.first?.titel.shuffled() ?? []
+            if titel.isEmpty { titel = (try? await client.zufaelligeTitel()) ?? [] }
             geteilterPlayer.spiele(titel, quelle: "CarPlay: Spiel etwas für mich")
         }
         spiel.setImage(UIImage(systemName: "sparkles"))
