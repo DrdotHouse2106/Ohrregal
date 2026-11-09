@@ -17,7 +17,7 @@ struct StartView: View {
     @State private var verlaufLoeschen = false
     @State private var mitteilungen: String?
 
-    struct Reihe: Identifiable {
+    struct Reihe: Identifiable, Codable {
         let titel: String
         let alben: [Album]
         var id: String { titel }
@@ -79,8 +79,8 @@ struct StartView: View {
             Text(mitteilungen ?? "")
         }
         .sheet(isPresented: $zugaengeOffen) { Anmeldung() }
-        .refreshable { await laden() }
-        .task { if !geladen { await laden() } }
+        .refreshable { await laden(neu: true) }
+        .task { await laden() }
         .overlay {
             if let fehler, reihen.isEmpty {
                 ContentUnavailableView("Server nicht erreichbar", systemImage: "wifi.exclamationmark", description: Text(fehler))
@@ -99,38 +99,32 @@ struct StartView: View {
         }
     }
 
-    private func laden() async {
+    /// Zeigt zuerst den Vorrat (sofort), rechnet nur neu, wenn er älter als 6 Stunden ist oder neu gewünscht.
+    private func laden(neu: Bool = false) async {
+        if !geladen, let vorrat = StartVorrat.laden() { anwenden(vorrat) }
+        hoerbuecher = (try? await sitzung.hoerbuchClient?.angefangen()) ?? hoerbuecher
+        if !neu, let vorrat = StartVorrat.laden(), Date().timeIntervalSince(vorrat.zeit) < 6 * 3600 { return }
         do {
-            async let zuletztAnfrage = client.alben("recent", anzahl: 50)
-            async let haeufigAnfrage = client.alben("frequent", anzahl: 50)
-            async let neuAnfrage = client.alben("newest")
-            async let gefaelltAnfrage = client.alben("starred")
-            async let zufallAnfrage = client.alben("random")
-            let kuerzlich = try await zuletztAnfrage
-            let oft = try await haeufigAnfrage
-            let gehoert = Set(kuerzlich.map(\.id))
-            zuletzt = Array(kuerzlich.prefix(15))
-            reihen = [
-                Reihe(titel: "Am häufigsten gespielt", alben: Array(oft.prefix(20))),
-                // Oft gespielt, aber nicht unter den letzten 50.
-                Reihe(titel: "Lange nicht gehört", alben: Array(oft.filter { !gehoert.contains($0.id) }.prefix(20))),
-                Reihe(titel: "Kürzlich hinzugefügt", alben: try await neuAnfrage),
-                Reihe(titel: "Alben mit „Gefällt mir“", alben: (try? await gefaelltAnfrage) ?? []),
-                Reihe(titel: "Zufällige Alben", alben: try await zufallAnfrage),
-            ].filter { !$0.alben.isEmpty }
+            let vorrat = try await StartVorrat.berechnen(client)
+            vorrat.speichern()
+            anwenden(vorrat)
             fehler = nil
-            geladen = true
-            hoerbuecher = (try? await sitzung.hoerbuchClient?.angefangen()) ?? []
-            mixe = await Mix.laden(client, haeufig: oft)
         } catch {
             fehler = error.localizedDescription
             geladen = true
         }
     }
+
+    private func anwenden(_ vorrat: StartVorrat) {
+        zuletzt = vorrat.zuletzt
+        reihen = vorrat.reihen
+        mixe = vorrat.mixe
+        geladen = true
+    }
 }
 
 /// Ein fertig geladener Mix; so startet er beim Antippen sofort und zeigt seine Cover.
-struct Mix: Identifiable {
+struct Mix: Identifiable, Codable {
     let id: String
     let name: String
     let untertitel: String

@@ -59,6 +59,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         // Downloads im Hintergrund wieder verbinden.
         Task { @MainActor in _ = Offline.geteilt }
+        Hintergrund.registrieren()
+        Hintergrund.planen()
         Task { @MainActor in
             // Token kann sich ändern; bei erteilter Erlaubnis bei jedem Start neu holen.
             if await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .authorized {
