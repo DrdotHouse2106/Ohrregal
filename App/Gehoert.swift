@@ -6,6 +6,8 @@ import SwiftUI
 final class Gehoert {
     static let geteilt = Gehoert()
     private(set) var ids: Set<String> = []
+    /// Nach einer Markierung „Entdecken“ neu rechnen lassen.
+    var geaendert = false
 
     func laden(_ abs: AudiobookshelfClient) async {
         if let neu = try? await abs.fertigGehoert() { ids = neu }
@@ -13,6 +15,7 @@ final class Gehoert {
 
     func umschalten(_ h: Hoerbuch, _ abs: AudiobookshelfClient) {
         let gehoert = !ids.contains(h.id)
+        geaendert = true
         if gehoert { ids.insert(h.id) } else { ids.remove(h.id) }
         Protokoll.geteilt.merke(gehoert ? "hoerbuch_fertig" : "hoerbuch_ungehoert", art: "hoerbuch", quelle: "manuell",
                                 id: h.id, name: h.titel, urheber: h.autor)

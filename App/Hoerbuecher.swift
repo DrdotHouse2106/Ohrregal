@@ -73,7 +73,14 @@ struct HoerbuecherView: View {
                     .padding(.vertical)
                 }
                 .refreshable { await laden(abs, neu: true) }
-                .task { if bibliotheken.isEmpty { await laden(abs) } }
+                .task {
+                    // Nach dem Markieren als gehört passen sich die Vorschläge sofort an.
+                    if bibliotheken.isEmpty || Gehoert.geteilt.geaendert {
+                        let neu = Gehoert.geteilt.geaendert
+                        Gehoert.geteilt.geaendert = false
+                        await laden(abs, neu: neu)
+                    }
+                }
                 .overlay {
                     if let fehler, bibliotheken.isEmpty {
                         ContentUnavailableView("Audiobookshelf nicht erreichbar", systemImage: "wifi.exclamationmark", description: Text(fehler))
