@@ -17,10 +17,11 @@ struct LadenKnopf: View {
                     ProgressView(value: Double(titel.count - laufend.count) / Double(max(titel.count, 1)))
                         .progressViewStyle(.circular)
                 } else {
-                    Image(systemName: offline.istGeladen(titel.map(\.id)) ? "checkmark.circle.fill" : "arrow.down.circle")
+                    Label(offline.istGeladen(titel.map(\.id)) ? "Geladen" : "Laden",
+                          systemImage: offline.istGeladen(titel.map(\.id)) ? "checkmark.circle.fill" : "arrow.down.circle")
+                        .lineLimit(1)
                 }
             }
-            .frame(width: 24, height: 24)
         }
         .buttonStyle(.bordered)
         .disabled(titel.isEmpty)

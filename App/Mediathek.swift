@@ -82,7 +82,7 @@ struct MediathekKnopf: View {
                 if drin { await Mediathek.geteilt.entfernen(titel, client) } else { await Mediathek.geteilt.hinzufuegen(titel, client) }
             }
         } label: {
-            Image(systemName: drin ? "checkmark" : "plus").frame(width: 24, height: 24)
+            Label(drin ? "In der Mediathek" : "Zur Mediathek", systemImage: drin ? "checkmark" : "plus").lineLimit(1)
         }
         .buttonStyle(.bordered)
         .disabled(titel.isEmpty)

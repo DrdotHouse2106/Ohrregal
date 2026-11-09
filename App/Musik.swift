@@ -116,20 +116,26 @@ struct AbspielKnoepfe: View {
     @Environment(Player.self) private var player
     let titel: [Titel]
 
+    /// Oben Abspielen und Zufällig über die ganze Breite (wie Apple Music), darunter Mediathek und Laden.
     var body: some View {
-        HStack(spacing: 14) {
-            MediathekKnopf(titel: titel)
-            LadenKnopf(titel: titel)
-            Button { player.spiele(titel, quelle: "Album/Playlist") } label: {
-                Label("Abspielen", systemImage: "play.fill").frame(maxWidth: .infinity)
+        VStack(spacing: 10) {
+            HStack(spacing: 14) {
+                Button { player.spiele(titel, quelle: "Album/Playlist") } label: {
+                    Label("Abspielen", systemImage: "play.fill").lineLimit(1).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                Button { player.spiele(titel.shuffled(), quelle: "Album/Playlist zufällig") } label: {
+                    Label("Zufällig", systemImage: "shuffle").lineLimit(1).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.borderedProminent)
-            Button { player.spiele(titel.shuffled(), quelle: "Album/Playlist zufällig") } label: {
-                Label("Zufällig", systemImage: "shuffle").frame(maxWidth: .infinity)
+            .controlSize(.large)
+            HStack(spacing: 14) {
+                MediathekKnopf(titel: titel)
+                LadenKnopf(titel: titel)
             }
-            .buttonStyle(.bordered)
+            .controlSize(.regular)
         }
-        .controlSize(.large)
         .disabled(titel.isEmpty)
     }
 }
