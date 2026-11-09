@@ -180,9 +180,21 @@ public struct MusikwunschClient: Sendable {
     public func sendeEreignisse(_ ereignisse: [Ereignis]) async -> Protokoll.Antwort {
         let kodierer = JSONEncoder()
         kodierer.dateEncodingStrategy = .iso8601
+        let ziel = basis.absoluteString + "/ereignisse"
+        func merke(_ text: String) {
+            UserDefaults.standard.set("\(Date().formatted(date: .abbreviated, time: .standard)) · \(ereignisse.count) Ereignisse an \(ziel) → \(text)",
+                                      forKey: "protokollLetzterVersuch")
+        }
         guard let daten = try? kodierer.encode(ereignisse),
-              let liste = try? JSONSerialization.jsonObject(with: daten) as? [Any],
-              let (antwort, code) = try? await sende("/ereignisse", methode: "POST", json: ["ereignisse": liste]) else { return .spaeter }
+              let liste = try? JSONSerialization.jsonObject(with: daten) as? [Any] else { merke("nicht kodierbar"); return .spaeter }
+        let antwort: Data, code: Int
+        do {
+            (antwort, code) = try await sende("/ereignisse", methode: "POST", json: ["ereignisse": liste])
+        } catch {
+            merke("Fehler: \(error.localizedDescription)")
+            return .spaeter
+        }
+        merke("HTTP \(code)" + ((200..<300).contains(code) ? "" : " " + String((String(data: antwort, encoding: .utf8) ?? "").prefix(200))))
         switch code {
         case 200..<300: return .angenommen
         case 413: return .zuGross

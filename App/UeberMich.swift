@@ -8,6 +8,7 @@ struct UeberMichView: View {
     @State private var eintraege: [MusikwunschClient.ProtokollEintrag] = []
     @State private var fehler: String?
     @State private var loeschen = false
+    @State private var letzterVersuch = UserDefaults.standard.string(forKey: "protokollLetzterVersuch")
 
     var body: some View {
         List {
@@ -20,6 +21,12 @@ struct UeberMichView: View {
                 LabeledContent("Ereignisse auf dem Server", value: "\(gesamt)")
                 LabeledContent("Noch auf diesem iPhone", value: "\(Protokoll.geteilt.offenAnzahl)")
                 LabeledContent("Hörverlauf für Mixe (nur hier)", value: "\(Hoerverlauf.geteilt.ereignisse.count)")
+            }
+            Section {
+                Text(letzterVersuch ?? "Noch kein Sendeversuch.").font(.caption).foregroundStyle(Farben.textGedaempft)
+                Button("Jetzt senden", systemImage: "arrow.up.circle") { Task { await laden() } }
+            } header: {
+                Text("Letzter Sendeversuch")
             }
             if let fehler { Section { Text(fehler).foregroundStyle(.red) } }
             if !eintraege.isEmpty {
@@ -55,6 +62,7 @@ struct UeberMichView: View {
 
     private func laden() async {
         await Protokoll.geteilt.abschicken()
+        letzterVersuch = UserDefaults.standard.string(forKey: "protokollLetzterVersuch")
         guard let dienst = sitzung.musikwunsch else { return }
         do {
             let ergebnis = try await dienst.protokoll()

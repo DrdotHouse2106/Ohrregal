@@ -80,6 +80,7 @@ public final class Protokoll {
     /// Schickt alles Offene in Stapeln bis 200 Ereignisse und etwa 80 KB (der Proxy nimmt höchstens 100 KB).
     /// Bei Verbindungsfehlern bleibt alles liegen; kaputte Ereignisse werden verworfen, damit nichts festhängt.
     public func abschicken() async {
+        if senden == nil { UserDefaults.standard.set("Kein Server zum Senden eingerichtet", forKey: "protokollLetzterVersuch") }
         guard !sendetGerade, let senden, !offen.isEmpty else { return }
         sendetGerade = true
         defer { sendetGerade = false }
