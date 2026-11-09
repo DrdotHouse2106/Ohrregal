@@ -23,8 +23,12 @@ extension View {
     }
 
     /// iOS 26: Mini-Player als Zubehör der Tab-Leiste, wie bei Apple Music.
+    /// Das Zubehör hängt immer an der Leiste und wird nur ein- und ausgeschaltet. Würde es erst beim ersten Abspielen
+    /// angehängt, baut SwiftUI die ganze Ansicht neu auf, und die Seite springt nach oben.
     @ViewBuilder func miniPlayerInTabLeiste(_ offen: Binding<Bool>, aktiv: Bool) -> some View {
-        if #available(iOS 26, *), aktiv {
+        if #available(iOS 26.1, *) {
+            tabViewBottomAccessory(isEnabled: aktiv) { MiniPlayer(offen: offen, kompakt: true) }
+        } else if #available(iOS 26, *) {
             tabViewBottomAccessory { MiniPlayer(offen: offen, kompakt: true) }
         } else {
             self
