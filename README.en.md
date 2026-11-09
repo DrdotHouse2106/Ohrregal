@@ -1,5 +1,7 @@
 # Ohrregal
 
+[![Buy me a coffee](https://img.shields.io/badge/☕_Buy_me_a_coffee-PayPal-0070ba?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/DrdotHouse)
+
 Music and audiobooks from your own servers in one iPhone app that feels like Apple Music.
 
 - **Music** from [Navidrome](https://www.navidrome.org/) (Subsonic / OpenSubsonic API)

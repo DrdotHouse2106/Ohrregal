@@ -1,5 +1,7 @@
 # Ohrregal
 
+[![Spendier mir einen Kaffee](https://img.shields.io/badge/☕_Spendier_mir_einen_Kaffee-PayPal-0070ba?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/DrdotHouse)
+
 Musik und Hörbücher von den eigenen Servern in einer iPhone-App, die sich anfühlt wie Apple Music.
 
 - **Musik** aus [Navidrome](https://www.navidrome.org/) (Subsonic- bzw. OpenSubsonic-API)
