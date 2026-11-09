@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 2.4.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.4.1. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 2.4.0. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.4.0"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.4.1"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -90,7 +90,7 @@ Liefert `202` und startet bei `nicht_gefunden` oder `fehler` sofort eine neue Su
 
 ### `POST /geraet`
 Body: `{"apnsToken": "<hex>", "umgebung": "produktion" | "sandbox"}`. Antwort: `204`.
-Speichert das Gerät für den angemeldeten Benutzer. Ein Benutzer kann mehrere Geräte haben. Ein erneuter Aufruf mit demselben Token aktualisiert den Eintrag, auch wenn das Gerät jetzt einem anderen Benutzer gehört. TestFlight und App Store melden sich mit `produktion` an, Debug-Builds aus Xcode mit `sandbox`. Bei ungültigem Body kommt `400 ungueltig`.
+Speichert das Gerät für den angemeldeten Benutzer. Ab 2.4.1 kann dasselbe Gerät zu mehreren Anmeldungen gehören: Wer ABS und Navidrome nutzt, meldet das Gerät **mit beiden** an, einmal mit ABS-Token und einmal mit den X-Subsonic-Kopfzeilen. Hörbuch-Nachrichten gehen an `abs:…`, Musik-Nachrichten an `nd:…`, und jede Nachricht kommt nur einmal. `DELETE` meldet das Gerät nur für die jeweilige Anmeldung ab. Ein Benutzer kann mehrere Geräte haben. Ein erneuter Aufruf mit demselben Token aktualisiert den Eintrag, auch wenn das Gerät jetzt einem anderen Benutzer gehört. TestFlight und App Store melden sich mit `produktion` an, Debug-Builds aus Xcode mit `sandbox`. Bei ungültigem Body kommt `400 ungueltig`.
 
 ### `DELETE /geraet/{apnsToken}`
 Antwort: `204`. Meldet das Gerät des angemeldeten Benutzers ab.

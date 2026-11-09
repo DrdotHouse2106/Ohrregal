@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 
 
 def env(name, standard=None, pflicht=False):
@@ -138,8 +138,8 @@ def db_anlegen():
           nzo TEXT, guid TEXT, release TEXT, ziel TEXT, fertigSeit TEXT,
           verworfen TEXT NOT NULL DEFAULT '[]', zurueckgezogen INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS geraet (
-          token TEXT PRIMARY KEY, benutzer TEXT NOT NULL, umgebung TEXT NOT NULL,
-          erstellt TEXT NOT NULL, aktualisiert TEXT NOT NULL);
+          token TEXT NOT NULL, benutzer TEXT NOT NULL, umgebung TEXT NOT NULL,
+          erstellt TEXT NOT NULL, aktualisiert TEXT NOT NULL, PRIMARY KEY (token, benutzer));
         CREATE TABLE IF NOT EXISTS interesse (
           wunsch TEXT NOT NULL, benutzer TEXT NOT NULL, PRIMARY KEY (wunsch, benutzer));
         CREATE TABLE IF NOT EXISTS reihe (
@@ -158,6 +158,17 @@ def db_anlegen():
         spalten = {z[1] for z in v.execute("PRAGMA table_info(wunsch)")}
         if "ausReihe" not in spalten:
             v.execute("ALTER TABLE wunsch ADD COLUMN ausReihe TEXT")
+        # Ein Gerät kann zu mehreren Anmeldungen gehören (ABS und Navidrome)
+        pk = [z[1] for z in v.execute("PRAGMA table_info(geraet)") if z[5]]
+        if pk == ["token"]:
+            v.executescript("""
+            ALTER TABLE geraet RENAME TO geraet_alt;
+            CREATE TABLE geraet (
+              token TEXT NOT NULL, benutzer TEXT NOT NULL, umgebung TEXT NOT NULL,
+              erstellt TEXT NOT NULL, aktualisiert TEXT NOT NULL, PRIMARY KEY (token, benutzer));
+            INSERT INTO geraet SELECT token, benutzer, umgebung, erstellt, aktualisiert FROM geraet_alt;
+            DROP TABLE geraet_alt;
+            """)
         if "hoerspiel" not in spalten:
             v.execute("ALTER TABLE wunsch ADD COLUMN hoerspiel INTEGER")
 
@@ -351,7 +362,7 @@ def melden(w, art):
         z = v.execute("SELECT absItemId FROM wunsch WHERE id=?", (w["id"],)).fetchone()
         benutzer = [w["benutzer"]] + [r[0] for r in v.execute(
             "SELECT benutzer FROM interesse WHERE wunsch=?", (w["id"],))]
-        geraete = v.execute("SELECT token, umgebung FROM geraet WHERE benutzer IN (%s)"
+        geraete = v.execute("SELECT DISTINCT token, umgebung FROM geraet WHERE benutzer IN (%s)"
                             % ",".join("?" * len(benutzer)), benutzer).fetchall()
     nutzlast = {"aps": {"alert": {"title": titel, "body": text}, "sound": "default"}, "wunschId": w["id"]}
     if z and z[0]:
@@ -1287,7 +1298,7 @@ def push_an(benutzer, titel, text, extra):
     if not (E.apns_schluessel and E.apns_key_id and E.apns_team_id and E.apns_topic) or not benutzer:
         return
     with db() as v:
-        geraete = v.execute("SELECT token, umgebung FROM geraet WHERE benutzer IN (%s)"
+        geraete = v.execute("SELECT DISTINCT token, umgebung FROM geraet WHERE benutzer IN (%s)"
                             % ",".join("?" * len(benutzer)), benutzer).fetchall()
     nutzlast = {"aps": {"alert": {"title": titel, "body": text}, "sound": "default"}, **extra}
     for token, umgebung in geraete:
@@ -1958,8 +1969,8 @@ class Schnittstelle(BaseHTTPRequestHandler):
                 return self.fehler(400, "ungueltig", "apnsToken (hex) und umgebung (produktion|sandbox) nötig")
             t = jetzt().isoformat()
             with DB_SPERRE, db() as v:
-                v.execute("INSERT INTO geraet VALUES (?,?,?,?,?) ON CONFLICT(token) DO UPDATE SET "
-                          "benutzer=excluded.benutzer, umgebung=excluded.umgebung, aktualisiert=excluded.aktualisiert",
+                v.execute("INSERT INTO geraet VALUES (?,?,?,?,?) ON CONFLICT(token, benutzer) DO UPDATE SET "
+                          "umgebung=excluded.umgebung, aktualisiert=excluded.aktualisiert",
                           (token, name, umgebung, t, t))
             return self.antworte(204)
         if len(teile) == 3 and teile[0] == "wunsch" and teile[2] == "erneut":
