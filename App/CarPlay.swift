@@ -8,11 +8,13 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
 
     func templateApplicationScene(_ scene: CPTemplateApplicationScene, didConnect interfaceController: CPInterfaceController) {
         steuerung = interfaceController
+        Task { @MainActor in Protokoll.geteilt.geraet = "CarPlay" }
         Task { @MainActor in await aufbauen() }
     }
 
     func templateApplicationScene(_ scene: CPTemplateApplicationScene, didDisconnectInterfaceController interfaceController: CPInterfaceController) {
         steuerung = nil
+        Task { @MainActor in Protokoll.geteilt.geraet = "iPhone" }
     }
 
     // MARK: Aufbau
@@ -39,17 +41,34 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     }
 
     @MainActor private func fuelleStart(_ liste: CPListTemplate, _ client: NavidromeClient) async {
-        let mix = abspielen("Spiel etwas für mich", nil, bild: nil) {
-            geteilterPlayer.spiele((try? await client.zufaelligeTitel()) ?? [])
+        // Mixe aus dem Vorrat der Startseite, sonst „Dein Mix“ frisch.
+        let mixe = StartVorrat.laden()?.mixe ?? []
+        let spiel = abspielen("Spiel etwas für mich", nil, bild: nil) {
+            let titel = mixe.first?.titel.shuffled() ?? (try? await client.zufaelligeTitel()) ?? []
+            geteilterPlayer.spiele(titel, quelle: "CarPlay: Spiel etwas für mich")
         }
-        mix.setImage(UIImage(systemName: "sparkles"))
+        spiel.setImage(UIImage(systemName: "sparkles"))
+        let mixEintraege = mixe.map { m in
+            abspielen(m.name, m.untertitel, bild: client.coverURL(m.cover.first, groesse: 200)) {
+                geteilterPlayer.spiele(m.titel, quelle: "CarPlay: Mix: \(m.name)")
+            }
+        }
+        // „Weiterhören“ heißt hier nur: angefangene Hörbücher. Musik steht unter „Zuletzt gespielt“.
+        var hoerbuecher: [CPListItem] = []
+        if let abs = geteilteSitzung.hoerbuchClient {
+            hoerbuecher = ((try? await abs.angefangen()) ?? []).prefix(6).map { h in
+                abspielen(h.titel, h.autor, bild: abs.coverURL(h.id)) { await geteilterPlayer.spiele(hoerbuch: h) }
+            }
+        }
         async let zuletzt = client.alben("recent", anzahl: 12)
         async let haeufig = client.alben("frequent", anzahl: 12)
-        let weiter = ((try? await zuletzt) ?? []).map { albumEintrag($0, client) }
+        let gespielt = ((try? await zuletzt) ?? []).map { albumEintrag($0, client) }
         let oft = ((try? await haeufig) ?? []).map { albumEintrag($0, client) }
         liste.updateSections([
-            CPListSection(items: [mix]),
-            CPListSection(items: weiter, header: "Weiterhören", sectionIndexTitle: nil),
+            CPListSection(items: [spiel]),
+            CPListSection(items: hoerbuecher, header: "Hörbücher weiterhören", sectionIndexTitle: nil),
+            CPListSection(items: mixEintraege, header: "Für dich", sectionIndexTitle: nil),
+            CPListSection(items: gespielt, header: "Zuletzt gespielt", sectionIndexTitle: nil),
             CPListSection(items: oft, header: "Am häufigsten gespielt", sectionIndexTitle: nil),
         ].filter { !$0.items.isEmpty })
     }
@@ -59,7 +78,7 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             ordner("Playlists", symbol: "music.note.list") { [self] in
                 ((try? await client.playlists()) ?? []).map { p in
                     abspielen(p.name, "\(p.songCount ?? 0) Titel", bild: client.coverURL(p.coverArt, groesse: 200)) {
-                        geteilterPlayer.spiele((try? await client.playlist(p.id))?.entry ?? [])
+                        geteilterPlayer.spiele((try? await client.playlist(p.id))?.entry ?? [], quelle: "CarPlay: Playlist")
                     }
                 }
             },
@@ -98,7 +117,7 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
 
     @MainActor private func albumEintrag(_ album: Album, _ client: NavidromeClient) -> CPListItem {
         abspielen(album.name, album.artist, bild: client.coverURL(album.coverArt, groesse: 200)) {
-            geteilterPlayer.spiele((try? await client.album(album.id))?.song ?? [])
+            geteilterPlayer.spiele((try? await client.album(album.id))?.song ?? [], quelle: "CarPlay: Album")
         }
     }
 

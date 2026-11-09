@@ -55,6 +55,9 @@ final class Sitzung {
             client = NavidromeClient(server: url, benutzer: benutzer, passwort: passwort)
         }
         ladeHoerbuch()
+        // Hörprotokoll geht an den eigenen Server (Wunsch-Dienst), angemeldet mit dem Navidrome-Konto.
+        Protokoll.geteilt.senden = { ereignisse in await geteilteSitzung.musikwunsch?.sendeEreignisse(ereignisse) ?? false }
+        Task { await Protokoll.geteilt.abschicken() }
         // Beobachter greifen im eigenen init nicht; daher hier ausdrücklich.
         geteilterPlayer.client = client
         geteilterPlayer.hoerbuchClient = hoerbuchClient
@@ -113,6 +116,7 @@ extension EnvironmentValues {
 }
 
 struct Hauptansicht: View {
+    @Environment(\.scenePhase) private var phase
     @Environment(Sitzung.self) private var sitzung
     @Environment(Player.self) private var player
     @Environment(\.client) private var client
@@ -145,6 +149,7 @@ struct Hauptansicht: View {
             PlaylistAuswahl(titel: sitzung.playlistFuer ?? [])
         }
         .onChange(of: sitzung.sprung) { springen() }
+        .onChange(of: phase) { if phase == .background { Task { await Protokoll.geteilt.abschicken() } } }
         .onAppear { springen() }
         .task(id: client.adresse("ping")) {
             player.client = client

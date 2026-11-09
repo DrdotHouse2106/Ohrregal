@@ -34,6 +34,7 @@ public final class Player {
         didSet {
             UserDefaults.standard.set(tempo, forKey: "tempo")
             guard istHoerbuch else { return }
+            Protokoll.geteilt.merke("tempo", art: "hoerbuch", position: zeit, wert: String(tempo), id: hoerbuchId, name: anzeige?.titel)
             player.defaultRate = tempo
             if spielt { player.rate = tempo }
         }
@@ -51,6 +52,9 @@ public final class Player {
     @ObservationIgnored private var stellen: [ObjectIdentifier: Int] = [:]
     @ObservationIgnored private var spur = 0
     @ObservationIgnored private var sitzung: String?
+    /// Woher die laufende Musik kommt (für das Hörprotokoll), z. B. „Mix: Dein Mix“.
+    @ObservationIgnored private var quelle: String?
+    @ObservationIgnored private var letzterStart: String?
     @ObservationIgnored private var hoerbuchId: String?
     @ObservationIgnored private var gehoertSeitSync: Double = 0
     @ObservationIgnored private var beobachter: [Any] = []
@@ -79,8 +83,9 @@ public final class Player {
 
     // MARK: Starten
 
-    public func spiele(_ titel: [Titel], ab start: Int = 0) {
+    public func spiele(_ titel: [Titel], ab start: Int = 0, quelle: String? = nil) {
         guard let client, !titel.isEmpty else { return }
+        self.quelle = quelle
         beendeHoerbuch()
         istHoerbuch = false
         kapitel = []
@@ -123,6 +128,8 @@ public final class Player {
                               cover: abs.coverURL(hoerbuch.id), dauer: neu?.duration ?? offline?.dauer ?? 0)
             let start = neu?.currentTime ?? offline?.position ?? 0
             player.defaultRate = tempo
+            Protokoll.geteilt.merke("start", art: "hoerbuch", position: start, dauer: anzeige?.dauer, quelle: offline != nil ? "Geladen" : nil,
+                                    id: hoerbuch.id, name: hoerbuch.titel, urheber: hoerbuch.autor)
             lade(ab: spuren.lastIndex { $0.start <= start } ?? 0, zeit: start)
             player.play()
             knoepfe()
@@ -147,7 +154,10 @@ public final class Player {
         if istHoerbuch { springe(zu: min(zeit + 30, dauer)); return }
         guard index + 1 < warteschlange.count else { return }
         // Früh weitergeschaltet zählt als „übersprungen“ und wirkt auf die Mixe.
-        if let titel = aktuell, zeit < 30 { Hoerverlauf.geteilt.merke(titel, uebersprungen: true) }
+        if let titel = aktuell {
+            if zeit < 30 { Hoerverlauf.geteilt.merke(titel, uebersprungen: true) }
+            Protokoll.geteilt.merke("uebersprungen", titel: titel, position: zeit)
+        }
         player.advanceToNextItem()
     }
 
@@ -159,6 +169,8 @@ public final class Player {
 
     public func springe(zu ziel: Double) {
         guard !spuren.isEmpty else { return }
+        Protokoll.geteilt.merke("gespult", titel: aktuell, art: istHoerbuch ? "hoerbuch" : "musik", position: zeit,
+                                wert: String(Int(ziel)), id: hoerbuchId, name: istHoerbuch ? anzeige?.titel : nil)
         let neu = spuren.lastIndex { $0.start <= ziel } ?? 0
         if neu == spur, player.currentItem != nil {
             player.seek(to: CMTime(seconds: ziel - spuren[neu].start, preferredTimescale: 600))
@@ -227,11 +239,14 @@ public final class Player {
 
     /// Schlaf-Timer: nach Minuten (nil = aus).
     public func schlafen(in minuten: Int?) {
+        Protokoll.geteilt.merke("schlaftimer", art: istHoerbuch ? "hoerbuch" : "musik", position: zeit,
+                                wert: minuten.map(String.init) ?? "aus", id: hoerbuchId, name: anzeige?.titel)
         schlafenAmKapitelende = false
         schlafenUm = minuten.map { Date().addingTimeInterval(Double($0) * 60) }
     }
 
     public func schlafenAmEndeDesKapitels() {
+        Protokoll.geteilt.merke("schlaftimer", art: "hoerbuch", position: zeit, wert: "kapitel", id: hoerbuchId, name: anzeige?.titel)
         schlafenUm = nil
         schlafenAmKapitelende = true
     }
@@ -269,6 +284,10 @@ public final class Player {
         guard !istHoerbuch else { zeitInfo(); return }
         index = i
         if let titel = aktuell {
+            if letzterStart != "\(i)|\(titel.id)" {
+                letzterStart = "\(i)|\(titel.id)"
+                Protokoll.geteilt.merke("start", titel: titel, position: 0, quelle: quelle)
+            }
             anzeige = Anzeige(titel: titel.title, untertitel: titel.artist ?? "",
                               cover: client?.coverURL(titel.coverArt, groesse: 600), dauer: Double(titel.duration ?? 0))
             if let client { Task { try? await client.scrobble(titel.id, fertig: false) } }
@@ -289,6 +308,10 @@ public final class Player {
     }
 
     private func laeuftGeaendert(_ laeuft: Bool) {
+        if spielt && !laeuft {
+            Protokoll.geteilt.merke("pause", titel: aktuell, art: istHoerbuch ? "hoerbuch" : "musik", position: zeit,
+                                    id: hoerbuchId, name: istHoerbuch ? anzeige?.titel : nil)
+        }
         spielt = laeuft
         if !laeuft { synchronisiere() }
         zeitInfo()
@@ -298,6 +321,7 @@ public final class Player {
         guard let i = stellen.removeValue(forKey: schluessel), !istHoerbuch, let client, warteschlange.indices.contains(i) else { return }
         let titel = warteschlange[i]
         Hoerverlauf.geteilt.merke(titel, uebersprungen: false)
+        Protokoll.geteilt.merke("ende", titel: titel, position: Double(titel.duration ?? 0))
         Task { try? await client.scrobble(titel.id, fertig: true) }
     }
 

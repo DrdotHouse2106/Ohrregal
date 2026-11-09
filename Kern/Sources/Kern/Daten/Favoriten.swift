@@ -12,6 +12,7 @@ public final class Favoriten {
     public func umschalten(_ titel: Titel, _ client: NavidromeClient) {
         let neu = !ist(titel)
         stand[titel.id] = neu
+        Protokoll.geteilt.merke(neu ? "gefaellt" : "gefaellt_nicht", titel: titel)
         Task {
             do { try await client.gefaelltMir(titel.id, neu) } catch { stand[titel.id] = !neu }
         }

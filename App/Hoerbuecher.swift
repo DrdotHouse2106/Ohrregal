@@ -21,6 +21,7 @@ struct HoerbuecherView: View {
                         if !angefangen.isEmpty {
                             HoerbuchReihe(titel: "Weiterhören", hoerbuecher: angefangen) { h in
                                 angefangen.removeAll { $0.id == h.id }
+                                Protokoll.geteilt.merke("hoerbuch_abgebrochen", art: "hoerbuch", id: h.id, name: h.titel, urheber: h.autor)
                                 Task { try? await abs.ausWeiterhoerenEntfernen(h.id) }
                             }
                         }
@@ -449,6 +450,7 @@ struct WunschView: View {
         defer { sucht = false }
         do {
             treffer = try await abs.sucheBuecher(text)
+            Protokoll.geteilt.merke("suche", art: "hoerbuch", wert: text, quelle: "Audible")
             meldung = treffer.isEmpty ? "Bei Audible nichts gefunden." : nil
         } catch {
             meldung = "Suche fehlgeschlagen: \(error.localizedDescription)"

@@ -190,6 +190,7 @@ struct MusikWunschView: View {
         defer { sucht = false }
         do {
             treffer = try await dienst.suche(text)
+            Protokoll.geteilt.merke("suche", wert: text, quelle: "Lidarr")
             meldung = nil
         } catch {
             meldung = "Suche fehlgeschlagen: \(error.localizedDescription)"

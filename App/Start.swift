@@ -1,7 +1,7 @@
 import Kern
 import SwiftUI
 
-/// Startseite im Stil von Apple Music: Gruß, Mixe mit Cover-Collage, Weiterhören (Musik und Hörbücher),
+/// Startseite im Stil von Apple Music: Gruß, Mixe mit Cover-Collage, Hörbücher weiterhören, zuletzt gespielt,
 /// Schnellauswahl und die übrigen Reihen.
 struct StartView: View {
     @Environment(\.client) private var client
@@ -28,7 +28,7 @@ struct StartView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 Button {
-                    player.spiele(mixe.first?.titel.shuffled() ?? [])
+                    player.spiele(mixe.first?.titel.shuffled() ?? [], quelle: "Spiel etwas für mich")
                 } label: {
                     Label("Spiel etwas für mich", systemImage: "play.fill")
                         .font(.headline)
@@ -42,9 +42,8 @@ struct StartView: View {
 
                 if !mixe.isEmpty { MixReihe(mixe: mixe) }
 
-                if !hoerbuecher.isEmpty || !zuletzt.isEmpty {
-                    WeiterhoerenReihe(hoerbuecher: hoerbuecher, alben: zuletzt)
-                }
+                if !hoerbuecher.isEmpty { HoerbuchReihe(titel: "Hörbücher weiterhören", hoerbuecher: hoerbuecher) }
+                if !zuletzt.isEmpty { AlbenReihe(titel: "Zuletzt gespielt", alben: zuletzt) }
 
                 if let titel = mixe.first?.titel, titel.count > 4 {
                     Schnellauswahl(titel: Array(titel.prefix(16)))
@@ -175,7 +174,7 @@ struct MixReihe: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
                     ForEach(mixe) { mix in
-                        Button { player.spiele(mix.titel) } label: {
+                        Button { player.spiele(mix.titel, quelle: "Mix: \(mix.name)") } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Collage(cover: mix.cover)
                                     .overlay(alignment: .bottomLeading) {
@@ -219,29 +218,6 @@ struct Collage: View {
     }
 }
 
-/// Weiterhören: angefangene Hörbücher und zuletzt gehörte Alben in einer Reihe.
-struct WeiterhoerenReihe: View {
-    let hoerbuecher: [Hoerbuch]
-    let alben: [Album]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Weiterhören").font(.title2.bold()).padding(.horizontal)
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 14) {
-                    ForEach(hoerbuecher) { h in
-                        NavigationLink(value: h) { HoerbuchKarte(hoerbuch: h) }.buttonStyle(.plain)
-                    }
-                    ForEach(alben) { a in
-                        NavigationLink(value: a) { AlbumKarte(album: a) }.buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal)
-            }
-        }
-    }
-}
-
 /// Schnellauswahl: Titel in Spalten zu je vier, seitlich wischbar.
 struct Schnellauswahl: View {
     @Environment(Player.self) private var player
@@ -253,7 +229,7 @@ struct Schnellauswahl: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHGrid(rows: Array(repeating: GridItem(.fixed(56), spacing: 6), count: 4), spacing: 16) {
                     ForEach(Array(titel.enumerated()), id: \.offset) { i, t in
-                        Button { player.spiele(titel, ab: i) } label: {
+                        Button { player.spiele(titel, ab: i, quelle: "Schnellauswahl") } label: {
                             HStack(spacing: 10) {
                                 Cover(id: t.coverArt, groesse: 48)
                                 VStack(alignment: .leading, spacing: 2) {

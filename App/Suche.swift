@@ -27,6 +27,7 @@ struct SucheView: View {
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }
                 ergebnis = try? await client.suche(text)
+                Protokoll.geteilt.merke("suche", wert: text)
             }
     }
 }

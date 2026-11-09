@@ -105,11 +105,11 @@ struct AbspielKnoepfe: View {
     var body: some View {
         HStack(spacing: 14) {
             LadenKnopf(titel: titel)
-            Button { player.spiele(titel) } label: {
+            Button { player.spiele(titel, quelle: "Album/Playlist") } label: {
                 Label("Abspielen", systemImage: "play.fill").frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            Button { player.spiele(titel.shuffled()) } label: {
+            Button { player.spiele(titel.shuffled(), quelle: "Album/Playlist zufällig") } label: {
                 Label("Zufällig", systemImage: "shuffle").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)

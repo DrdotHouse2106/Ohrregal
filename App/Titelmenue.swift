@@ -9,15 +9,22 @@ struct TitelMenue: View {
     let titel: Titel
 
     var body: some View {
-        Button("Als Nächstes spielen", systemImage: "text.line.first.and.arrowtriangle.forward") { player.alsNaechstes([titel]) }
-        Button("Zur Warteschlange", systemImage: "text.line.last.and.arrowtriangle.forward") { player.anhaengen([titel]) }
+        Button("Als Nächstes spielen", systemImage: "text.line.first.and.arrowtriangle.forward") {
+            Protokoll.geteilt.merke("als_naechstes", titel: titel)
+            player.alsNaechstes([titel])
+        }
+        Button("Zur Warteschlange", systemImage: "text.line.last.and.arrowtriangle.forward") {
+            Protokoll.geteilt.merke("warteschlange", titel: titel)
+            player.anhaengen([titel])
+        }
         Button(Favoriten.geteilt.ist(titel) ? "Gefällt mir nicht mehr" : "Gefällt mir",
                systemImage: Favoriten.geteilt.ist(titel) ? "heart.slash" : "heart") {
             Favoriten.geteilt.umschalten(titel, client)
         }
         Button("Zur Playlist hinzufügen …", systemImage: "text.badge.plus") { sitzung.playlistFuer = [titel] }
         Button("Radio ab diesem Song", systemImage: "dot.radiowaves.left.and.right") {
-            Task { player.spiele(await Mixe.radio(ab: titel, client)) }
+            Protokoll.geteilt.merke("radio", titel: titel)
+            Task { player.spiele(await Mixe.radio(ab: titel, client), quelle: "Radio") }
         }
     }
 }
@@ -42,6 +49,7 @@ struct PlaylistAuswahl: View {
                         Task {
                             do {
                                 try await client.zurPlaylist(p.id, titel: titel.map(\.id))
+                                titel.forEach { Protokoll.geteilt.merke("playlist", titel: $0, wert: p.name) }
                                 schliessen()
                             } catch { fehler = error.localizedDescription }
                         }
@@ -62,6 +70,7 @@ struct PlaylistAuswahl: View {
                     Task {
                         do {
                             try await client.neuePlaylist(name, titel: titel.map(\.id))
+                            titel.forEach { Protokoll.geteilt.merke("playlist", titel: $0, wert: name) }
                             schliessen()
                         } catch { fehler = error.localizedDescription }
                     }
