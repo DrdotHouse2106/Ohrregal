@@ -286,6 +286,7 @@ Stand: 09.11.2026, App 0.13.0, Hörbuchwunsch 2.3.0.
 | **App Store** | Veröffentlichung, danach Smart-App-Banner auf der Hörbuch-Seite | offen |
 | **6 – Heim-Satellit** | weitere Ausgabeziele, Raumauswahl | offen |
 | **später** | Widgets, Siri-Kurzbefehle, Equalizer, Crossfade, „Wer hört?“, Weiterhören zwischen Geräten (savePlayQueue) | offen |
+| **Idee: eigene Lese-App** | E-Books und Comics nicht in Ohrregal, sondern in einer eigenen App über OPDS (z. B. Kavita, Audiobookshelf); später ggf. Verbindung „Hörbuch ↔ E-Book an derselben Stelle“ | Idee |
 
 **Grundsatz Vorrat:** Was sich vorrechnen lässt, wird im Leerlauf gerechnet (Server: nachts 3–6 Uhr, nur wenn niemand streamt; App: Hintergrundaufgabe ab 3 Uhr) und tagsüber nur ausgeliefert. Was man hört, liegt auf dem iPhone.
 
