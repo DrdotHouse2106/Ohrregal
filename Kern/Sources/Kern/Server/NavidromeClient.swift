@@ -122,6 +122,10 @@ public struct NavidromeClient: Sendable {
         return (text.line ?? []).map { Textzeile(start: text.synced == true ? $0.start.map { Double($0) / 1000 } : nil, text: $0.value) }
     }
 
+    public func sender() async throws -> [Sender] {
+        try await hole("getInternetRadioStations").internetRadioStations?.internetRadioStation ?? []
+    }
+
     public func coverURL(_ id: String?, groesse: Int) -> URL? {
         id.map { adresse("getCoverArt", ["id": $0, "size": "\(groesse)"]) }
     }

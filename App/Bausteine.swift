@@ -28,6 +28,7 @@ enum Ziel: Hashable {
     case stoebern
     case geladen
     case ueberMich
+    case radio
     case musikwuensche(String)
     case albumFinden(String, String)
     case kategorie(Kategorie)
@@ -45,6 +46,7 @@ enum Ziel: Hashable {
         case .stoebern: StoebernView()
         case .geladen: GeladenView()
         case .ueberMich: UeberMichView()
+        case .radio: RadioView()
         case .musikwuensche(let text): MusikWunschView(text: text)
         case .albumFinden(let titel, let kuenstler): AlbumFinden(titel: titel, kuenstler: kuenstler)
         case .kategorie(let k): KategorieView(kategorie: k)

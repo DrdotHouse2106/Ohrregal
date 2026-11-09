@@ -1,7 +1,7 @@
 import CarPlay
 import Kern
 
-/// CarPlay: Tabs Start, Musik und Hörbücher. Gespielt wird über denselben Player wie auf dem iPhone,
+/// CarPlay: Tabs Start, Musik, Hörbücher und Radio. Gespielt wird über denselben Player wie auf dem iPhone,
 /// „Läuft gerade“ zeigt CarPlay selbst an (über Sperrbildschirm-Infos und Fernbedienung).
 final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     private var steuerung: CPInterfaceController?
@@ -27,8 +27,12 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         let buecher = CPListTemplate(title: "Hörbücher", sections: [])
         buecher.tabImage = UIImage(systemName: "books.vertical.fill")
 
+        let radio = CPListTemplate(title: "Radio", sections: [])
+        radio.tabImage = UIImage(systemName: "dot.radiowaves.left.and.right")
+
         var tabs = [start, musik]
         if geteilteSitzung.hoerbuchClient != nil { tabs.append(buecher) }
+        tabs.append(radio)
         steuerung?.setRootTemplate(CPTabBarTemplate(templates: tabs), animated: false, completion: nil)
 
         guard let client = geteilteSitzung.client else {
@@ -37,11 +41,13 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         }
         await fuelleStart(start, client)
         fuelleMusik(musik, client)
+        await fuelleRadio(radio, client)
         if let abs = geteilteSitzung.hoerbuchClient { await fuelleHoerbuecher(buecher, abs) }
     }
 
+    /// Start wie bei Apple Music: Zeilen mit großen Covern zum Seitwärtswischen.
+    /// Antippen eines Covers spielt ab, Antippen der Überschrift öffnet die ganze Liste.
     @MainActor private func fuelleStart(_ liste: CPListTemplate, _ client: NavidromeClient) async {
-        // Mixe aus dem Vorrat der Startseite, sonst „Dein Mix“ frisch.
         let mixe = StartVorrat.laden()?.mixe ?? []
         let spiel = abspielen("Spiel etwas für mich", nil, bild: nil) {
             var titel = mixe.first?.titel.shuffled() ?? []
@@ -49,29 +55,78 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             geteilterPlayer.spiele(titel, quelle: "CarPlay: Spiel etwas für mich")
         }
         spiel.setImage(UIImage(systemName: "sparkles"))
-        let mixEintraege = mixe.map { m in
-            abspielen(m.name, m.untertitel, bild: client.coverURL(m.cover.first, groesse: 200)) {
-                geteilterPlayer.spiele(m.titel, quelle: "CarPlay: Mix: \(m.name)")
-            }
+
+        var zeilen: [CPListImageRowItem] = []
+        if !mixe.isEmpty {
+            zeilen.append(await bildzeile("Für dich", mixe.map { m in
+                (client.coverURL(m.cover.first, groesse: 300), { geteilterPlayer.spiele(m.titel, quelle: "CarPlay: Mix: \(m.name)") })
+            }))
         }
-        // „Weiterhören“ heißt hier nur: angefangene Hörbücher. Musik steht unter „Zuletzt gespielt“.
-        var hoerbuecher: [CPListItem] = []
         if let abs = geteilteSitzung.hoerbuchClient {
-            hoerbuecher = ((try? await abs.angefangen()) ?? []).prefix(6).map { h in
-                abspielen(h.titel, h.autor, bild: abs.coverURL(h.id)) { await geteilterPlayer.spiele(hoerbuch: h) }
+            let hoerbuecher = (try? await abs.angefangen()) ?? []
+            if !hoerbuecher.isEmpty {
+                zeilen.append(await bildzeile("Hörbücher weiterhören", hoerbuecher.map { h in
+                    (abs.coverURL(h.id), { await geteilterPlayer.spiele(hoerbuch: h) })
+                }))
             }
         }
         async let zuletzt = client.alben("recent", anzahl: 12)
+        async let neu = client.alben("newest", anzahl: 12)
         async let haeufig = client.alben("frequent", anzahl: 12)
-        let gespielt = ((try? await zuletzt) ?? []).map { albumEintrag($0, client) }
-        let oft = ((try? await haeufig) ?? []).map { albumEintrag($0, client) }
-        liste.updateSections([
-            CPListSection(items: [spiel]),
-            CPListSection(items: hoerbuecher, header: "Hörbücher weiterhören", sectionIndexTitle: nil),
-            CPListSection(items: mixEintraege, header: "Für dich", sectionIndexTitle: nil),
-            CPListSection(items: gespielt, header: "Zuletzt gespielt", sectionIndexTitle: nil),
-            CPListSection(items: oft, header: "Am häufigsten gespielt", sectionIndexTitle: nil),
-        ].filter { !$0.items.isEmpty })
+        for (titel, alben) in [("Zuletzt gespielt", (try? await zuletzt) ?? []), ("Kürzlich hinzugefügt", (try? await neu) ?? []),
+                               ("Am häufigsten gespielt", (try? await haeufig) ?? [])] where !alben.isEmpty {
+            zeilen.append(await bildzeile(titel, alben.map { a in
+                (client.coverURL(a.coverArt, groesse: 300), {
+                    geteilterPlayer.spiele((try? await client.album(a.id))?.song ?? [], quelle: "CarPlay: \(titel)")
+                })
+            }, liste: alben.map { albumEintrag($0, client) }))
+        }
+        liste.updateSections([CPListSection(items: [spiel]), CPListSection(items: zeilen)])
+    }
+
+    /// Zeile mit Covern; die Bilder werden geladen, bevor die Zeile erscheint.
+    @MainActor private func bildzeile(_ titel: String, _ eintraege: [(URL?, @MainActor () async -> Void)],
+                                      liste: [CPListItem]? = nil) async -> CPListImageRowItem {
+        let teil = Array(eintraege.prefix(Int(CPMaximumNumberOfGridImages)))
+        var bilder = Array(repeating: UIImage(systemName: "music.note") ?? UIImage(), count: teil.count)
+        await withTaskGroup(of: (Int, UIImage?).self) { gruppe in
+            for (i, e) in teil.enumerated() {
+                gruppe.addTask {
+                    guard let url = e.0, let (daten, _) = try? await URLSession.shared.data(from: url) else { return (i, nil) }
+                    return (i, UIImage(data: daten))
+                }
+            }
+            for await (i, bild) in gruppe { if let bild { bilder[i] = bild } }
+        }
+        let zeile = CPListImageRowItem(text: titel, images: bilder)
+        zeile.listImageRowHandler = { [weak self] _, index, fertig in
+            Task { @MainActor in
+                if teil.indices.contains(index) { await teil[index].1() }
+                self?.zeigeWiedergabe()
+                fertig()
+            }
+        }
+        zeile.handler = { [weak self] _, fertig in
+            Task { @MainActor in
+                if let liste {
+                    let vorlage = CPListTemplate(title: titel, sections: [CPListSection(items: Array(liste.prefix(CPListTemplate.maximumItemCount)))])
+                    self?.steuerung?.pushTemplate(vorlage, animated: true, completion: nil)
+                }
+                fertig()
+            }
+        }
+        return zeile
+    }
+
+    @MainActor private func fuelleRadio(_ liste: CPListTemplate, _ client: NavidromeClient) async {
+        let sender = (try? await client.sender()) ?? []
+        let eintraege = sender.map { s in
+            let e = abspielen(s.name, nil, bild: nil) { geteilterPlayer.spiele(sender: s) }
+            e.setImage(UIImage(systemName: "dot.radiowaves.left.and.right"))
+            return e
+        }
+        liste.updateSections([CPListSection(items: eintraege.isEmpty
+            ? [CPListItem(text: "Keine Sender", detailText: "Sender werden in Navidrome eingerichtet.")] : eintraege)])
     }
 
     @MainActor private func fuelleMusik(_ liste: CPListTemplate, _ client: NavidromeClient) {

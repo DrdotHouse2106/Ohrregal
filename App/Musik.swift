@@ -8,6 +8,7 @@ struct MusikView: View {
             NavigationLink(value: Ziel.alben) { Label("Alben", systemImage: "square.stack") }
             NavigationLink(value: Ziel.playlists) { Label("Playlists", systemImage: "music.note.list") }
             NavigationLink(value: Ziel.favoriten) { Label("Gefällt mir", systemImage: "heart") }
+            NavigationLink(value: Ziel.radio) { Label("Radio", systemImage: "dot.radiowaves.left.and.right") }
             NavigationLink(value: Ziel.geladen) { Label("Geladen", systemImage: "arrow.down.circle") }
             NavigationLink(value: Ziel.musikwuensche("")) { Label("Musik wünschen", systemImage: "sparkles") }
         }

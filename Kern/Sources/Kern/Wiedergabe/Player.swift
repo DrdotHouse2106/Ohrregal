@@ -24,6 +24,7 @@ public final class Player {
     public private(set) var zeit: Double = 0
     public private(set) var anzeige: Anzeige?
     public private(set) var istHoerbuch = false
+    public private(set) var istRadio = false
     public private(set) var kapitel: [Kapitel] = []
     public private(set) var schlafenUm: Date?
     public private(set) var schlafenAmKapitelende = false
@@ -88,6 +89,7 @@ public final class Player {
         self.quelle = quelle
         beendeHoerbuch()
         istHoerbuch = false
+        istRadio = false
         kapitel = []
         warteschlange = titel
         spuren = titel.map { (Offline.geteilt.datei(fuerTitel: $0.id) ?? client.streamURL($0.id), 0) }
@@ -95,6 +97,24 @@ public final class Player {
         lade(ab: start, zeit: 0)
         player.play()
         knoepfe()
+    }
+
+    /// Internetradio: ein endloser Stream ohne Warteschlange.
+    public func spiele(sender: Sender) {
+        guard let url = URL(string: sender.streamUrl) else { return }
+        beendeHoerbuch()
+        istHoerbuch = false
+        istRadio = true
+        kapitel = []
+        warteschlange = []
+        spuren = [(url, 0)]
+        anzeige = Anzeige(titel: sender.name, untertitel: "Internetradio", cover: nil, dauer: 0)
+        player.defaultRate = 1
+        Protokoll.geteilt.merke("start", art: "musik", quelle: "Internetradio", id: sender.id, name: sender.name)
+        lade(ab: 0, zeit: 0)
+        player.play()
+        knoepfe()
+        nowPlaying()
     }
 
     /// Startet ein Hörbuch an der zuletzt gehörten Stelle.
@@ -121,6 +141,7 @@ public final class Player {
             sitzung = neu?.id
             hoerbuchId = hoerbuch.id
             istHoerbuch = true
+            istRadio = false
             warteschlange = []
             kapitel = neu?.chapters ?? offline?.kapitel ?? []
             spuren = dateien
@@ -389,6 +410,7 @@ public final class Player {
             MPMediaItemPropertyPlaybackDuration: a.dauer,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: zeit,
             MPNowPlayingInfoPropertyPlaybackRate: spielt ? Double(player.rate) : 0.0,
+            MPNowPlayingInfoPropertyIsLiveStream: istRadio,
         ]
         #if canImport(UIKit)
         guard let url = a.cover else { return }

@@ -90,6 +90,9 @@ struct Antwort: Decodable {
     let playlists: Playlists?
     let playlist: Playlist?
     let lyricsList: Liedtexte?
+    let internetRadioStations: Sendertabelle?
+
+    struct Sendertabelle: Decodable { let internetRadioStation: [Sender]? }
 
     struct Liedtexte: Decodable {
         struct Strukturiert: Decodable {
@@ -110,4 +113,12 @@ struct Antwort: Decodable {
 public struct Textzeile: Hashable, Sendable {
     public let start: Double?
     public let text: String
+}
+
+/// Internetradio-Sender aus Navidrome.
+public struct Sender: Codable, Hashable, Identifiable, Sendable {
+    public let id: String
+    public let name: String
+    public let streamUrl: String
+    public let homePageUrl: String?
 }
