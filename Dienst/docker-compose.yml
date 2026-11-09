@@ -1,0 +1,28 @@
+# Beispiel für Docker Compose. Alles in <spitzen Klammern> anpassen.
+# Am einfachsten in die vorhandene docker-compose.yml des Media-Stacks übernehmen,
+# dann sind Audiobookshelf, Navidrome, Lidarr, Prowlarr, SABnzbd und Jellyfin
+# über ihre Containernamen erreichbar (z. B. http://prowlarr:9696).
+services:
+  hoerbuch-wunsch:
+    image: ghcr.io/drdothouse2106/ohrregal-wunsch:latest
+    # build: .                      # stattdessen selbst bauen
+    container_name: hoerbuch-wunsch
+    restart: unless-stopped
+    user: "1000:1000"               # dieselbe UID/GID wie Audiobookshelf, damit Dateien passen
+    env_file: hoerbuch-wunsch.env   # Vorlage: beispiel.env
+    ports:
+      - "8097:8097"                 # nur im Heimnetz freigeben, von außen über den Reverse-Proxy
+    volumes:
+      - ./hoerbuch-wunsch:/data                                   # Datenbank, Vorrat
+      - <hoerbuch-bibliothek>:/hoerbuecher                         # dieselbe wie bei Audiobookshelf
+      - <sabnzbd-complete>/hoerbuch-wunsch:/downloads              # Ordner der SABnzbd-Kategorie
+      - <audiobookshelf-config>:/abs-config:ro                     # nur lesend: absdatabase.sqlite
+      - <apns-schluessel>.p8:/run/secrets/apns.p8:ro               # optional: Push an Ohrregal
+      - <youtube-musik>:/youtube-musik:ro                          # optional: YouTube-Musik
+    networks:
+      - medien
+
+networks:
+  medien:
+    external: true
+    name: <netzwerk-des-media-stacks>   # docker network ls

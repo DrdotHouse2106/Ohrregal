@@ -1,6 +1,6 @@
 # Hörbuchwunsch – Server-Dienst für Ohrregal
 
-Ein kleiner Dienst für den eigenen Server, nur mit der Python-Standardbibliothek. Er gehört zur App Ohrregal und erledigt alles, was der Server besser kann als das iPhone:
+Ein kleiner Dienst für den eigenen Server, nur mit der Python-Standardbibliothek, fertig als Docker-Image. Er gehört zur App Ohrregal und erledigt alles, was der Server besser kann als das iPhone:
 
 - **Hörbücher wünschen:** Er sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein.
 - **Reihe folgen:** Fehlende, schon erschienene Teile einer Reihe werden sofort gewünscht, neue Teile danach automatisch.
@@ -40,32 +40,94 @@ Was nicht gefunden wird, sucht der Dienst nachts erneut.
 
 ## Voraussetzungen
 
-- Python 3.11 oder neuer, `curl` mit HTTP/2 und `openssl` (für Apple Push)
-- Prowlarr mit mindestens einem Usenet-Indexer, der Hörbücher (3030) kennt
-- SABnzbd mit einer eigenen Kategorie, z. B. `hoerbuchwunsch`. Ihr Ordner muss **außerhalb** der Bibliothek liegen.
-- Audiobookshelf mit eingeschaltetem Ordner-Watcher
+- Prowlarr mit mindestens einem Usenet-Indexer, der Hörbücher (Kategorie 3030) kennt
+- SABnzbd
+- Audiobookshelf mit eingeschaltetem Ordner-Watcher (Standard)
 - Optional:
   - Lidarr (Musik wünschen)
   - Navidrome (Anmeldung für Musik-Nutzer)
   - Jellyfin (Leerlauf-Erkennung)
-  - ein APNs-Schlüssel (.p8) aus dem Apple-Entwicklerkonto
+  - ein Apple-Push-Schlüssel (.p8) für Nachrichten an Ohrregal
 - Internetzugang zum Audible-Katalog (Reihen, Hörspiel-Erkennung, Entdecken, Stöbern) und zu MusicBrainz (Künstlerseiten). Übertragen werden nur ASINs und MusicBrainz-IDs, keine Benutzerdaten.
 
-## Einrichtung
+## Einrichtung mit Docker (empfohlen)
 
+Ein fertiges Image liegt unter `ghcr.io/drdothouse2106/ohrregal-wunsch` (amd64 und arm64). Selbst bauen ist nicht nötig.
+
+**1. SABnzbd vorbereiten**
+
+In SABnzbd unter **Config → Categories** eine Kategorie `hoerbuchwunsch` anlegen, mit Ordner `hoerbuch-wunsch`. Der Ordner liegt dann im „Completed“-Ordner von SABnzbd, also **nicht** in der Hörbuch-Bibliothek. So sieht Audiobookshelf nie halbe Downloads.
+
+**2. Dateien holen**
+
+Im Ordner des Media-Stacks:
 ```sh
-install -d /opt/hoerbuch-wunsch /etc/hoerbuch-wunsch
-cp hoerbuch_wunsch.py /opt/hoerbuch-wunsch/
-cp beispiel.env /etc/hoerbuch-wunsch/zugang.env   # Werte eintragen, chmod 640
-install -d -o medien -g medien -m 750 /var/lib/hoerbuch-wunsch
-cp hoerbuch-wunsch.service /etc/systemd/system/    # Pfade anpassen
-systemctl enable --now hoerbuch-wunsch
+mkdir hoerbuch-wunsch
+curl -o hoerbuch-wunsch.env https://raw.githubusercontent.com/DrdotHouse2106/Ohrregal/main/Dienst/beispiel.env
+chmod 600 hoerbuch-wunsch.env
 ```
 
-Alle Einstellungen stehen mit Erklärung in [beispiel.env](beispiel.env).
+**3. Werte eintragen**
 
-Von außen erreichbar wird der Dienst am besten über denselben Reverse-Proxy wie Audiobookshelf bzw. Navidrome, als Unterpfad. Beispiel für nginx:
+`hoerbuch-wunsch.env` ausfüllen, siehe [Wo finde ich die Werte?](#wo-finde-ich-die-werte). Mindestens nötig sind `PROWLARR_KEY`, `SAB_KEY` und `SAB_PFADE`.
 
+**4. Dienst in die docker-compose.yml übernehmen**
+
+Den Block aus [docker-compose.yml](docker-compose.yml) in die eigene `docker-compose.yml` kopieren und die Platzhalter in `<…>` ersetzen:
+
+| Platzhalter | Was | Beispiel |
+|---|---|---|
+| `<hoerbuch-bibliothek>` | derselbe Ordner, den Audiobookshelf als Bibliothek eingebunden hat | `/srv/hoerbuecher` |
+| `<sabnzbd-complete>` | der „Completed“-Ordner von SABnzbd auf dem Host | `/srv/downloads/complete` |
+| `<audiobookshelf-config>` | der Config-Ordner von Audiobookshelf (mit `absdatabase.sqlite`) | `./config/audiobookshelf` |
+| `<apns-schluessel>` | optional, der .p8-Schlüssel | `./geheim/apns` |
+| `<youtube-musik>` | optional, Ordner mit YouTube-Musik | `/srv/youtube/music` |
+
+`user: "1000:1000"` muss zur UID/GID passen, mit der Audiobookshelf seine Dateien schreibt (`ls -n` im Bibliotheksordner).
+Steht der Dienst in derselben `docker-compose.yml` wie die anderen Container, entfällt der `networks:`-Block. Die Container finden sich dann über ihre Namen.
+
+**5. Starten**
+
+```sh
+docker compose up -d hoerbuch-wunsch
+docker compose logs -f hoerbuch-wunsch
+```
+
+**6. Funktioniert es?**
+
+```sh
+curl http://<server>:8097/status
+# {"ok": true, "version": "…"}
+curl http://<server>:8097/wunsch
+# {"fehler": "nicht_angemeldet", …}  → richtig, ohne Anmeldung kommt 401
+```
+
+In Ohrregal dann **Hörbuch wünschen** öffnen. Die App nimmt automatisch die Adresse von Audiobookshelf + `/wunsch-api`. Dafür braucht es den Reverse-Proxy (unten). Im Heimnetz geht es auch direkt.
+
+**Aktualisieren:** `docker compose pull hoerbuch-wunsch && docker compose up -d hoerbuch-wunsch`. Daten und Vorrat liegen in `./hoerbuch-wunsch` und bleiben erhalten.
+
+## Wo finde ich die Werte?
+
+| Wert | Wo |
+|---|---|
+| `PROWLARR_KEY` | Prowlarr → Settings → General → Security → API Key |
+| `SAB_KEY` | SABnzbd → Config → General → Security → API Key |
+| `SAB_PFADE` | links der Pfad, unter dem SABnzbd im **eigenen** Container den Kategorie-Ordner sieht (Config → Folders → Completed Download Folder + `/hoerbuch-wunsch`), rechts `/downloads` |
+| `ABS_BIBLIOTHEK_PFAD` | Audiobookshelf → Einstellungen → Bibliotheken → Bibliothek bearbeiten → Ordner |
+| `ABS_BIBLIOTHEK_ID` | Bibliothek in Audiobookshelf öffnen, die ID steht in der Adresse: `…/library/<ID>/…` |
+| `LIDARR_KEY` | Lidarr → Settings → General → Security → API Key |
+| `LIDARR_ORDNER` | Lidarr → Settings → Media Management → Root Folders |
+| Lidarr-Profil-IDs | Lidarr → Settings → Profiles, Profil bearbeiten, die Zahl in der Adresse |
+| `JELLYFIN_KEY` | Jellyfin → Dashboard → API-Schlüssel → + |
+| `APNS_*` | developer.apple.com → Certificates, IDs & Profiles → Keys → + → „Apple Push Notifications service“. Key-ID beim Schlüssel, Team-ID unter Membership, Topic = Bundle-ID der App |
+| `LASTFM_KEY` | last.fm/api/account/create |
+| `WUNSCH_PROXYS` | IP, mit der der Reverse-Proxy beim Dienst ankommt (steht nach dem ersten Aufruf im Log) |
+
+## Von außen erreichbar machen (Reverse-Proxy)
+
+Der Dienst gehört unter dieselbe Adresse wie Audiobookshelf, als Unterpfad `/wunsch-api/`. Wer Musik ohne Audiobookshelf nutzt, richtet denselben Pfad zusätzlich unter der Navidrome-Adresse ein.
+
+**nginx** (auch Plesk: Domain → Apache & nginx-Einstellungen → „Zusätzliche nginx-Anweisungen“, unten anhängen):
 ```nginx
 location /wunsch-api/ {
     proxy_pass http://<dienst-adresse>:8097/;
@@ -76,8 +138,28 @@ location /wunsch-api/ {
     client_max_body_size 100k;
 }
 ```
+Beim Einfügen in ein Formular wie Plesk den Block per Tastatur bzw. Zwischenablage einfügen und danach die Seite neu laden. Erst dann ist sicher, dass er gespeichert ist.
 
-Die IP des Proxys gehört in `WUNSCH_PROXYS`, damit die Fehlversuchssperre die echte Absender-IP sieht. Nach 10 Fehlversuchen in 10 Minuten ist eine IP für 15 Minuten gesperrt.
+**Nginx Proxy Manager:** Beim Proxy-Host von Audiobookshelf → **Custom Locations** → Location `/wunsch-api/`, Forward Hostname `hoerbuch-wunsch` (bzw. Server-IP), Port `8097`. Im Zahnrad-Feld `proxy_pass http://hoerbuch-wunsch:8097/;` eintragen, damit der Pfad abgeschnitten wird.
+
+**Test von außen:** `curl https://<abs-adresse>/wunsch-api/status` muss `{"ok": true, …}` liefern. Kommt stattdessen eine HTML-Seite von Audiobookshelf („Cannot GET“), greift der Block nicht.
+
+Die IP des Proxys in `WUNSCH_PROXYS` eintragen, damit die Fehlversuchssperre die echte Absender-IP sieht. Nach 10 Fehlversuchen in 10 Minuten ist eine IP für 15 Minuten gesperrt.
+
+## Alternative: ohne Docker (systemd)
+
+Braucht Python 3.11 oder neuer, `curl` mit HTTP/2 und `openssl`. Für das Lesen der Tags von YouTube-Musik zusätzlich `ffprobe`.
+
+```sh
+install -d /opt/hoerbuch-wunsch /etc/hoerbuch-wunsch
+cp hoerbuch_wunsch.py /opt/hoerbuch-wunsch/
+cp beispiel.env /etc/hoerbuch-wunsch/zugang.env   # echte Pfade und Adressen eintragen, chmod 640
+install -d -o medien -g medien -m 750 /var/lib/hoerbuch-wunsch
+cp hoerbuch-wunsch.service /etc/systemd/system/    # Pfade anpassen
+systemctl enable --now hoerbuch-wunsch
+```
+
+Bei systemd die Datenbank-Pfade (`WUNSCH_DATENBANK`, `WUNSCH_TOKENS`) in der env-Datei setzen und `SAB_PFADE` nur, wenn SABnzbd andere Pfade sieht als der Host.
 
 ## Anmeldung
 
@@ -95,12 +177,14 @@ env WUNSCH_TOKENS=/var/lib/hoerbuch-wunsch/tokens.json python3 hoerbuch_wunsch.p
 
 ## Datenschutz
 
-Hörprotokoll, Wunschlisten und Geräte liegen nur in der SQLite-Datenbank des Dienstes (`WUNSCH_DATENBANK`). Sie werden an niemanden weitergegeben. Jeder Benutzer sieht und löscht nur seine eigenen Daten. Wer den Server sichert, sichert diese Datenbank mit.
+Hörprotokoll, Wunschlisten und Geräte liegen nur in der SQLite-Datenbank des Dienstes (Docker: `./hoerbuch-wunsch`, systemd: `WUNSCH_DATENBANK`). Sie werden an niemanden weitergegeben. Jeder Benutzer sieht und löscht nur seine eigenen Daten. Wer den Server sichert, sichert diese Datenbank mit.
 
 ## Suche testen, ohne etwas zu laden
 
 ```sh
-env $(cat /etc/hoerbuch-wunsch/zugang.env | xargs) python3 hoerbuch_wunsch.py suche-test "<Autor>" "<Titel>" [laufzeitMin]
+docker compose exec hoerbuch-wunsch python3 /app/hoerbuch_wunsch.py suche-test "<Autor>" "<Titel>" [laufzeitMin]
+# systemd:
+env $(grep -v '^#' /etc/hoerbuch-wunsch/zugang.env | xargs) python3 hoerbuch_wunsch.py suche-test "<Autor>" "<Titel>"
 ```
 
 Zeigt die passenden Treffer mit Punkten und die Gründe für verworfene Treffer.
@@ -110,7 +194,7 @@ Zeigt die passenden Treffer mit Punkten und die Gründe für verworfene Treffer.
 - **App zeigt „nicht angemeldet“, obwohl ABS geht:** Das ABS-Token ist abgelaufen, die App holt ein neues. Kommt danach `429`, ist die IP nach vielen Fehlversuchen 15 Minuten gesperrt.
 - **Wünsche hängen auf „gewuenscht“:** Prüfen, ob Prowlarr Indexer mit Kategorie 3030 hat (`suche-test`) und SABnzbd die Kategorie kennt. Teile aus „Reihe folgen“ werden absichtlich erst nachts geladen.
 - **Entdecken bleibt leer:** Ohne Hörverlauf in Audiobookshelf nimmt der Dienst die zuletzt hinzugefügten Bücher als Grundlage. Ohne ASINs in der Bibliothek kann er auch damit nichts anfangen.
-- **Keine Push-Nachrichten:** In der Tabelle `geraet` muss das Gerät stehen. `APNS_*` müssen gesetzt sein. Apple-Fehler stehen mit Grund im Log (`journalctl -u hoerbuch-wunsch`).
+- **Keine Push-Nachrichten:** In der Tabelle `geraet` muss das Gerät stehen. `APNS_*` müssen gesetzt sein. Apple-Fehler stehen mit Grund im Log (`docker compose logs hoerbuch-wunsch` bzw. `journalctl -u hoerbuch-wunsch`).
 - Jede Anfrage steht mit Status und Dauer im Log, ohne Token.
 
 ## Tests

@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.6.0"
+VERSION = "2.6.1"
 
 
 def env(name, standard=None, pflicht=False):
@@ -1744,8 +1744,11 @@ def yt_bereinigen(titel, kuenstler, kanal):
 
 
 def yt_tags(pfad):
-    a = subprocess.run(["ffprobe", "-v", "quiet", "-show_entries", "format_tags=title,artist,comment",
-                        "-of", "json", pfad], capture_output=True, text=True, timeout=30)
+    try:
+        a = subprocess.run(["ffprobe", "-v", "quiet", "-show_entries", "format_tags=title,artist,comment",
+                            "-of", "json", pfad], capture_output=True, text=True, timeout=30)
+    except FileNotFoundError:  # ohne ffprobe (z. B. im schlanken Container): Dateiname als Titel
+        a = subprocess.CompletedProcess([], 0, "{}", "")
     tags = {k.lower(): v for k, v in (json.loads(a.stdout or "{}").get("format", {}).get("tags") or {}).items()}
     yt = re.search(r"[?&]v=([\w-]{11})", tags.get("comment", ""))
     return tags.get("title") or os.path.splitext(os.path.basename(pfad))[0], tags.get("artist") or "", \
