@@ -57,6 +57,8 @@ enum Benachrichtigungen {
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // Downloads im Hintergrund wieder verbinden.
+        Task { @MainActor in _ = Offline.geteilt }
         Task { @MainActor in
             // Token kann sich ändern; bei erteilter Erlaubnis bei jedem Start neu holen.
             if await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .authorized {
@@ -64,6 +66,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
         }
         return true
+    }
+
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
+        Task { @MainActor in Offline.geteilt.hintergrundFertig = completionHandler }
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

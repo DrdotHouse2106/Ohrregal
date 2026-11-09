@@ -51,6 +51,7 @@ public final class Player {
     @ObservationIgnored private var stellen: [ObjectIdentifier: Int] = [:]
     @ObservationIgnored private var spur = 0
     @ObservationIgnored private var sitzung: String?
+    @ObservationIgnored private var hoerbuchId: String?
     @ObservationIgnored private var gehoertSeitSync: Double = 0
     @ObservationIgnored private var beobachter: [Any] = []
 
@@ -84,38 +85,52 @@ public final class Player {
         istHoerbuch = false
         kapitel = []
         warteschlange = titel
-        spuren = titel.map { (client.streamURL($0.id), 0) }
+        spuren = titel.map { (Offline.geteilt.datei(fuerTitel: $0.id) ?? client.streamURL($0.id), 0) }
         player.defaultRate = 1
         lade(ab: start, zeit: 0)
         player.play()
         knoepfe()
     }
 
-    /// Startet ein Hörbuch an der zuletzt gehörten Stelle (von Audiobookshelf).
+    /// Startet ein Hörbuch an der zuletzt gehörten Stelle.
+    /// Ist es geladen, spielt es von der Datei auf dem iPhone, auch ohne Verbindung zum Server.
     public func spiele(hoerbuch: Hoerbuch) async {
         guard let abs = hoerbuchClient else { return }
         beendeHoerbuch()
         player.pause()
+        let offline = Offline.geteilt.hoerbuch(hoerbuch.id)
+        if offline != nil { await Offline.geteilt.nachtragen(abs) }
         do {
-            let neu = try await abs.starte(hoerbuch.id)
+            // Sitzung beim Server: für Fortschritt und Statistik. Ohne Verbindung geht es mit der Datei weiter.
+            var neu: HoerbuchSitzung?
+            do { neu = try await abs.starte(hoerbuch.id) } catch { if offline == nil { throw error } }
             var dateien: [(url: URL, start: Double)] = []
-            for s in neu.audioTracks.sorted(by: { $0.startOffset < $1.startOffset }) {
-                dateien.append((try await abs.dateiURL(s.contentUrl), s.startOffset))
+            if let offline {
+                dateien = offline.dateien.map { (Offline.pfad(offline, $0), $0.start) }
+            } else if let neu {
+                for s in neu.audioTracks.sorted(by: { $0.startOffset < $1.startOffset }) {
+                    dateien.append((try await abs.dateiURL(s.contentUrl), s.startOffset))
+                }
             }
             guard !dateien.isEmpty else { throw ServerFehler("Das Hörbuch hat keine abspielbaren Dateien.") }
-            sitzung = neu.id
+            sitzung = neu?.id
+            hoerbuchId = hoerbuch.id
             istHoerbuch = true
             warteschlange = []
-            kapitel = neu.chapters ?? []
+            kapitel = neu?.chapters ?? offline?.kapitel ?? []
             spuren = dateien
-            anzeige = Anzeige(titel: neu.displayTitle ?? hoerbuch.titel, untertitel: neu.displayAuthor ?? hoerbuch.autor,
-                              cover: abs.coverURL(hoerbuch.id), dauer: neu.duration)
-            let start = neu.currentTime ?? 0
+            anzeige = Anzeige(titel: neu?.displayTitle ?? hoerbuch.titel, untertitel: neu?.displayAuthor ?? hoerbuch.autor,
+                              cover: abs.coverURL(hoerbuch.id), dauer: neu?.duration ?? offline?.dauer ?? 0)
+            let start = neu?.currentTime ?? offline?.position ?? 0
             player.defaultRate = tempo
             lade(ab: spuren.lastIndex { $0.start <= start } ?? 0, zeit: start)
             player.play()
             knoepfe()
             nowPlaying()
+            // Was man hört, kommt automatisch aufs iPhone.
+            if offline == nil, Offline.geteilt.hoerbuecherAutomatisch {
+                Task { try? await Offline.geteilt.lade(hoerbuch: hoerbuch, abs) }
+            }
         } catch {
             fehler = error.localizedDescription
         }
@@ -202,7 +217,7 @@ public final class Player {
     /// Lässt den laufenden Titel weiterspielen und stellt alles danach neu ein.
     private func neuAufbauen() {
         guard let client else { return }
-        spuren = warteschlange.map { (client.streamURL($0.id), 0) }
+        spuren = warteschlange.map { (Offline.geteilt.datei(fuerTitel: $0.id) ?? client.streamURL($0.id), 0) }
         guard let laufend = player.currentItem else { return }
         for eintrag in player.items() where eintrag !== laufend { player.remove(eintrag) }
         stellen = [ObjectIdentifier(laufend): index]
@@ -288,16 +303,26 @@ public final class Player {
 
     /// Meldet die Hörposition an Audiobookshelf (alle 15 s, beim Pausieren und am Ende).
     private func synchronisiere(schliessen: Bool = false) {
-        guard istHoerbuch, let sitzung, let abs = hoerbuchClient else { return }
+        guard istHoerbuch, let abs = hoerbuchClient else { return }
         let zeit = zeit, dauer = dauer, gehoert = gehoertSeitSync
         gehoertSeitSync = 0
-        Task { try? await abs.synchronisiere(sitzung, zeit: zeit, gehoert: gehoert, dauer: dauer, schliessen: schliessen) }
+        // Geladene Hörbücher merken sich die Stelle immer selbst; ohne Server-Sitzung wird sie später nachgetragen.
+        if let id = hoerbuchId { Offline.geteilt.merke(position: zeit, hoerbuch: id, offen: sitzung == nil) }
+        guard let sitzung else { return }
+        Task {
+            do {
+                try await abs.synchronisiere(sitzung, zeit: zeit, gehoert: gehoert, dauer: dauer, schliessen: schliessen)
+            } catch {
+                if let id = self.hoerbuchId { Offline.geteilt.merke(position: zeit, hoerbuch: id, offen: true) }
+            }
+        }
     }
 
     private func beendeHoerbuch() {
         guard istHoerbuch else { return }
         synchronisiere(schliessen: true)
         sitzung = nil
+        hoerbuchId = nil
     }
 
     private func fernsteuerung() {

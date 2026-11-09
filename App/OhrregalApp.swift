@@ -70,6 +70,8 @@ final class Sitzung {
         guard let url = URL(string: text) else { return }
         hoerbuchClient = AudiobookshelfClient(server: url, benutzer: benutzer.trimmingCharacters(in: .whitespacesAndNewlines),
                                               passwort: passwort.trimmingCharacters(in: .newlines))
+        // Offline gehörte Stellen nachtragen, sobald der Server erreichbar ist.
+        if let abs = hoerbuchClient { Task { await Offline.geteilt.nachtragen(abs) } }
     }
 
     func anmelden(server: String, benutzer: String, passwort: String) async throws {

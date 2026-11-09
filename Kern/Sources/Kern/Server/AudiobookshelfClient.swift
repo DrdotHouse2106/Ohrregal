@@ -170,6 +170,46 @@ public final class AudiobookshelfClient {
         return ergebnis.book?.map(\.libraryItem) ?? []
     }
 
+    /// Dateien, Kapitel und Länge eines Hörbuchs zum Herunterladen.
+    public struct Dateiliste: Sendable {
+        public let dateien: [(ino: String, endung: String, dauer: Double)]
+        public let kapitel: [Kapitel]
+        public let dauer: Double?
+    }
+
+    public func dateien(_ id: String) async throws -> Dateiliste {
+        struct Voll: Decodable {
+            struct Medium: Decodable {
+                struct Audio: Decodable {
+                    struct Meta: Decodable { let ext: String? }
+                    let ino: String
+                    let index: Int?
+                    let duration: Double?
+                    let exclude: Bool?
+                    let invalid: Bool?
+                    let metadata: Meta?
+                }
+                let audioFiles: [Audio]?
+                let chapters: [Kapitel]?
+                let duration: Double?
+            }
+            let media: Medium
+        }
+        let voll: Voll = try await hole("/api/items/\(id)?expanded=1")
+        let dateien = (voll.media.audioFiles ?? [])
+            .filter { $0.exclude != true && $0.invalid != true }
+            .sorted { ($0.index ?? 0) < ($1.index ?? 0) }
+            .map { (ino: $0.ino, endung: ($0.metadata?.ext ?? ".mp3").trimmingCharacters(in: CharacterSet(charactersIn: ".")), dauer: $0.duration ?? 0) }
+        return Dateiliste(dateien: dateien, kapitel: voll.media.chapters ?? [], dauer: voll.media.duration)
+    }
+
+    /// Meldet eine (offline gehörte) Stelle an Audiobookshelf.
+    public func fortschrittMelden(_ id: String, zeit: Double, dauer: Double) async throws {
+        let (daten, code) = try await sende("/api/me/progress/\(id)", methode: "PATCH",
+                                            json: ["currentTime": zeit, "duration": dauer, "progress": dauer > 0 ? min(zeit / dauer, 1) : 0])
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
     public func coverURL(_ id: String) -> URL? {
         token.map { adresse("/api/items/\(id)/cover?token=\($0)") }
     }

@@ -57,6 +57,9 @@ struct HoerbuecherView: View {
                                     Zeile(text: b.name, symbol: "books.vertical")
                                 }
                             }
+                            NavigationLink(value: Ziel.geladen) {
+                                Zeile(text: "Geladen", symbol: "arrow.down.circle")
+                            }
                             NavigationLink(value: Ziel.stoebern) {
                                 Zeile(text: "Stöbern", symbol: "square.grid.2x2")
                             }
@@ -307,6 +310,7 @@ struct HoerbuchView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(startet)
+                HoerbuchLadenKnopf(hoerbuch: h)
                 if let fehler = player.fehler {
                     Text(fehler).font(.caption).foregroundStyle(.red)
                 }

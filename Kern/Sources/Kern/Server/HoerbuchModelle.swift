@@ -45,7 +45,7 @@ public struct Hoerbuch: Decodable, Hashable, Identifiable, Sendable {
     public var autor: String { media.metadata.authorName ?? "" }
 }
 
-public struct Kapitel: Decodable, Hashable, Sendable {
+public struct Kapitel: Codable, Hashable, Sendable {
     public let start: Double
     public let end: Double
     public let title: String

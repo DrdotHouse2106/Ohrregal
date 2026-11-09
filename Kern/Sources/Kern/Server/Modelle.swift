@@ -25,6 +25,8 @@ public struct Titel: Codable, Hashable, Identifiable, Sendable {
     public let track: Int?
     /// Datum von „Gefällt mir“, nil wenn nicht markiert.
     public let starred: String?
+    /// Dateiendung, z. B. „mp3“ oder „flac“ (für Downloads).
+    public let suffix: String?
 }
 
 /// Künstler (Subsonic `ArtistID3`).
