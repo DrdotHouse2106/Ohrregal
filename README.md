@@ -48,7 +48,9 @@ Ohne den Dienst funktioniert alles andere: Musik, Hörbücher, CarPlay, Offline 
 
 ## Einrichten
 
-1. App über TestFlight installieren.
+Die ausführliche Anleitung steht in **[EINRICHTUNG.md](EINRICHTUNG.md)**: App benutzen, Server vorbereiten, eigene App bauen. Kurz:
+
+1. App über TestFlight installieren (Einladung durch die Person, die Ohrregal betreibt).
 2. Beim ersten Start Navidrome (Pflicht) und Audiobookshelf (optional) eintragen. Später geht das über **Start → Profil → Zugänge**.
 3. **Profil → Mitteilungen** einmal antippen und erlauben.
 

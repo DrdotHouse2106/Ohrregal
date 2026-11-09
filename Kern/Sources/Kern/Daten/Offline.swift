@@ -59,7 +59,7 @@ public final class Offline {
             titel = index.titel
             wartendeTitel = Dictionary(index.wartend.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         }
-        let konfiguration = URLSessionConfiguration.background(withIdentifier: "de.drdothouse.Ohrregal.offline")
+        let konfiguration = URLSessionConfiguration.background(withIdentifier: (Bundle.main.bundleIdentifier ?? "Ohrregal") + ".offline")
         konfiguration.sessionSendsLaunchEvents = true
         konfiguration.isDiscretionary = false
         helfer.offline = self

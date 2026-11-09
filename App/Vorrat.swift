@@ -61,7 +61,7 @@ struct StartVorrat: Codable {
 
 /// Nächtliches Erneuern im Hintergrund (iOS entscheidet den genauen Zeitpunkt, frühestens 3 Uhr).
 enum Hintergrund {
-    static let kennung = "de.drdothouse.Ohrregal.vorladen"
+    static let kennung = (Bundle.main.bundleIdentifier ?? "Ohrregal") + ".vorladen"
 
     static func registrieren() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: kennung, using: nil) { aufgabe in

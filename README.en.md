@@ -39,6 +39,10 @@ Requests, discover, browse, series, notifications and the listening log run thro
 
 Credentials stay on the iPhone (passwords in the Keychain). The listening log only goes to your own server, is used for recommendations only and can be viewed and deleted in the app. Played tracks go to Last.fm via Navidrome only if you set that up there.
 
+## Setup
+
+Step-by-step guide (use the app, prepare servers, build your own app): **[EINRICHTUNG.en.md](EINRICHTUNG.en.md)**.
+
 ## Build
 
 GitHub builds, tests and uploads to TestFlight on every push (Actions tab). Locally on a Mac:

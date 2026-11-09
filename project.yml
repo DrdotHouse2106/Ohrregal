@@ -1,4 +1,5 @@
 # Xcode-Projekt wird mit XcodeGen erzeugt: `xcodegen` im Repo-Ordner ausführen.
+# Eigene App bauen: nur PRODUCT_BUNDLE_IDENTIFIER unten ändern (siehe EINRICHTUNG.md).
 name: Ohrregal
 options:
   bundleIdPrefix: de.drdothouse
@@ -22,7 +23,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UIBackgroundModes: [audio, fetch]
-        BGTaskSchedulerPermittedIdentifiers: [de.drdothouse.Ohrregal.vorladen]
+        BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).vorladen]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: Ohrregal hört kurz zu, um den gerade laufenden Titel zu erkennen.

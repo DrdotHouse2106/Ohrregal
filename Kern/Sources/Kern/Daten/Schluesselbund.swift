@@ -5,7 +5,7 @@ import Security
 public enum Schluesselbund {
     private static func anfrage(_ konto: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: "de.drdothouse.Ohrregal",
+         kSecAttrService as String: Bundle.main.bundleIdentifier ?? "Ohrregal",
          kSecAttrAccount as String: konto]
     }
 
