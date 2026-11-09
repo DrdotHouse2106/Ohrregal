@@ -6,24 +6,17 @@ import SwiftUI
 struct MiniPlayer: View {
     @Environment(Player.self) private var player
     @Binding var offen: Bool
+    /// In der Tab-Leiste (iOS 26): ohne eigenen Hintergrund, die Leiste zeichnet ihn.
+    var kompakt = false
 
     var body: some View {
         if let a = player.anzeige {
-            HStack(spacing: 12) {
-                Cover(url: a.cover, groesse: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(a.titel).font(.subheadline.bold()).lineLimit(1)
-                    Text(player.aktuellesKapitel?.title ?? a.untertitel).font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
-                }
-                Spacer()
-                Button { player.umschalten() } label: {
-                    Image(systemName: player.spielt ? "pause.fill" : "play.fill").font(.title2).frame(width: 44, height: 44)
-                }
-                Button { player.weiter() } label: {
-                    Image(systemName: player.istHoerbuch ? "goforward.30" : "forward.fill").font(.title3).frame(width: 36, height: 44)
-                }
-            }
-            .foregroundStyle(Farben.text)
+            if kompakt { inhalt(a).padding(.horizontal, 6).contentShape(Rectangle()).onTapGesture { offen = true } } else { schwebend(a) }
+        }
+    }
+
+    private func schwebend(_ a: Anzeige) -> some View {
+        inhalt(a)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(Farben.flaeche, in: RoundedRectangle(cornerRadius: 14))
@@ -39,7 +32,24 @@ struct MiniPlayer: View {
             .onTapGesture { offen = true }
             .padding(.horizontal, 8)
             .padding(.bottom, 4)
-        }
+    }
+
+    private func inhalt(_ a: Anzeige) -> some View {
+            HStack(spacing: 12) {
+                Cover(url: a.cover, groesse: kompakt ? 32 : 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(a.titel).font(.subheadline.bold()).lineLimit(1)
+                    Text(player.aktuellesKapitel?.title ?? a.untertitel).font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
+                }
+                Spacer()
+                Button { player.umschalten() } label: {
+                    Image(systemName: player.spielt ? "pause.fill" : "play.fill").font(kompakt ? .title3 : .title2).frame(width: 44, height: 44)
+                }
+                Button { player.weiter() } label: {
+                    Image(systemName: player.istHoerbuch ? "goforward.30" : "forward.fill").font(.title3).frame(width: 36, height: 44)
+                }
+            }
+            .foregroundStyle(Farben.text)
     }
 }
 

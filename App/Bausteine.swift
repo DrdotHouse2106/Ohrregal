@@ -12,8 +12,23 @@ extension View {
             .navigationDestination(for: Ziel.self) { $0.ansicht }
     }
 
-    func miniPlayer(_ offen: Binding<Bool>) -> some View {
-        safeAreaInset(edge: .bottom) { MiniPlayer(offen: offen) }
+    /// Bis iOS 18 sitzt der Mini-Player über der Tab-Leiste. Ab iOS 26 übernimmt das die Tab-Leiste selbst
+    /// (siehe `miniPlayerInTabLeiste`); ein eigener Einschub verrutscht dort beim Ein- und Ausklappen der Leiste.
+    @ViewBuilder func miniPlayer(_ offen: Binding<Bool>) -> some View {
+        if #available(iOS 26, *) {
+            self
+        } else {
+            safeAreaInset(edge: .bottom) { MiniPlayer(offen: offen) }
+        }
+    }
+
+    /// iOS 26: Mini-Player als Zubehör der Tab-Leiste, wie bei Apple Music.
+    @ViewBuilder func miniPlayerInTabLeiste(_ offen: Binding<Bool>, aktiv: Bool) -> some View {
+        if #available(iOS 26, *), aktiv {
+            tabViewBottomAccessory { MiniPlayer(offen: offen, kompakt: true) }
+        } else {
+            self
+        }
     }
 }
 

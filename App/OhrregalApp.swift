@@ -144,6 +144,7 @@ struct Hauptansicht: View {
                 .tabItem { Label("Suchen", systemImage: "magnifyingglass") }
                 .tag(3)
         }
+        .miniPlayerInTabLeiste($playerOffen, aktiv: player.anzeige != nil)
         .sheet(isPresented: $playerOffen) { VollPlayer() }
         .sheet(isPresented: Binding(get: { sitzung.playlistFuer != nil }, set: { if !$0 { sitzung.playlistFuer = nil } })) {
             PlaylistAuswahl(titel: sitzung.playlistFuer ?? [])
