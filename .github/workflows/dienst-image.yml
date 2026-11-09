@@ -1,0 +1,49 @@
+# Baut das Docker-Image des Server-Dienstes (Dienst/) und legt es in der GitHub Container Registry ab.
+name: Dienst-Image
+
+on:
+  push:
+    branches: [main]
+    paths: ["Dienst/**", ".github/workflows/dienst-image.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Tests
+        working-directory: Dienst
+        run: python3 -m unittest test_bewertung.py
+
+      - name: Version lesen
+        id: version
+        run: |
+          echo "wert=$(grep -oP '^VERSION = "\K[^"]+' Dienst/hoerbuch_wunsch.py)" >> "$GITHUB_OUTPUT"
+          echo "besitzer=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: Dienst
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ steps.version.outputs.besitzer }}/ohrregal-wunsch:latest
+            ghcr.io/${{ steps.version.outputs.besitzer }}/ohrregal-wunsch:${{ steps.version.outputs.wert }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Hörbuchwunsch – Server-Dienst für Ohrregal
