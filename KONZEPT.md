@@ -268,19 +268,26 @@ Gleicher Name, gleiche Optik, gleiche Tabs, aber für die Fernbedienung gebaut. 
 - Liegt im selben Repo im Ordner `TV/`.
 - GitHub baut die APK kostenlos. Installation per „Downloader“-App über einen festen Link zur neuesten Version, ohne Entwicklerkonto.
 
-## 11. Fahrplan
+## 11. Fahrplan und Stand
 
-| Stufe | Inhalt |
-|---|---|
-| **1 – Grundversion Musik** | Anmeldung Navidrome, Bibliothek, Suche, Player mit Sperrbildschirm und AirPlay, Startseite mit Server-Reihen, Scrobbling, P1, P2, **CarPlay** |
-| **2 – Vorschläge und offline** | lokaler Hörverlauf, Mixe, „Spiel etwas für mich“, Radio, Downloads, Songtexte, Weiterhören an anderen Geräten |
-| **2b – Lidarr** | Einzelne Alben wünschen, Künstler folgen (nur neue Alben), Fehlt noch, Wunschliste |
-| **3 – Hörbücher** | Audiobookshelf, Hörbuch-Player, P3, Offline-Fortschritt, Hörbücher in CarPlay |
-| **4 – Apple Watch** | Steuerung, danach eigene Offline-Wiedergabe |
-| **3b – Hörbuchwunsch** | Dienst im Media-Stack, Hörbücher suchen und wünschen, Serie folgen |
-| **TV-App (parallel ab Stufe 1)** | Fire TV / Android TV mit Musik und Hörbüchern, Weiterhören zwischen den Geräten |
-| **6 – Heim-Satellit** | weitere Ausgabeziele, Raumauswahl |
-| **später** | Widgets, Siri-Kurzbefehle, Equalizer, Crossfade, „Wer hört?“ |
+Stand: 09.11.2026, App 0.13.0, Hörbuchwunsch 2.3.0.
+
+| Stufe | Inhalt | Stand |
+|---|---|---|
+| **1 – Grundversion Musik** | Anmeldung, Mediathek, Suche, Player, AirPlay, Sperrbildschirm, Scrobbling, P1, P2, CarPlay | fertig |
+| **2 – Vorschläge** | Hörverlauf, Für dich mit Cover-Collagen, Dein Mix, Künstler-Mixe, Radio ab Song, Lange nicht gehört, Schnellauswahl | fertig |
+| **2 – Player** | Gefällt mir, Playlists anlegen/bearbeiten (in Navidrome), Warteschlange, Songtexte | fertig |
+| **2 – Offline und Vorrat** | Hörbücher automatisch laden (nur WLAN), Alben/Playlists laden, Hörposition offline, Startseite aus dem Vorrat, nächtliches Erneuern | fertig |
+| **3 – Hörbücher** | Audiobookshelf, Kapitel, Tempo, Schlaf-Timer, P3, Hörbücher in CarPlay, Kürzlich hinzugefügt, Genres (deutsch) | fertig |
+| **3b – Hörbuchwunsch** | Wünschen mit Detailseite und Hörprobe, Reihe folgen, Entdecken, Stöbern (inkl. Hörspiele), Push „Hörbuch ist da“, Vorrechnen in Ruhezeiten | fertig |
+| **2b – Lidarr** | Einzelne Alben wünschen, Künstler folgen (nur neue Alben), Fehlt noch, Wunschliste | offen |
+| **4 – Apple Watch** | Steuerung, danach eigene Offline-Wiedergabe | offen |
+| **TV-App** | Fire TV / Android TV mit Musik und Hörbüchern | offen |
+| **App Store** | Veröffentlichung, danach Smart-App-Banner auf der Hörbuch-Seite | offen |
+| **6 – Heim-Satellit** | weitere Ausgabeziele, Raumauswahl | offen |
+| **später** | Widgets, Siri-Kurzbefehle, Equalizer, Crossfade, „Wer hört?“, Weiterhören zwischen Geräten (savePlayQueue) | offen |
+
+**Grundsatz Vorrat:** Was sich vorrechnen lässt, wird im Leerlauf gerechnet (Server: nachts 3–6 Uhr, nur wenn niemand streamt; App: Hintergrundaufgabe ab 3 Uhr) und tagsüber nur ausgeliefert. Was man hört, liegt auf dem iPhone.
 
 ## 12. Voraussetzungen
 
