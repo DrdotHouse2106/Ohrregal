@@ -9,6 +9,7 @@ Ein kleiner Dienst für den eigenen Server, nur mit der Python-Standardbibliothe
 - **Stöbern:** Bestseller und Neuheiten je Audible-Kategorie, dazu eine eigene Kategorie „Hörspiele“.
 - **Musik wünschen** über Lidarr: einzelne Alben, Künstlerseite mit „Fehlt noch“, Künstlern folgen (nur neue Alben), Neuerscheinungen.
 - **Push-Nachrichten** direkt in Ohrregal über Apple (APNs): „Hörbuch ist da“, „Album ist da“.
+- **YouTube-Musik zuordnen:** Bei Titeln aus YouTube-Downloads findet der Dienst nachts den echten Künstler, über MusicBrainz und bei Nightcore über Last.fm. Ist kein bekanntes Lied dabei, gilt der Kanal als Künstler. Die Dateien bleiben unverändert.
 - **Hörprotokoll** je Benutzer, nur zum Zuschneiden der Vorschläge. Einsehbar und löschbar.
 - **Ruhezeiten:** Gerechnet wird nachts und nur, wenn niemand streamt. Tagsüber liefert der Dienst nur aus seinem Vorrat aus.
 

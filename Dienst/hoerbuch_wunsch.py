@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.5.2"
+VERSION = "2.6.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -90,6 +90,9 @@ class Einstellungen:
         self.lidarr_qualitaet = int(env("LIDARR_QUALITAETSPROFIL", "1"))
         self.lidarr_metadaten = int(env("LIDARR_METADATENPROFIL", "1"))
         self.navidrome = env("NAVIDROME_URL", "").rstrip("/")
+        # Musik aus YouTube-Downloads (z. B. Pinchflat): echte Künstler nachts über MusicBrainz zuordnen
+        self.youtube_musik = env("YOUTUBE_MUSIK", "").rstrip("/")
+        self.lastfm_key = env("LASTFM_KEY", "")
         self.vorrat = env("WUNSCH_VORRAT", os.path.join(os.path.dirname(self.datenbank), "vorrat.json"))
         self.parallel = int(env("WUNSCH_PARALLEL", "2"))
         self.takt = int(env("WUNSCH_TAKT_SEKUNDEN", "60"))
@@ -155,6 +158,11 @@ def db_anlegen():
           benutzer TEXT NOT NULL, uid TEXT NOT NULL, typ TEXT NOT NULL, zeit TEXT NOT NULL,
           art TEXT, daten TEXT NOT NULL, empfangen TEXT NOT NULL, PRIMARY KEY (benutzer, uid));
         CREATE INDEX IF NOT EXISTS ereignis_zeit ON ereignis (benutzer, zeit);
+        CREATE TABLE IF NOT EXISTS yt_zuordnung (
+          pfad TEXT PRIMARY KEY, mtime REAL, kanal TEXT, rohKuenstler TEXT, rohTitel TEXT, schluessel TEXT,
+          ytId TEXT, kuenstler TEXT, titel TEXT, kuenstlerMbid TEXT, aufnahmeMbid TEXT,
+          status TEXT, geprueft TEXT);
+        CREATE INDEX IF NOT EXISTS yt_schluessel ON yt_zuordnung (schluessel);
         CREATE TABLE IF NOT EXISTS reihe_teil (
           reihe TEXT NOT NULL, asin TEXT NOT NULL, teil TEXT, titel TEXT,
           inAbs INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (reihe, asin));
@@ -1705,6 +1713,128 @@ def ereignis_json(z):
     return d
 
 
+# ---------------------------------------------------------------- YouTube-Musik: echte Künstler zuordnen
+
+YT_ZUSATZ = re.compile(r"(?i)\b(nightcore|lyrics?|official|video|audio|gmv|amv|version|hits (hard|different)|"
+                       r"but it hits|slowed|sped ?up|reverb|cover|remix|edit|mix|visuali[sz]er|4k|hd|female|male|"
+                       r"rock|phonk|bass ?boost(ed)?|extended|clean|cinematic|deutsch|german)\b")
+
+
+def yt_bereinigen(titel, kuenstler, kanal):
+    """Rohtitel eines YouTube-Videos -> (Künstler, Titel) oder (None, Titel)."""
+    t = unicodedata.normalize("NFKC", titel or "")
+    t = re.split(r"\s*[|｜]\s*|\s//\s", t)[0]
+    t = "".join(c for c in t if unicodedata.category(c)[0] in "LNZP" or c in "-&'.,!?:")
+    t = re.sub(r"[【「\[(][^】」\])]*[】」\])]", lambda m: "" if YT_ZUSATZ.search(m.group(0)) or len(m.group(0)) < 4 else m.group(0), t)
+    t = re.sub(r"(?i)^\s*(nightcore|♪?nightcore♪?)\s*[-–→:]*\s*", "", t)
+    t = re.sub(r"(?i)\s*♪?nightcore♪?\s*", " ", t)
+    t = re.sub(r"\s*[→]\s*", " ", t)
+    t = re.sub(r"\s+", " ", t).strip(" -–:")
+    teile = re.split(r"\s+[-–]\s+", t, maxsplit=1)
+    k = None
+    if len(teile) == 2 and teile[0] and teile[1]:
+        k, t = teile[0].strip(), teile[1].strip(" -–")
+    elif kuenstler and kanal and norm(kuenstler) != norm(kanal):
+        # Künstler-Tag mit Zusatz, z. B. "Kanal, Sängerin": der zweite Name ist der Interpret
+        rest = [x.strip() for x in kuenstler.split(",") if norm(x) != norm(kanal)]
+        k = rest[0] if rest else None
+    t = re.sub(r"\s*\((?:[^)]*)\)\s*$", lambda m: "" if YT_ZUSATZ.search(m.group(0)) else m.group(0), t).strip()
+    t = re.sub(r"(?i)\s+(lyrics?|official (music )?video|audio)$", "", t).strip(" -–:")
+    return (k or None), t
+
+
+def yt_tags(pfad):
+    a = subprocess.run(["ffprobe", "-v", "quiet", "-show_entries", "format_tags=title,artist,comment",
+                        "-of", "json", pfad], capture_output=True, text=True, timeout=30)
+    tags = {k.lower(): v for k, v in (json.loads(a.stdout or "{}").get("format", {}).get("tags") or {}).items()}
+    yt = re.search(r"[?&]v=([\w-]{11})", tags.get("comment", ""))
+    return tags.get("title") or os.path.splitext(os.path.basename(pfad))[0], tags.get("artist") or "", \
+        (yt.group(1) if yt else None)
+
+
+def yt_nachschlagen(kuenstler, titel):
+    q = f'recording:"{titel}" AND artist:"{kuenstler}"'
+    for x in (musicbrainz("recording", query=q, limit=5).get("recordings") or []):
+        if int(x.get("score") or 0) < 90:
+            continue
+        credit = x.get("artist-credit") or []
+        namen = " ".join(c.get("name", "") + " " + (c.get("artist") or {}).get("name", "") for c in credit)
+        if set(norm(kuenstler).split()) <= set(norm(namen).split()) and \
+                set(woerter(titel)) <= set(norm(x.get("title")).split()):
+            a = credit[0].get("artist") or {}
+            return a.get("name"), x.get("title"), a.get("id"), x.get("id")
+    return None
+
+
+def lastfm_original(titel):
+    """Nightcore & Co. sind meist bekannte Lieder ohne Interpretenangabe: bekanntesten Treffer bei Last.fm nehmen."""
+    if not E.lastfm_key:
+        return None
+    d = json.loads(hole("https://ws.audioscrobbler.com/2.0/?" + urllib.parse.urlencode(
+        dict(method="track.search", track=titel, api_key=E.lastfm_key, format="json", limit=5)), zeit=20))
+    liste = ((d.get("results") or {}).get("trackmatches") or {}).get("track") or []
+    liste = [x for x in liste if norm(x.get("name")) == norm(titel) and "nightcore" not in norm(x.get("artist"))]
+    liste.sort(key=lambda x: -int(x.get("listeners") or 0))
+    if liste and int(liste[0].get("listeners") or 0) >= 50000:
+        return liste[0]["artist"]
+    return None
+
+
+def yt_zuordnen(hoechstens=400, nur_pruefen=False):
+    """Neue oder geänderte YouTube-Titel zuordnen; MusicBrainz gedrosselt (1/s)."""
+    if not E.youtube_musik or not os.path.isdir(E.youtube_musik):
+        return 0
+    with db() as v:
+        bekannt = {z[0]: (z[1], z[2], z[3]) for z in v.execute("SELECT pfad, mtime, status, geprueft FROM yt_zuordnung")}
+    grenze = (jetzt() - timedelta(days=30)).isoformat()
+    erledigt = 0
+    for wurzel, _, namen in os.walk(E.youtube_musik):
+        for n in sorted(namen):
+            if os.path.splitext(n)[1].lower() not in AUDIO:
+                continue
+            pfad = os.path.join(wurzel, n)
+            mtime = os.path.getmtime(pfad)
+            alt = bekannt.get(pfad)
+            if alt and alt[0] == mtime and not (alt[1] == "nicht_gefunden" and (alt[2] or "") < grenze):
+                continue
+            if erledigt >= hoechstens or (not nur_pruefen and not leerlauf()):
+                return erledigt
+            kanal = os.path.relpath(pfad, E.youtube_musik).split(os.sep)[0]
+            roh_t, roh_k, yt = yt_tags(pfad)
+            k, t = yt_bereinigen(roh_t, roh_k, kanal)
+            nightcore = "nightcore" in norm(f"{kanal} {roh_t}")
+            if not k and t and nightcore and len(norm(t)) >= 3:
+                # Nightcore-Kanäle spielen bekannte Lieder schneller ab: Original über Last.fm suchen
+                try:
+                    k = lastfm_original(t)
+                except Exception as f:
+                    log("Last.fm nicht erreichbar:", f)
+            try:
+                treffer = yt_nachschlagen(k, t) if k and t else None
+            except urllib.error.HTTPError as f:
+                if f.code in (429, 503):  # MusicBrainz überlastet: diesen Titel später erneut
+                    time.sleep(10)
+                    continue
+                raise
+            if treffer:
+                status = "zugeordnet"
+            elif not nightcore:
+                # Kein bekanntes Lied: Der Kanal selbst gilt als Künstler (eigene Lieder, Edits)
+                status, k = "kanal", re.split(r",", kanal.lstrip("@"))[-1].strip()
+            else:
+                status = "ohne_kuenstler" if not k else "nicht_gefunden"
+            zeile = (pfad, mtime, kanal, roh_k, roh_t, norm(roh_k) + "|" + norm(roh_t), yt,
+                     treffer[0] if treffer else k, treffer[1] if treffer else t,
+                     treffer[2] if treffer else None, treffer[3] if treffer else None, status, jetzt().isoformat())
+            if nur_pruefen:
+                print(f"{status:15} {roh_t[:60]!r:64} -> {zeile[7]!r} / {zeile[8]!r}")
+            else:
+                with DB_SPERRE, db() as v:
+                    v.execute("INSERT OR REPLACE INTO yt_zuordnung VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", zeile)
+            erledigt += 1
+    return erledigt
+
+
 # ---------------------------------------------------------------- Ruhezeiten und Vorrat
 
 LEERLAUF = {"zeit": 0, "wert": True, "grund": ""}
@@ -1809,6 +1939,7 @@ def vorrechnen():
     for kid in dict.fromkeys(oben + gefragt):
         for sortierung in ("beliebt", "neu"):
             aufgaben.append(("stoebern", f"{kid}|{sortierung}"))
+    aufgaben.append(("youtube", ""))
     for art, ziel in aufgaben:
         name = f"{art}:{ziel}"
         if name in VORRECHNEN["erledigt"]:
@@ -1823,6 +1954,10 @@ def vorrechnen():
                 kategorien()
             elif art == "entdecken":
                 entdecken_neu_berechnen(ziel)
+            elif art == "youtube":
+                n = yt_zuordnen()
+                if n:
+                    log(f"YouTube-Musik: {n} Titel geprüft")
             else:
                 kid, sortierung = ziel.split("|", 1)
                 stoebern_zwischengespeichert(kid, sortierung, neu=True)
@@ -2318,6 +2453,10 @@ def main():
         for p, h, r in treffer[:10]:
             print(f"{p:4d}  {r.get('size', 0) / 1e6:7.0f} MB  {r.get('title')}  {h}")
         print("verworfen:", gruende)
+        return
+    if befehl == "youtube-test":
+        db_anlegen()
+        yt_zuordnen(int(sys.argv[2]) if len(sys.argv) > 2 else 30, nur_pruefen=True)
         return
     if befehl != "dienst":
         sys.exit(__doc__)
