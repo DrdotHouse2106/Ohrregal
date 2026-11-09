@@ -63,9 +63,9 @@ Ohrregal braucht **keinen eigenen Server**. Die App spricht mit Programmen, die 
 
 ### B3 – Server-Dienst (optional)
 
-Für Wünschen, Entdecken, Stöbern, Reihen folgen, die Mitteilungen „Hörbuch/Album ist da“ und das Hörprotokoll. Die Einrichtung steht vollständig in [Dienst/README.md](Dienst/README.md). Kurz zusammengefasst:
+Für Wünschen, Entdecken, Stöbern, Reihen folgen, die Mitteilungen „Hörbuch/Album ist da“ und das Hörprotokoll. Ohne den Dienst blendet die App diese Bereiche aus. Die Einrichtung mit **Docker Compose** steht Schritt für Schritt in [Dienst/README.md](Dienst/README.md#einrichtung-mit-docker-empfohlen). Kurz zusammengefasst:
 
-1. Python-Dienst installieren und `beispiel.env` ausfüllen.
+1. `docker-compose.yml` und `beispiel.env` aus `Dienst/` übernehmen, die Werte eintragen (die README sagt, wo man sie findet) und `docker compose up -d` ausführen.
 2. Im Reverse-Proxy von Audiobookshelf **und** Navidrome den Pfad `/wunsch-api/` an den Dienst weiterleiten. Ohrregal sucht ihn unter Audiobookshelf-Adresse + `/wunsch-api`. Gibt es kein Audiobookshelf, unter der Navidrome-Adresse.
 3. Für Mitteilungen den Apple-Push-Schlüssel (.p8) aus [Teil C, Schritt C4](#c4--push-schlüssel-für-den-dienst) hinterlegen.
 

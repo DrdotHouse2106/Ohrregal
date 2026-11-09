@@ -63,6 +63,7 @@ struct Anmeldung: View {
         }
         do {
             try await sitzung.hoerbuchClient?.anmelden()
+            await sitzung.dienstPruefen()
             await Benachrichtigungen.geraetMelden()
             schliessen()
         } catch {

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MusikView: View {
     @Environment(\.client) private var client
+    @Environment(Sitzung.self) private var sitzung
 
     var body: some View {
         List {
@@ -21,7 +22,9 @@ struct MusikView: View {
             Section {
                 NavigationLink(value: Ziel.radio) { Label("Radio", systemImage: "dot.radiowaves.left.and.right") }
                 NavigationLink(value: Ziel.erkennen) { Label("Titel erkennen", systemImage: "shazam.logo") }
-                NavigationLink(value: Ziel.musikwuensche("")) { Label("Musik wünschen", systemImage: "sparkles") }
+                if sitzung.dienstDa {
+                    NavigationLink(value: Ziel.musikwuensche("")) { Label("Musik wünschen", systemImage: "sparkles") }
+                }
             }
         }
         .scrollContentBackground(.hidden)
@@ -141,6 +144,7 @@ struct AbspielKnoepfe: View {
 }
 
 struct KuenstlerView: View {
+    @Environment(Sitzung.self) private var sitzung
     @Environment(\.client) private var client
     @Environment(Player.self) private var player
     let kuenstler: Kuenstler
@@ -171,7 +175,7 @@ struct KuenstlerView: View {
                 }
             }
             .padding()
-            if !alben.isEmpty {
+            if !alben.isEmpty && sitzung.dienstDa {
                 FehltNoch(name: kuenstler.name, vorhanden: Set(alben.map(\.name)))
                     .padding(.bottom)
             }

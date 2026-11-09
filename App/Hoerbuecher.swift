@@ -25,7 +25,9 @@ struct HoerbuecherView: View {
                                 Task { try? await abs.ausWeiterhoerenEntfernen(h.id) }
                             }
                         }
-                        if let entdeckenFehler {
+                        if !sitzung.dienstDa {
+                            EmptyView()
+                        } else if let entdeckenFehler {
                             Label("Entdecken: \(entdeckenFehler)", systemImage: "exclamationmark.triangle")
                                 .font(.caption).foregroundStyle(Farben.textGedaempft).padding(.horizontal)
                         } else if !entdecken.isEmpty {
@@ -61,11 +63,13 @@ struct HoerbuecherView: View {
                             NavigationLink(value: Ziel.geladen) {
                                 Zeile(text: "Geladen", symbol: "arrow.down.circle")
                             }
-                            NavigationLink(value: Ziel.stoebern) {
-                                Zeile(text: "Stöbern", symbol: "square.grid.2x2")
-                            }
-                            NavigationLink(value: Ziel.wuensche) {
-                                Zeile(text: "Hörbuch wünschen", symbol: "sparkles")
+                            if sitzung.dienstDa {
+                                NavigationLink(value: Ziel.stoebern) {
+                                    Zeile(text: "Stöbern", symbol: "square.grid.2x2")
+                                }
+                                NavigationLink(value: Ziel.wuensche) {
+                                    Zeile(text: "Hörbuch wünschen", symbol: "sparkles")
+                                }
                             }
                         }
                         .buttonStyle(.plain)
@@ -116,7 +120,7 @@ struct HoerbuecherView: View {
             }
             neu = Array(neuAlle.prefix(20))
             do {
-                entdecken = try await abs.entdecken(neu: nachladen)
+                if sitzung.dienstDa { entdecken = try await abs.entdecken(neu: nachladen) }
                 entdeckenFehler = nil
             } catch {
                 entdeckenFehler = error.localizedDescription

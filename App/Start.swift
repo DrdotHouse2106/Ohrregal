@@ -60,10 +60,14 @@ struct StartView: View {
         .toolbar {
             Menu {
                 Button("Zugänge", systemImage: "key") { zugaengeOffen = true }
-                Button("Mitteilungen", systemImage: "bell") {
-                    Task { mitteilungen = await Benachrichtigungen.einschaltenUndPruefen() }
+                if sitzung.dienstDa {
+                    Button("Mitteilungen", systemImage: "bell") {
+                        Task { mitteilungen = await Benachrichtigungen.einschaltenUndPruefen() }
+                    }
                 }
-                Button("Was Ohrregal über mich weiß", systemImage: "person.text.rectangle") { ueberMichOffen = true }
+                if sitzung.dienstDa {
+                    Button("Was Ohrregal über mich weiß", systemImage: "person.text.rectangle") { ueberMichOffen = true }
+                }
                 Button("Abmelden", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { sitzung.abmelden() }
             } label: {
                 Image(systemName: "person.crop.circle")

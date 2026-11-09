@@ -41,6 +41,20 @@ final class Sitzung {
     var sprung: Sprung?
     /// Titel, für die gerade eine Playlist gewählt wird.
     var playlistFuer: [Titel]?
+    /// Ist ein eigener Wunsch-Dienst eingerichtet? Nur dann gibt es Wünschen, Stöbern, Entdecken, Mitteilungen und Hörprotokoll.
+    var dienstDa = UserDefaults.standard.bool(forKey: "dienstDa")
+
+    /// Fragt `/wunsch-api/status` ab (ohne Anmeldung). Ohne Antwort bleibt der letzte bekannte Stand.
+    func dienstPruefen() async {
+        guard let basis = musikwunsch?.basis else { dienstDa = false; return }
+        struct Status: Decodable { let ok: Bool }
+        do {
+            let (daten, antwort) = try await URLSession.shared.data(from: basis.appending(path: "status"))
+            let da = (antwort as? HTTPURLResponse)?.statusCode == 200 && ((try? JSONDecoder().decode(Status.self, from: daten).ok) ?? false)
+            dienstDa = da
+            UserDefaults.standard.set(da, forKey: "dienstDa")
+        } catch {}
+    }
 
     enum Sprung: Equatable {
         case hoerbuch(String)
@@ -56,8 +70,15 @@ final class Sitzung {
         }
         ladeHoerbuch()
         // Hörprotokoll geht an den eigenen Server (Wunsch-Dienst), angemeldet mit dem Navidrome-Konto.
-        Protokoll.geteilt.senden = { ereignisse in await geteilteSitzung.musikwunsch?.sendeEreignisse(ereignisse) ?? .spaeter }
-        Task { await Protokoll.geteilt.abschicken() }
+        Protokoll.geteilt.senden = { ereignisse in
+            // Ohne eigenen Dienst bleibt das Protokoll auf dem iPhone.
+            guard geteilteSitzung.dienstDa else { return .spaeter }
+            return await geteilteSitzung.musikwunsch?.sendeEreignisse(ereignisse) ?? .spaeter
+        }
+        Task {
+            await dienstPruefen()
+            await Protokoll.geteilt.abschicken()
+        }
         // Beobachter greifen im eigenen init nicht; daher hier ausdrücklich.
         geteilterPlayer.client = client
         geteilterPlayer.hoerbuchClient = hoerbuchClient

@@ -34,7 +34,7 @@ Ohrregal is not in the App Store (yet); it is distributed via **TestFlight**.
 - Make Navidrome and Audiobookshelf reachable via HTTPS through a reverse proxy.
 - One account per person, each with its **own Navidrome password** (also when using proxy authentication).
 - Internet radio stations are added in the Navidrome web UI.
-- The optional service is expected at the Audiobookshelf address + `/wunsch-api` (otherwise the Navidrome address).
+- The optional service runs with **Docker Compose** ([Dienst/README.md](Dienst/README.md#einrichtung-mit-docker-empfohlen), German) and is expected at the Audiobookshelf address + `/wunsch-api` (otherwise the Navidrome address). Without it, the app hides requests, discover, browse, notifications and the listening log.
 
 ## Part C – Build your own app
 

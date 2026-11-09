@@ -102,7 +102,7 @@ struct ErkennenView: View {
         let lieder = (try? await client.suche(titel))?.song ?? []
         treffer = lieder.filter { einfach($0.artist ?? "").contains(einfach(kuenstler)) || einfach(kuenstler).contains(einfach($0.artist ?? "-")) }
         if treffer.isEmpty {
-            lidarr = (try? await sitzung.musikwunsch?.suche("\(kuenstler) \(titel)")) ?? []
+            if sitzung.dienstDa { lidarr = (try? await sitzung.musikwunsch?.suche("\(kuenstler) \(titel)")) ?? [] }
         }
     }
 }
