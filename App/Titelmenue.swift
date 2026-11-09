@@ -17,6 +17,13 @@ struct TitelMenue: View {
             Protokoll.geteilt.merke("warteschlange", titel: titel)
             player.anhaengen([titel])
         }
+        Button(Mediathek.geteilt.enthaelt(titel) ? "Aus der Mediathek entfernen" : "Zur Mediathek hinzufügen",
+               systemImage: Mediathek.geteilt.enthaelt(titel) ? "minus.circle" : "plus.circle") {
+            Task {
+                if Mediathek.geteilt.enthaelt(titel) { await Mediathek.geteilt.entfernen([titel], client) }
+                else { await Mediathek.geteilt.hinzufuegen([titel], client) }
+            }
+        }
         Button(Favoriten.geteilt.ist(titel) ? "Gefällt mir nicht mehr" : "Gefällt mir",
                systemImage: Favoriten.geteilt.ist(titel) ? "heart.slash" : "heart") {
             Favoriten.geteilt.umschalten(titel, client)

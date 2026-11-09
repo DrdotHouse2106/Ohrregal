@@ -2,19 +2,32 @@ import Kern
 import SwiftUI
 
 struct MusikView: View {
+    @Environment(\.client) private var client
+
     var body: some View {
         List {
-            NavigationLink(value: Ziel.kuenstler) { Label("Künstler", systemImage: "music.mic") }
-            NavigationLink(value: Ziel.alben) { Label("Alben", systemImage: "square.stack") }
-            NavigationLink(value: Ziel.playlists) { Label("Playlists", systemImage: "music.note.list") }
-            NavigationLink(value: Ziel.favoriten) { Label("Gefällt mir", systemImage: "heart") }
-            NavigationLink(value: Ziel.radio) { Label("Radio", systemImage: "dot.radiowaves.left.and.right") }
-            NavigationLink(value: Ziel.geladen) { Label("Geladen", systemImage: "arrow.down.circle") }
-            NavigationLink(value: Ziel.musikwuensche("")) { Label("Musik wünschen", systemImage: "sparkles") }
+            Section("Meine Mediathek") {
+                NavigationLink(value: Ziel.mediathek(.titel)) { Label("Titel", systemImage: "music.note") }
+                NavigationLink(value: Ziel.mediathek(.alben)) { Label("Alben", systemImage: "square.stack") }
+                NavigationLink(value: Ziel.mediathek(.kuenstler)) { Label("Künstler", systemImage: "music.mic") }
+                NavigationLink(value: Ziel.playlists) { Label("Playlists", systemImage: "music.note.list") }
+                NavigationLink(value: Ziel.favoriten) { Label("Gefällt mir", systemImage: "heart") }
+                NavigationLink(value: Ziel.geladen) { Label("Geladen", systemImage: "arrow.down.circle") }
+            }
+            Section("Alles auf dem Server") {
+                NavigationLink(value: Ziel.kuenstler) { Label("Künstler", systemImage: "music.mic") }
+                NavigationLink(value: Ziel.alben) { Label("Alben", systemImage: "square.stack") }
+            }
+            Section {
+                NavigationLink(value: Ziel.radio) { Label("Radio", systemImage: "dot.radiowaves.left.and.right") }
+                NavigationLink(value: Ziel.erkennen) { Label("Titel erkennen", systemImage: "shazam.logo") }
+                NavigationLink(value: Ziel.musikwuensche("")) { Label("Musik wünschen", systemImage: "sparkles") }
+            }
         }
         .scrollContentBackground(.hidden)
         .background(Farben.hintergrund)
         .navigationTitle("Musik")
+        .task { if !Mediathek.geteilt.geladen { await Mediathek.geteilt.laden(client) } }
     }
 }
 
@@ -105,6 +118,7 @@ struct AbspielKnoepfe: View {
 
     var body: some View {
         HStack(spacing: 14) {
+            MediathekKnopf(titel: titel)
             LadenKnopf(titel: titel)
             Button { player.spiele(titel, quelle: "Album/Playlist") } label: {
                 Label("Abspielen", systemImage: "play.fill").frame(maxWidth: .infinity)
@@ -175,7 +189,8 @@ struct PlaylistListe: View {
 
     var body: some View {
         List {
-            ForEach(playlists) { p in
+            // „Meine Mediathek“ ist intern eine Playlist und steht unter Mediathek.
+            ForEach(playlists.filter { $0.name != Mediathek.name }) { p in
                 NavigationLink(value: p) {
                     HStack(spacing: 12) {
                         Cover(id: p.coverArt, groesse: 52)
