@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 2.3.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.4.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 2.3.0. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.3.0"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.4.0"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -170,6 +170,32 @@ Liefert `{"kategorien": [{"id": "…", "name": "…", "unter": [{"id": "…", "n
 Liefert `{"treffer": [ … ]}` mit höchstens 30 Treffern, Format wie bei `/entdecken`. Der grund lautet „Bestseller in <Kategorie>“ bzw. „Neu in <Kategorie>“. Es kommen nur deutsche, schon erschienene Titel, keine Sammelboxen, keine Erotik außerhalb der Kategorie Erotik. Was in ABS liegt oder gewünscht ist, fällt raus. Zwischengespeichert wird 6 Stunden je Kategorie und Sortierung, `neu=1` umgeht den Zwischenspeicher.
 Fehler: `400 ungueltig`, `404 unbekannt` (Kategorie gibt es nicht), `502 audible_nicht_erreichbar`.
 Hinweis: „neu“ braucht beim ersten Aufruf bis zu 5 Sekunden, weil Audible zuerst Vorbestellungen liefert.
+
+## Musik wünschen über Lidarr (ab 2.4.0)
+
+Lidarr bleibt im Heimnetz, sein Schlüssel bleibt auf dem Server.
+
+**Auth** wahlweise wie bisher mit ABS-Token oder mit der Navidrome-Anmeldung: Kopfzeilen `X-Subsonic-U`, `X-Subsonic-T`, `X-Subsonic-S` (Token = md5(Passwort+Salt)). Der Dienst prüft sie mit `/rest/ping` bei Navidrome und speichert das 5 Minuten zwischen. Benutzer ist dann `nd:<name>`. Beide Wege gelten für alle Endpunkte, auch `/geraet`. Erreichbar ist der Dienst unter jeder Domain mit `/wunsch-api`-Weiterleitung.
+
+**Regeln:** Es gibt nur Alben und Singles ohne Sekundärtypen (keine EPs, Live-Alben, Compilations oder Remixe). Ein neuer Künstler wird ohne Diskografie angelegt (`monitor none`, `monitorNewItems none`). Überwacht wird nur das gewünschte Album. „Folgen“ bedeutet: nur neue Alben (`monitorNewItems new`).
+
+**Album:**
+```json
+{"mbid": "<foreignAlbumId>", "titel": "…", "kuenstler": "…", "kuenstlerMbid": "…", "jahr": "2003",
+ "typ": "Album" | "Single", "titelAnzahl": 11, "cover": "https://…", "status": "da" | "gewuenscht" | "laedt" | "fehlt"}
+```
+`gewuenscht` heißt: in Lidarr überwacht, aber noch nicht vollständig. Das gilt auch, wenn das Album schon vor diesem Dienst überwacht war.
+
+- `GET /musik/suche?q=<Text>` liefert `{"alben": [Album]}` aus Lidarrs album/lookup. Eine leere Liste heißt „Bei Lidarr nicht gefunden“.
+- `GET /musik/kuenstler?name=<Name>[&mbid=<mbid>]` liefert `{"kuenstler": {name, mbid, folgt, inLidarr}, "alben": [Album]}`, neueste zuerst. Ist der Künstler in Lidarr, kommen die Alben mit Stand aus Lidarr. Sonst kommen sie von MusicBrainz, dann alle mit Status `fehlt`/`gewuenscht` und ohne titelAnzahl. Unbekannter Künstler: `404 kein_treffer`.
+- `POST /musik/wunsch` mit `{mbid, kuenstlerMbid?, titel?, kuenstler?}` liefert `201` Musikwunsch, `200` (schon gewünscht), `409 schon_vorhanden`, `404 kein_treffer` oder `400 ungueltig`. Ist der Künstler neu, kann die Antwort bis zu 60 s dauern, weil Lidarr erst seine Alben lädt.
+- `GET /musik/wunsch` liefert `{"wuensche": [{id, mbid, titel, kuenstler, cover, status, hinweis?, erstellt, aktualisiert}]}`. Die Status sind dieselben wie bei Hörbüchern. `nicht_gefunden` heißt: 30 Minuten nach der Suche gab es keinen Download, nachts wird neu gesucht.
+- `DELETE /musik/wunsch/{id}` liefert `204`. Wollen keine anderen Benutzer das Album, nimmt der Dienst es aus der Überwachung. Dateien werden nie gelöscht.
+- `POST /musik/folgen` mit `{kuenstlerMbid, name?}` liefert `201 {"kuenstlerMbid", "folgt": true}`. `DELETE /musik/folgen/{kuenstlerMbid}` liefert `204`.
+- `GET /musik/neuerscheinungen` liefert `{"alben": [Album + "erscheint": "JJJJ-MM-TT"]}`: Alben und Singles verfolgter Künstler, 30 Tage zurück und 90 Tage voraus, nach Datum sortiert.
+- Push: „Album ist da“ mit Text „<Titel> – <Künstler>“ und den Zusatzfeldern `musikWunschId` und `mbid`.
+- Fehler bei Störungen: `502 lidarr_nicht_erreichbar`.
+- Gesucht werden höchstens 3 Alben pro Minute.
 
 ## Ruhezeiten und Vorrat (ab 2.3.0)
 

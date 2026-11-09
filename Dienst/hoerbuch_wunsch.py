@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.3.0"
+VERSION = "2.4.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -84,6 +84,12 @@ class Einstellungen:
         self.nacht_von = int(env("NACHT_VON", "3"))
         self.nacht_bis = int(env("NACHT_BIS", "6"))
         self.zeitzone = env("ZEITZONE", "Europe/Berlin")
+        self.lidarr = env("LIDARR_URL", "").rstrip("/")
+        self.lidarr_key = env("LIDARR_KEY", "")
+        self.lidarr_ordner = env("LIDARR_ORDNER", "")
+        self.lidarr_qualitaet = int(env("LIDARR_QUALITAETSPROFIL", "1"))
+        self.lidarr_metadaten = int(env("LIDARR_METADATENPROFIL", "1"))
+        self.navidrome = env("NAVIDROME_URL", "").rstrip("/")
         self.vorrat = env("WUNSCH_VORRAT", os.path.join(os.path.dirname(self.datenbank), "vorrat.json"))
         self.parallel = int(env("WUNSCH_PARALLEL", "2"))
         self.takt = int(env("WUNSCH_TAKT_SEKUNDEN", "60"))
@@ -140,6 +146,11 @@ def db_anlegen():
           id TEXT PRIMARY KEY, benutzer TEXT NOT NULL, reiheAsin TEXT NOT NULL,
           reihe TEXT NOT NULL, autor TEXT, sprache TEXT, erstellt TEXT NOT NULL,
           geprueft TEXT, hinweis TEXT, zurueckgezogen INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS musik_wunsch (
+          id TEXT PRIMARY KEY, benutzer TEXT NOT NULL, mbid TEXT NOT NULL, kuenstlerMbid TEXT,
+          titel TEXT, kuenstler TEXT, cover TEXT, status TEXT NOT NULL, hinweis TEXT,
+          lidarrId INTEGER, gesucht TEXT, erstellt TEXT NOT NULL, aktualisiert TEXT NOT NULL,
+          zurueckgezogen INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS reihe_teil (
           reihe TEXT NOT NULL, asin TEXT NOT NULL, teil TEXT, titel TEXT,
           inAbs INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (reihe, asin));
@@ -1269,6 +1280,354 @@ def stoebern_zwischengespeichert(kid, sortierung, neu=False):
     return t
 
 
+# ---------------------------------------------------------------- Musik wünschen (Lidarr)
+
+def push_an(benutzer, titel, text, extra):
+    """APNs-Nachricht an alle Geräte dieser Benutzer."""
+    if not (E.apns_schluessel and E.apns_key_id and E.apns_team_id and E.apns_topic) or not benutzer:
+        return
+    with db() as v:
+        geraete = v.execute("SELECT token, umgebung FROM geraet WHERE benutzer IN (%s)"
+                            % ",".join("?" * len(benutzer)), benutzer).fetchall()
+    nutzlast = {"aps": {"alert": {"title": titel, "body": text}, "sound": "default"}, **extra}
+    for token, umgebung in geraete:
+        try:
+            code, grund = apns_senden(token, umgebung, nutzlast)
+        except Exception as f:
+            log("APNs fehlgeschlagen:", f)
+            continue
+        if code == 410 or grund in ("BadDeviceToken", "Unregistered", "DeviceTokenNotForTopic"):
+            with DB_SPERRE, db() as v:
+                v.execute("DELETE FROM geraet WHERE token=?", (token,))
+        elif code != 200:
+            log(f"APNs {code} {grund}")
+
+
+def lidarr(pfad, daten=None, methode=None, **param):
+    teile = []
+    for k, w in param.items():
+        for x in (w if isinstance(w, list) else [w]):
+            teile.append((k, x))
+    url = f"{E.lidarr}/api/v1/{pfad}" + ("?" + urllib.parse.urlencode(teile) if teile else "")
+    kopf = {"X-Api-Key": E.lidarr_key, "Content-Type": "application/json"}
+    roh = hole(url, json.dumps(daten).encode() if daten is not None else None, kopf, zeit=120, methode=methode)
+    return json.loads(roh) if roh else None
+
+
+MUSIK_TYPEN = ("Album", "Single")  # Regel des Benutzers: nur Alben und Singles
+MB_SPERRE = threading.Lock()
+MB_ZEIT = [0.0]
+
+
+def musicbrainz(pfad, **param):
+    """MusicBrainz höchstens 1 Anfrage pro Sekunde, allgemeiner Client-Name ohne Kontaktdaten."""
+    with MB_SPERRE:
+        warte = 1.1 - (time.time() - MB_ZEIT[0])
+        if warte > 0:
+            time.sleep(warte)
+        MB_ZEIT[0] = time.time()
+    param["fmt"] = "json"
+    url = f"https://musicbrainz.org/ws/2/{pfad}?" + urllib.parse.urlencode(param)
+    return json.loads(hole(url, kopf={"User-Agent": f"Hoerbuchwunsch/{VERSION} (+https://github.com/DrdotHouse2106/Ohrregal)",
+                                      "Accept": "application/json"}, zeit=30))
+
+
+def album_cover(a):
+    if a.get("remoteCover"):
+        return a["remoteCover"]
+    for b in a.get("images") or []:
+        if b.get("coverType") == "cover":
+            return b.get("remoteUrl") or b.get("url")
+    return None
+
+
+def album_status(a, queue_ids, gewuenscht_mbids):
+    st = a.get("statistics") or {}
+    if st.get("trackFileCount") and st.get("trackFileCount", 0) >= (st.get("totalTrackCount") or st.get("trackCount") or 1):
+        return "da"
+    if a.get("id") in queue_ids:
+        return "laedt"
+    if a.get("foreignAlbumId") in gewuenscht_mbids or (a.get("id") and a.get("monitored")):
+        return "gewuenscht"
+    return "fehlt"
+
+
+def album_json(a, queue_ids=(), gewuenscht=()):
+    kuenstler = a.get("artist") or {}
+    return {"mbid": a.get("foreignAlbumId"), "titel": a.get("title"),
+            "kuenstler": kuenstler.get("artistName") or a.get("artistName"),
+            "kuenstlerMbid": kuenstler.get("foreignArtistId"),
+            "jahr": (a.get("releaseDate") or "")[:4] or None, "typ": a.get("albumType"),
+            "titelAnzahl": (a.get("statistics") or {}).get("totalTrackCount") or
+            sum(len(r.get("tracks") or []) or (r.get("trackCount") or 0) for r in (a.get("releases") or [])[:1]) or None,
+            "cover": album_cover(a), "status": album_status(a, queue_ids, gewuenscht)}
+
+
+def lidarr_queue_ids():
+    try:
+        d = lidarr("queue", pageSize=500)
+        return {x.get("albumId") for x in d.get("records") or [] if x.get("albumId")}
+    except Exception:
+        return set()
+
+
+def musik_gewuenscht():
+    with db() as v:
+        return {z[0] for z in v.execute("SELECT mbid FROM musik_wunsch WHERE zurueckgezogen=0 AND status!='da'")}
+
+
+def lidarr_album(mbid):
+    a = lidarr("album", foreignAlbumId=mbid)
+    return a[0] if a else None
+
+
+def musik_suche(q):
+    roh = lidarr("album/lookup", term=q) or []
+    queue, gew = lidarr_queue_ids(), musik_gewuenscht()
+    alben = []
+    for a in roh:
+        if a.get("albumType") not in MUSIK_TYPEN or a.get("secondaryTypes"):
+            continue
+        if a.get("id"):  # schon in Lidarr: echten Stand mit Statistik holen
+            try:
+                a = {**lidarr(f"album/{a['id']}"), "remoteCover": album_cover(a)}
+            except Exception:
+                pass
+        alben.append(album_json(a, queue, gew))
+    return alben
+
+
+def lidarr_kuenstler(mbid):
+    a = lidarr("artist", mbId=mbid) or []
+    a = [x for x in a if x.get("foreignArtistId") == mbid]
+    return a[0] if a else None
+
+
+def musik_kuenstler(name, mbid):
+    if not mbid:
+        treffer = lidarr("artist/lookup", term=name) or []
+        if not treffer:
+            return None
+        mbid = treffer[0].get("foreignArtistId")
+        name = treffer[0].get("artistName") or name
+    k = lidarr_kuenstler(mbid)
+    queue, gew = lidarr_queue_ids(), musik_gewuenscht()
+    alben = []
+    if k:
+        for a in lidarr("album", artistId=k["id"]) or []:
+            if a.get("albumType") in MUSIK_TYPEN and not a.get("secondaryTypes"):
+                alben.append(album_json({**a, "artist": k}, queue, gew))
+        info = {"name": k["artistName"], "mbid": mbid, "inLidarr": True,
+                "folgt": k.get("monitored") and k.get("monitorNewItems") in ("all", "new")}
+    else:
+        rg, offset = [], 0
+        while True:
+            d = musicbrainz("release-group", artist=mbid, type="album|single", limit=100, offset=offset)
+            rg += d.get("release-groups") or []
+            offset += 100
+            if offset >= (d.get("release-group-count") or 0) or offset >= 400:
+                break
+        for g in rg:
+            if g.get("secondary-types"):
+                continue
+            alben.append({"mbid": g["id"], "titel": g.get("title"), "kuenstler": name, "kuenstlerMbid": mbid,
+                          "jahr": (g.get("first-release-date") or "")[:4] or None, "typ": g.get("primary-type"),
+                          "titelAnzahl": None, "cover": f"https://coverartarchive.org/release-group/{g['id']}/front-500",
+                          "status": "gewuenscht" if g["id"] in gew else "fehlt"})
+        info = {"name": name, "mbid": mbid, "inLidarr": False, "folgt": False}
+    alben.sort(key=lambda x: x["jahr"] or "", reverse=True)
+    return {"kuenstler": info, "alben": alben}
+
+
+def kuenstler_anlegen(mbid, neue_alben):
+    """Künstler ohne Diskografie anlegen: nichts überwacht, nur auf Wunsch neue Alben."""
+    treffer = lidarr("artist/lookup", term=f"lidarr:{mbid}") or []
+    if not treffer:
+        raise RuntimeError("Künstler bei Lidarr nicht gefunden")
+    k = treffer[0]
+    k.update(qualityProfileId=E.lidarr_qualitaet, metadataProfileId=E.lidarr_metadaten,
+             rootFolderPath=E.lidarr_ordner, monitored=True,
+             monitorNewItems="new" if neue_alben else "none",
+             addOptions={"monitor": "none", "searchForMissingAlbums": False})
+    return lidarr("artist", k, methode="POST")
+
+
+def musik_wunsch_anlegen(name, d):
+    mbid = str(d.get("mbid") or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f-]{36}", mbid):
+        return 400, {"fehler": "ungueltig", "text": "mbid (MusicBrainz-ID des Albums) ist Pflicht"}
+    with DB_SPERRE, db() as v:
+        z = v.execute("SELECT * FROM musik_wunsch WHERE mbid=? AND benutzer=? AND zurueckgezogen=0",
+                      (mbid, name)).fetchone()
+    if z:
+        return 200, musik_wunsch_json(z)
+    a = lidarr_album(mbid)
+    if a and album_status(a, (), ()) == "da":
+        return 409, {"fehler": "schon_vorhanden", "text": "Das Album ist schon in der Bibliothek"}
+    if not a:
+        km = str(d.get("kuenstlerMbid") or "").strip().lower()
+        if not km:
+            treffer = [x for x in lidarr("album/lookup", term=f"lidarr:{mbid}") or [] if x.get("foreignAlbumId") == mbid]
+            km = ((treffer[0].get("artist") or {}).get("foreignArtistId") if treffer else "") or ""
+        if not km:
+            return 404, {"fehler": "kein_treffer", "text": "Bei Lidarr nicht gefunden"}
+        if not lidarr_kuenstler(km):
+            kuenstler_anlegen(km, neue_alben=False)
+            for _ in range(30):  # Lidarr lädt die Alben des neuen Künstlers nach
+                time.sleep(2)
+                a = lidarr_album(mbid)
+                if a:
+                    break
+        if not a:
+            treffer = [x for x in lidarr("album/lookup", term=f"lidarr:{mbid}") or [] if x.get("foreignAlbumId") == mbid]
+            if not treffer:
+                return 404, {"fehler": "kein_treffer", "text": "Bei Lidarr nicht gefunden"}
+            k = lidarr_kuenstler(km)
+            neu = {**treffer[0], "artistId": k["id"], "artist": k, "monitored": True,
+                   "addOptions": {"searchForNewAlbum": False}}
+            a = lidarr("album", neu, methode="POST")
+    lidarr("album/monitor", {"albumIds": [a["id"]], "monitored": True}, methode="PUT")
+    wid, t = "m_" + secrets.token_hex(4), jetzt().isoformat()
+    k = a.get("artist") or {}
+    with DB_SPERRE, db() as v:
+        v.execute("INSERT INTO musik_wunsch (id, benutzer, mbid, kuenstlerMbid, titel, kuenstler, cover, status, "
+                  "lidarrId, erstellt, aktualisiert) VALUES (?,?,?,?,?,?,?,'gewuenscht',?,?,?)",
+                  (wid, name, mbid, k.get("foreignArtistId") or d.get("kuenstlerMbid"),
+                   a.get("title") or d.get("titel"), k.get("artistName") or d.get("kuenstler"),
+                   album_cover(a), a["id"], t, t))
+        z = v.execute("SELECT * FROM musik_wunsch WHERE id=?", (wid,)).fetchone()
+    log(f"{wid}: Album gewünscht von {name}")
+    WECKER.set()
+    return 201, musik_wunsch_json(z)
+
+
+def musik_wunsch_json(z):
+    d = {k: z[k] for k in ("id", "mbid", "titel", "kuenstler", "cover", "status")}
+    if z["hinweis"]:
+        d["hinweis"] = bereinigt(z["hinweis"])
+    d["erstellt"] = iso(datetime.fromisoformat(z["erstellt"]))
+    d["aktualisiert"] = iso(datetime.fromisoformat(z["aktualisiert"]))
+    return d
+
+
+def musik_setze(wid, **werte):
+    werte["aktualisiert"] = jetzt().isoformat()
+    with DB_SPERRE, db() as v:
+        v.execute("UPDATE musik_wunsch SET " + ", ".join(f"{k}=?" for k in werte) + " WHERE id=?",
+                  (*werte.values(), wid))
+
+
+def musik_arbeiten():
+    """Stand der Musik-Wünsche nachführen; Suchen gedrosselt, Neuversuche nur in der Ruhezeit."""
+    if not (E.lidarr and E.lidarr_key):
+        return
+    with db() as v:
+        offen = v.execute("SELECT * FROM musik_wunsch WHERE zurueckgezogen=0 AND status!='da'").fetchall()
+    if not offen:
+        return
+    queue = {}
+    try:
+        for x in lidarr("queue", pageSize=500).get("records") or []:
+            if x.get("albumId"):
+                queue[x["albumId"]] = x
+    except Exception as f:
+        log("Lidarr-Warteschlange nicht abrufbar:", f)
+        return
+    suchen = 0
+    for w in offen:
+        try:
+            a = lidarr(f"album/{w['lidarrId']}")
+        except urllib.error.HTTPError as f:
+            if f.code == 404:
+                musik_setze(w["id"], status="fehler", hinweis="Album ist nicht mehr in Lidarr")
+            continue
+        except Exception:
+            continue
+        if album_status(a, (), ()) == "da":
+            musik_setze(w["id"], status="da", hinweis=None)
+            push_an([w["benutzer"]], "Album ist da", f"{w['titel']} – {w['kuenstler']}",
+                    {"musikWunschId": w["id"], "mbid": w["mbid"]})
+            log(f"{w['id']}: Album da")
+            continue
+        q = queue.get(w["lidarrId"])
+        if q:
+            st = "einsortieren" if (q.get("trackedDownloadState") or "").startswith("import") else "laedt"
+            hinweis = None
+            if q.get("trackedDownloadState") == "importFailed":
+                st, hinweis = "fehler", "Import in Lidarr fehlgeschlagen"
+            if st != w["status"] or hinweis != w["hinweis"]:
+                musik_setze(w["id"], status=st, hinweis=hinweis)
+            continue
+        faellig = not w["gesucht"] or (
+            ruhig() and datetime.fromisoformat(w["gesucht"]) < jetzt() - timedelta(hours=24))
+        if faellig and suchen < 3:
+            lidarr("command", {"name": "AlbumSearch", "albumIds": [w["lidarrId"]]}, methode="POST")
+            musik_setze(w["id"], gesucht=jetzt().isoformat(),
+                        status="gewuenscht" if not w["gesucht"] else w["status"])
+            suchen += 1
+        elif w["gesucht"] and w["status"] in ("gewuenscht", "laedt") and \
+                datetime.fromisoformat(w["gesucht"]) < jetzt() - timedelta(minutes=30):
+            musik_setze(w["id"], status="nicht_gefunden", hinweis="Kein passender Download gefunden, sucht nachts erneut")
+
+
+def musik_folgen(name, d, folgen):
+    km = str(d.get("kuenstlerMbid") or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f-]{36}", km):
+        return 400, {"fehler": "ungueltig", "text": "kuenstlerMbid ist Pflicht"}
+    k = lidarr_kuenstler(km)
+    if not k:
+        if not folgen:
+            return 204, None
+        kuenstler_anlegen(km, neue_alben=True)
+        log(f"Künstler neu angelegt, folgt neuen Alben ({name})")
+        return 201, {"kuenstlerMbid": km, "folgt": True}
+    k.update(monitored=True, monitorNewItems="new" if folgen else "none")
+    lidarr(f"artist/{k['id']}", k, methode="PUT")
+    log(f"Künstler {'folgen' if folgen else 'nicht mehr folgen'} ({name})")
+    return (201, {"kuenstlerMbid": km, "folgt": True}) if folgen else (204, None)
+
+
+def musik_neuerscheinungen():
+    heute = jetzt().date()
+    ein = lidarr("calendar", start=(heute - timedelta(days=30)).isoformat(),
+                 end=(heute + timedelta(days=90)).isoformat(), unmonitored="true", includeArtist="true") or []
+    queue, gew = lidarr_queue_ids(), musik_gewuenscht()
+    alben = []
+    for a in ein:
+        if a.get("albumType") in MUSIK_TYPEN and not a.get("secondaryTypes") \
+                and (a.get("artist") or {}).get("monitorNewItems") in ("all", "new"):
+            j = album_json(a, queue, gew)
+            j["erscheint"] = (a.get("releaseDate") or "")[:10] or None
+            alben.append(j)
+    alben.sort(key=lambda x: x["erscheint"] or "")
+    return alben
+
+
+ND_CACHE = {}
+
+
+def navidrome_benutzer(u, t, s_):
+    if not (E.navidrome and u and t and s_):
+        return None
+    h = hash_token(f"{u}|{t}|{s_}")
+    z = ND_CACHE.get(h)
+    if z and z[1] > time.time():
+        return z[0]
+    try:
+        d = json.loads(hole(f"{E.navidrome}/rest/ping?" + urllib.parse.urlencode(
+            dict(u=u, t=t, s=s_, v="1.16.1", c="hoerbuchwunsch", f="json")), zeit=10))
+    except Exception as f:
+        log("Navidrome nicht erreichbar:", f)
+        return None
+    if (d.get("subsonic-response") or {}).get("status") != "ok":
+        return None
+    name = "nd:" + u
+    if len(ND_CACHE) > 1000:
+        ND_CACHE.clear()
+    ND_CACHE[h] = (name, time.time() + 300)
+    return name
+
+
 # ---------------------------------------------------------------- Ruhezeiten und Vorrat
 
 LEERLAUF = {"zeit": 0, "wert": True, "grund": ""}
@@ -1413,6 +1772,10 @@ def arbeiter():
         except Exception:
             log("Reihen-Prüfung fehlgeschlagen:", traceback.format_exc())
         try:
+            musik_arbeiten()
+        except Exception:
+            log("Musik-Wünsche fehlgeschlagen:", traceback.format_exc())
+        try:
             vorrechnen()
         except Exception:
             log("Vorrechnen fehlgeschlagen:", traceback.format_exc())
@@ -1468,6 +1831,9 @@ class Schnittstelle(BaseHTTPRequestHandler):
             return None
         kopf = self.headers.get("Authorization", "")
         name = benutzer_zu_token(kopf[7:].strip()) if kopf.startswith("Bearer ") else None
+        if not name and self.headers.get("X-Subsonic-U"):
+            name = navidrome_benutzer(self.headers.get("X-Subsonic-U"), self.headers.get("X-Subsonic-T"),
+                                      self.headers.get("X-Subsonic-S"))
         if not name:
             fehlversuch(ip)
             self.fehler(401, "nicht_angemeldet", "Token fehlt oder ist ungültig")
@@ -1495,6 +1861,11 @@ class Schnittstelle(BaseHTTPRequestHandler):
         teile, abfrage = self.pfad()
         if teile == ["status"]:
             return self.antworte(200, {"ok": True, "version": VERSION})
+        if teile[:1] == ["musik"]:
+            name = self.benutzer()
+            if not name:
+                return
+            return self.musik_get(teile, abfrage, name)
         if teile in (["kategorien"], ["stoebern"]):
             name = self.benutzer()
             if not name:
@@ -1560,6 +1931,22 @@ class Schnittstelle(BaseHTTPRequestHandler):
             return
         if teile == ["reihe"]:
             return self.reihe_folgen(name)
+        if teile[:1] == ["musik"]:
+            try:
+                d = self.koerper()
+            except (ValueError, json.JSONDecodeError):
+                return self.fehler(400, "ungueltig", "Kein gültiges JSON-Objekt")
+            try:
+                if teile == ["musik", "wunsch"]:
+                    code, daten = musik_wunsch_anlegen(name, d)
+                elif teile == ["musik", "folgen"]:
+                    code, daten = musik_folgen(name, d, True)
+                else:
+                    return self.fehler(404, "unbekannt", "Diesen Pfad gibt es nicht")
+            except Exception:
+                log("Musik fehlgeschlagen:", traceback.format_exc())
+                return self.fehler(502, "lidarr_nicht_erreichbar", "Lidarr ist gerade nicht erreichbar")
+            return self.antworte(code, daten)
         if teile == ["geraet"]:
             try:
                 d = self.koerper()
@@ -1625,6 +2012,33 @@ class Schnittstelle(BaseHTTPRequestHandler):
         WECKER.set()
         self.antworte(201, als_json(z))
 
+    def musik_get(self, teile, abfrage, name):
+        q = lambda k: (abfrage.get(k, [""])[0] or "").strip()
+        try:
+            if teile == ["musik", "suche"]:
+                if len(q("q")) < 2:
+                    return self.fehler(400, "ungueltig", "q (mindestens 2 Zeichen) nötig")
+                alben = musik_suche(q("q")[:200])
+                return self.antworte(200, {"alben": alben})
+            if teile == ["musik", "kuenstler"]:
+                if not q("name") and not q("mbid"):
+                    return self.fehler(400, "ungueltig", "name oder mbid nötig")
+                d = musik_kuenstler(q("name")[:200], q("mbid").lower() or None)
+                if not d:
+                    return self.fehler(404, "kein_treffer", "Bei Lidarr nicht gefunden")
+                return self.antworte(200, d)
+            if teile == ["musik", "neuerscheinungen"]:
+                return self.antworte(200, {"alben": musik_neuerscheinungen()})
+            if teile == ["musik", "wunsch"]:
+                with db() as v:
+                    zeilen = v.execute("SELECT * FROM musik_wunsch WHERE benutzer=? AND zurueckgezogen=0 "
+                                       "ORDER BY erstellt DESC", (name,)).fetchall()
+                return self.antworte(200, {"wuensche": [musik_wunsch_json(z) for z in zeilen]})
+        except Exception:
+            log("Musik fehlgeschlagen:", traceback.format_exc())
+            return self.fehler(502, "lidarr_nicht_erreichbar", "Lidarr bzw. MusicBrainz gerade nicht erreichbar")
+        return self.fehler(404, "unbekannt", "Diesen Pfad gibt es nicht")
+
     def reihe_folgen(self, name):
         try:
             d = self.koerper()
@@ -1664,6 +2078,30 @@ class Schnittstelle(BaseHTTPRequestHandler):
         name = self.benutzer()
         if not name:
             return
+        if len(teile) == 3 and teile[:2] == ["musik", "folgen"]:
+            try:
+                code, daten = musik_folgen(name, {"kuenstlerMbid": teile[2]}, False)
+            except Exception:
+                log("Musik fehlgeschlagen:", traceback.format_exc())
+                return self.fehler(502, "lidarr_nicht_erreichbar", "Lidarr ist gerade nicht erreichbar")
+            return self.antworte(code, daten)
+        if len(teile) == 3 and teile[:2] == ["musik", "wunsch"]:
+            with DB_SPERRE, db() as v:
+                z = v.execute("SELECT * FROM musik_wunsch WHERE id=? AND benutzer=? AND zurueckgezogen=0",
+                              (teile[2], name)).fetchone()
+                if not z:
+                    return self.fehler(404, "unbekannt", "Diesen Wunsch gibt es nicht")
+                v.execute("UPDATE musik_wunsch SET zurueckgezogen=1, aktualisiert=? WHERE id=?",
+                          (jetzt().isoformat(), z["id"]))
+                andere = v.execute("SELECT count(*) FROM musik_wunsch WHERE lidarrId=? AND zurueckgezogen=0",
+                                   (z["lidarrId"],)).fetchone()[0]
+            if z["status"] != "da" and not andere:
+                try:  # nur aus der Überwachung nehmen, Dateien bleiben immer liegen
+                    lidarr("album/monitor", {"albumIds": [z["lidarrId"]], "monitored": False}, methode="PUT")
+                except Exception as f:
+                    log(f"{z['id']}: Überwachung nicht beendet:", f)
+            log(f"{z['id']}: Musikwunsch zurückgezogen von {name}")
+            return self.antworte(204)
         if len(teile) == 2 and teile[0] == "reihe":
             with DB_SPERRE, db() as v:
                 v.execute("UPDATE reihe SET zurueckgezogen=1 WHERE id=? AND benutzer=?", (teile[1], name))
