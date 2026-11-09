@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.5.1"
+VERSION = "2.5.2"
 
 
 def env(name, standard=None, pflicht=False):
@@ -1679,12 +1679,20 @@ def ereignisse_speichern(name, liste):
         if not isinstance(e, dict):
             return "Ereignis muss ein Objekt sein"
         uid, typ, z = str(e.get("uid") or "")[:80], e.get("typ"), zeit_lesen(e.get("zeit"))
-        if not uid or typ not in EREIGNIS_TYPEN or not z or e.get("art") not in ("musik", "hoerbuch", None):
+        # Neue typ-Werte der App werden angenommen, solange sie wie ein Schlüssel aussehen
+        if not uid or not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", str(typ or "")) or not z \
+                or e.get("art") not in ("musik", "hoerbuch", None):
             return f"ungültiges Ereignis {uid or '?'}: uid, typ, zeit und art prüfen"
-        d = {k: str(e[k])[:300] for k in EREIGNIS_TEXT if e.get(k) not in (None, "")}
-        for k in ("position", "dauer"):
-            if isinstance(e.get(k), (int, float)):
-                d[k] = round(float(e[k]), 1)
+        d = {}
+        for k, w in e.items():
+            if k in ("uid", "typ", "zeit", "art") or not re.fullmatch(r"[A-Za-z][A-Za-z0-9]{0,29}", k) or len(d) >= 25:
+                continue
+            if isinstance(w, bool):
+                d[k] = w
+            elif isinstance(w, (int, float)):
+                d[k] = round(float(w), 1)
+            elif isinstance(w, str) and w:
+                d[k] = w[:300]
         zeilen.append((name, uid, typ, z.isoformat(), e.get("art"), json.dumps(d, ensure_ascii=False), jetzt_))
     with DB_SPERRE, db() as v:
         v.executemany("INSERT OR IGNORE INTO ereignis VALUES (?,?,?,?,?,?,?)", zeilen)

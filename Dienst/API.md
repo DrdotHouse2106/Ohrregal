@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 2.5.1. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.5.2. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 2.5.1. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.5.1"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.5.2"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -210,7 +210,7 @@ Ereignis:
  "id": "…", "titel": "…", "kuenstler": "…", "kuenstlerId": "…", "albumId": "…",
  "position": 40, "dauer": 200, "wert": "…", "quelle": "…", "geraet": "iPhone", "ausgabe": "Kopfhörer"}
 ```
-Pflicht sind `uid`, `typ` und `zeit`. Erlaubte `typ`: start, ende, uebersprungen, gespult, pause, gefaellt, gefaellt_nicht, playlist, als_naechstes, warteschlange, radio, suche, tempo, schlaftimer, hoerbuch_fertig, hoerbuch_abgebrochen, hoerbuch_ungehoert (ab 2.5.1). Textfelder werden nach 300 Zeichen abgeschnitten.
+Pflicht sind `uid`, `typ` und `zeit`. Ab 2.5.2 nimmt der Server jeden `typ` an, der wie ein Schlüssel aussieht (Kleinbuchstaben, Ziffern, `_`, höchstens 40 Zeichen). Neue Ereignisarten der App werden also nicht mehr abgelehnt. Bekannt sind: start, ende, uebersprungen, gespult, pause, gefaellt, gefaellt_nicht, playlist, als_naechstes, warteschlange, radio, suche, tempo, schlaftimer, hoerbuch_fertig, hoerbuch_abgebrochen, hoerbuch_ungehoert, mediathek_hinzu, mediathek_weg, erkannt. Zusätzliche Felder werden ebenfalls gespeichert: höchstens 25, Name aus Buchstaben und Ziffern, Texte bis 300 Zeichen, Zahlen und Wahrheitswerte.
 
 ### `GET /ereignisse?von=&bis=&limit=`
 Liefert `{"ereignisse": [ … ], "gesamt": <Anzahl insgesamt>}`, neueste zuerst. `von`/`bis` als ISO-Datum, `limit` 1–5000, Standard 500. Zeiten kommen in UTC zurück.
