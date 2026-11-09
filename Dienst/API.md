@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 2.4.1. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.5.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 2.4.1. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.4.1"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.5.0"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -196,6 +196,31 @@ Lidarr bleibt im Heimnetz, sein Schlüssel bleibt auf dem Server.
 - Push: „Album ist da“ mit Text „<Titel> – <Künstler>“ und den Zusatzfeldern `musikWunschId` und `mbid`.
 - Fehler bei Störungen: `502 lidarr_nicht_erreichbar`.
 - Gesucht werden höchstens 3 Alben pro Minute.
+
+## Hörprotokoll (ab 2.5.0)
+
+Das Hörprotokoll wird je Benutzer getrennt gespeichert und dient nur dazu, Vorschläge zuzuschneiden. Es liegt in der Datenbank des Dienstes, verlässt das Haus nicht und wird an niemanden weitergegeben. Jeder Benutzer sieht und löscht nur sein eigenes Protokoll.
+
+### `POST /ereignisse`
+Body: `{"ereignisse": [Ereignis]}`, höchstens 200 pro Aufruf, alte zuerst. Antwort: `204`. Der ganze Body darf höchstens **100 KB** groß sein, das ist die Grenze des Reverse-Proxys. Bei langen Texten also weniger Ereignisse pro Aufruf schicken. Doppelte Ereignisse (gleiche `uid`) werden ignoriert, erneutes Senden ist also gefahrlos. Ist auch nur ein Ereignis ungültig, kommt `400 ungueltig` und es wird nichts gespeichert. Der Text nennt die uid.
+
+Ereignis:
+```json
+{"uid": "…", "typ": "start", "zeit": "2026-11-09T08:00:00+01:00", "art": "musik" | "hoerbuch",
+ "id": "…", "titel": "…", "kuenstler": "…", "kuenstlerId": "…", "albumId": "…",
+ "position": 40, "dauer": 200, "wert": "…", "quelle": "…", "geraet": "iPhone", "ausgabe": "Kopfhörer"}
+```
+Pflicht sind `uid`, `typ` und `zeit`. Erlaubte `typ`: start, ende, uebersprungen, gespult, pause, gefaellt, gefaellt_nicht, playlist, als_naechstes, warteschlange, radio, suche, tempo, schlaftimer, hoerbuch_fertig, hoerbuch_abgebrochen. Textfelder werden nach 300 Zeichen abgeschnitten.
+
+### `GET /ereignisse?von=&bis=&limit=`
+Liefert `{"ereignisse": [ … ], "gesamt": <Anzahl insgesamt>}`, neueste zuerst. `von`/`bis` als ISO-Datum, `limit` 1–5000, Standard 500. Zeiten kommen in UTC zurück.
+
+### `DELETE /ereignisse[?bis=]`
+Antwort: `204`. Ohne `bis` wird das ganze Protokoll des Benutzers gelöscht, mit `bis` alles bis zu diesem Zeitpunkt.
+
+Hinweis: Ereignisse mit X-Subsonic-Anmeldung landen bei `nd:<name>`, mit ABS-Token bei `abs:<id>`. Die App sollte für beide Arten dieselbe Anmeldung verwenden (X-Subsonic, wenn vorhanden), sonst ist das Protokoll auf zwei Benutzer verteilt.
+
+Das Profil (`GET /profil`), die Nutzung in `/entdecken`, `/musik/fuerdich` und der Status „abgebrochen nach 30 Tagen“ kommen in einer späteren Version.
 
 ## Ruhezeiten und Vorrat (ab 2.3.0)
 

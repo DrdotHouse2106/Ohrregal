@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.4.1"
+VERSION = "2.5.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -151,6 +151,10 @@ def db_anlegen():
           titel TEXT, kuenstler TEXT, cover TEXT, status TEXT NOT NULL, hinweis TEXT,
           lidarrId INTEGER, gesucht TEXT, erstellt TEXT NOT NULL, aktualisiert TEXT NOT NULL,
           zurueckgezogen INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS ereignis (
+          benutzer TEXT NOT NULL, uid TEXT NOT NULL, typ TEXT NOT NULL, zeit TEXT NOT NULL,
+          art TEXT, daten TEXT NOT NULL, empfangen TEXT NOT NULL, PRIMARY KEY (benutzer, uid));
+        CREATE INDEX IF NOT EXISTS ereignis_zeit ON ereignis (benutzer, zeit);
         CREATE TABLE IF NOT EXISTS reihe_teil (
           reihe TEXT NOT NULL, asin TEXT NOT NULL, teil TEXT, titel TEXT,
           inAbs INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (reihe, asin));
@@ -1639,6 +1643,48 @@ def navidrome_benutzer(u, t, s_):
     return name
 
 
+# ---------------------------------------------------------------- Hörprotokoll (bleibt im Haus)
+
+EREIGNIS_TYPEN = {"start", "ende", "uebersprungen", "gespult", "pause", "gefaellt", "gefaellt_nicht", "playlist",
+                  "als_naechstes", "warteschlange", "radio", "suche", "tempo", "schlaftimer",
+                  "hoerbuch_fertig", "hoerbuch_abgebrochen"}
+EREIGNIS_TEXT = ("id", "titel", "kuenstler", "kuenstlerId", "albumId", "wert", "quelle", "geraet", "ausgabe")
+
+
+def zeit_lesen(t):
+    try:
+        z = datetime.fromisoformat(str(t).replace("Z", "+00:00"))
+        return (z if z.tzinfo else z.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def ereignisse_speichern(name, liste):
+    if not isinstance(liste, list) or len(liste) > 200:
+        return "bis zu 200 Ereignisse als Liste"
+    zeilen, jetzt_ = [], jetzt().isoformat()
+    for e in liste:
+        if not isinstance(e, dict):
+            return "Ereignis muss ein Objekt sein"
+        uid, typ, z = str(e.get("uid") or "")[:80], e.get("typ"), zeit_lesen(e.get("zeit"))
+        if not uid or typ not in EREIGNIS_TYPEN or not z or e.get("art") not in ("musik", "hoerbuch", None):
+            return f"ungültiges Ereignis {uid or '?'}: uid, typ, zeit und art prüfen"
+        d = {k: str(e[k])[:300] for k in EREIGNIS_TEXT if e.get(k) not in (None, "")}
+        for k in ("position", "dauer"):
+            if isinstance(e.get(k), (int, float)):
+                d[k] = round(float(e[k]), 1)
+        zeilen.append((name, uid, typ, z.isoformat(), e.get("art"), json.dumps(d, ensure_ascii=False), jetzt_))
+    with DB_SPERRE, db() as v:
+        v.executemany("INSERT OR IGNORE INTO ereignis VALUES (?,?,?,?,?,?,?)", zeilen)
+    return None
+
+
+def ereignis_json(z):
+    d = {"uid": z["uid"], "typ": z["typ"], "zeit": iso(datetime.fromisoformat(z["zeit"])), "art": z["art"]}
+    d.update(json.loads(z["daten"]))
+    return d
+
+
 # ---------------------------------------------------------------- Ruhezeiten und Vorrat
 
 LEERLAUF = {"zeit": 0, "wert": True, "grund": ""}
@@ -1850,9 +1896,9 @@ class Schnittstelle(BaseHTTPRequestHandler):
             self.fehler(401, "nicht_angemeldet", "Token fehlt oder ist ungültig")
         return name
 
-    def koerper(self):
+    def koerper(self, grenze=100_000):
         laenge = int(self.headers.get("Content-Length") or 0)
-        if laenge > 100_000:
+        if laenge > grenze:
             raise ValueError("zu groß")
         roh = self.rfile.read(laenge) if laenge else b"{}"
         d = json.loads(roh or b"{}")
@@ -1877,6 +1923,26 @@ class Schnittstelle(BaseHTTPRequestHandler):
             if not name:
                 return
             return self.musik_get(teile, abfrage, name)
+        if teile == ["ereignisse"]:
+            name = self.benutzer()
+            if not name:
+                return
+            sql, werte = "SELECT * FROM ereignis WHERE benutzer=?", [name]
+            for k, op in (("von", ">="), ("bis", "<=")):
+                if abfrage.get(k):
+                    z = zeit_lesen(abfrage[k][0])
+                    if not z:
+                        return self.fehler(400, "ungueltig", f"{k} muss ein ISO-Datum sein")
+                    sql += f" AND zeit{op}?"
+                    werte.append(z.isoformat())
+            try:
+                limit = max(1, min(5000, int(abfrage.get("limit", ["500"])[0])))
+            except ValueError:
+                return self.fehler(400, "ungueltig", "limit muss eine Zahl sein")
+            with db() as v:
+                gesamt = v.execute("SELECT count(*) FROM ereignis WHERE benutzer=?", (name,)).fetchone()[0]
+                zeilen = v.execute(sql + " ORDER BY zeit DESC LIMIT ?", (*werte, limit)).fetchall()
+            return self.antworte(200, {"ereignisse": [ereignis_json(z) for z in zeilen], "gesamt": gesamt})
         if teile in (["kategorien"], ["stoebern"]):
             name = self.benutzer()
             if not name:
@@ -1942,6 +2008,15 @@ class Schnittstelle(BaseHTTPRequestHandler):
             return
         if teile == ["reihe"]:
             return self.reihe_folgen(name)
+        if teile == ["ereignisse"]:
+            try:
+                d = self.koerper(grenze=2_000_000)
+            except (ValueError, json.JSONDecodeError):
+                return self.fehler(400, "ungueltig", "Kein gültiges JSON-Objekt")
+            fehler = ereignisse_speichern(name, d.get("ereignisse"))
+            if fehler:
+                return self.fehler(400, "ungueltig", fehler)
+            return self.antworte(204)
         if teile[:1] == ["musik"]:
             try:
                 d = self.koerper()
@@ -2089,6 +2164,19 @@ class Schnittstelle(BaseHTTPRequestHandler):
         name = self.benutzer()
         if not name:
             return
+        if teile == ["ereignisse"]:
+            abfrage = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            sql, werte = "DELETE FROM ereignis WHERE benutzer=?", [name]
+            if abfrage.get("bis"):
+                z = zeit_lesen(abfrage["bis"][0])
+                if not z:
+                    return self.fehler(400, "ungueltig", "bis muss ein ISO-Datum sein")
+                sql += " AND zeit<=?"
+                werte.append(z.isoformat())
+            with DB_SPERRE, db() as v:
+                n = v.execute(sql, werte).rowcount
+            log(f"Hörprotokoll: {n} Ereignisse von {name} gelöscht")
+            return self.antworte(204)
         if len(teile) == 3 and teile[:2] == ["musik", "folgen"]:
             try:
                 code, daten = musik_folgen(name, {"kuenstlerMbid": teile[2]}, False)
