@@ -39,7 +39,7 @@ struct AlbumWunschKnopf: View {
             album.status = try await dienst.wuensche(album) == .schonVorhanden ? "da" : "gewuenscht"
             await Benachrichtigungen.erlaubnisHolen()
         } catch {
-            fehler = error.localizedDescription
+            fehler = error.deutsch
         }
     }
 }
@@ -193,7 +193,7 @@ struct MusikWunschView: View {
             Protokoll.geteilt.merke("suche", wert: text, quelle: "Lidarr")
             meldung = nil
         } catch {
-            meldung = "Suche fehlgeschlagen: \(error.localizedDescription)"
+            meldung = "Suche fehlgeschlagen: \(error.deutsch)"
         }
     }
 
@@ -202,7 +202,7 @@ struct MusikWunschView: View {
         do {
             wuensche = try await dienst.wuensche()
         } catch {
-            meldung = "Wunsch-Dienst nicht erreichbar: \(error.localizedDescription)"
+            meldung = "Wunsch-Dienst nicht erreichbar: \(error.deutsch)"
         }
     }
 }

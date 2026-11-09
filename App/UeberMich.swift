@@ -70,14 +70,14 @@ struct UeberMichView: View {
             eintraege = ergebnis.eintraege
             fehler = nil
         } catch {
-            fehler = error.localizedDescription
+            fehler = error.deutsch
         }
     }
 
     private func allesLoeschen() async {
         Protokoll.geteilt.offeneVerwerfen()
         Hoerverlauf.geteilt.loeschen()
-        do { try await sitzung.musikwunsch?.protokollLoeschen() } catch { fehler = error.localizedDescription }
+        do { try await sitzung.musikwunsch?.protokollLoeschen() } catch { fehler = error.deutsch }
         await laden()
     }
 

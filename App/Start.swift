@@ -111,7 +111,7 @@ struct StartView: View {
             anwenden(vorrat)
             fehler = nil
         } catch {
-            fehler = error.localizedDescription
+            fehler = error.deutsch
             geladen = true
         }
     }

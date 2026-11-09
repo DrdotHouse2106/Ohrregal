@@ -123,12 +123,12 @@ struct HoerbuecherView: View {
                 if sitzung.dienstDa { entdecken = try await abs.entdecken(neu: nachladen) }
                 entdeckenFehler = nil
             } catch {
-                entdeckenFehler = error.localizedDescription
+                entdeckenFehler = error.deutsch
             }
             genres = genresAlle.sorted { $0.1.localizedCompare($1.1) == .orderedAscending }
             fehler = nil
         } catch {
-            fehler = error.localizedDescription
+            fehler = error.deutsch
         }
     }
 }
@@ -483,7 +483,7 @@ struct WunschView: View {
             Protokoll.geteilt.merke("suche", art: "hoerbuch", wert: text, quelle: "Audible")
             meldung = treffer.isEmpty ? "Bei Audible nichts gefunden." : nil
         } catch {
-            meldung = "Suche fehlgeschlagen: \(error.localizedDescription)"
+            meldung = "Suche fehlgeschlagen: \(error.deutsch)"
         }
     }
 
@@ -492,7 +492,7 @@ struct WunschView: View {
         do {
             wuensche = try await abs.wuensche()
         } catch {
-            meldung = "Wunsch-Dienst nicht erreichbar: \(error.localizedDescription)"
+            meldung = "Wunsch-Dienst nicht erreichbar: \(error.deutsch)"
         }
         reihen = (try? await abs.reihen()) ?? []
     }
@@ -506,7 +506,7 @@ struct WunschView: View {
         do {
             try await sitzung.hoerbuchClient?.erneutSuchen(w.id)
         } catch {
-            meldung = error.localizedDescription
+            meldung = error.deutsch
         }
         await liste()
     }
@@ -549,7 +549,7 @@ struct HoerbuchLaden: View {
         .background(Farben.hintergrund)
         .task {
             guard hoerbuch == nil, let abs = sitzung.hoerbuchClient else { return }
-            do { hoerbuch = try await abs.hoerbuch(id) } catch { fehler = error.localizedDescription }
+            do { hoerbuch = try await abs.hoerbuch(id) } catch { fehler = error.deutsch }
         }
     }
 }
@@ -679,7 +679,7 @@ struct TrefferView: View {
                 meldung = "Ist schon in deiner Bibliothek."
             }
         } catch {
-            meldung = "Wünschen fehlgeschlagen: \(error.localizedDescription)"
+            meldung = "Wünschen fehlgeschlagen: \(error.deutsch)"
         }
     }
 
@@ -692,7 +692,7 @@ struct TrefferView: View {
             meldung = "Du folgst der Reihe. Fehlende Teile sind gewünscht und werden nachts geladen, wenn der Server Ruhe hat. Neue Teile kommen automatisch dazu."
             await Benachrichtigungen.erlaubnisHolen()
         } catch {
-            meldung = error.localizedDescription
+            meldung = error.deutsch
         }
     }
 }

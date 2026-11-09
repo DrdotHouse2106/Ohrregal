@@ -88,11 +88,8 @@ final class Sitzung {
     func ladeHoerbuch() {
         let d = UserDefaults.standard
         hoerbuchClient = nil
-        guard var text = d.string(forKey: "absServer"), !text.isEmpty, let benutzer = d.string(forKey: "absBenutzer"),
-              let passwort = Schluesselbund.lies("audiobookshelf") else { return }
-        if !text.contains("://") { text = "https://" + text }
-        while text.hasSuffix("/") { text.removeLast() }
-        guard let url = URL(string: text) else { return }
+        guard let text = d.string(forKey: "absServer"), !text.isEmpty, let benutzer = d.string(forKey: "absBenutzer"),
+              let passwort = Schluesselbund.lies("audiobookshelf"), let url = Adresse.aufbereiten(text) else { return }
         hoerbuchClient = AudiobookshelfClient(server: url, benutzer: benutzer.trimmingCharacters(in: .whitespacesAndNewlines),
                                               passwort: passwort.trimmingCharacters(in: .newlines))
         // Offline gehörte Stellen nachtragen, sobald der Server erreichbar ist.
@@ -103,12 +100,9 @@ final class Sitzung {
         // Leerzeichen am Rand fügt die iPhone-Tastatur gern selbst an (Wortvorschläge, Einfügen) – sie führen zu „falsches Passwort“.
         let benutzer = benutzer.trimmingCharacters(in: .whitespacesAndNewlines)
         let passwort = passwort.trimmingCharacters(in: .newlines)
-        var text = server.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.contains("://") { text = "https://" + text }
-        // Adresse der Weboberfläche (…/app) wird auf die Server-Adresse gekürzt.
-        while text.hasSuffix("/") { text.removeLast() }
-        if text.hasSuffix("/app") { text.removeLast(4) }
-        guard let url = URL(string: text) else { throw ServerFehler("Die Adresse ist ungültig.") }
+        // https:// ergänzen bzw. statt http:// nehmen, Adresse der Weboberfläche (…/app) kürzen.
+        guard let url = Adresse.aufbereiten(server) else { throw ServerFehler("Die Adresse ist ungültig.") }
+        let text = url.absoluteString
         let neu = NavidromeClient(server: url, benutzer: benutzer, passwort: passwort)
         try await neu.ping()
         UserDefaults.standard.set(text, forKey: "server")

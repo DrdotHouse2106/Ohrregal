@@ -24,10 +24,10 @@ enum Benachrichtigungen {
         guard let token = UserDefaults.standard.string(forKey: "apnsToken") else { return }
         var fehler: [String] = []
         if let abs = geteilteSitzung.hoerbuchClient {
-            do { try await abs.meldeGeraet(token, umgebung: umgebung) } catch { fehler.append("Audiobookshelf: \(error.localizedDescription)") }
+            do { try await abs.meldeGeraet(token, umgebung: umgebung) } catch { fehler.append("Audiobookshelf: \(error.deutsch)") }
         }
         if let dienst = geteilteSitzung.musikwunsch {
-            do { try await dienst.meldeGeraet(token, umgebung: umgebung) } catch { fehler.append("Navidrome: \(error.localizedDescription)") }
+            do { try await dienst.meldeGeraet(token, umgebung: umgebung) } catch { fehler.append("Navidrome: \(error.deutsch)") }
         }
         if fehler.isEmpty {
             UserDefaults.standard.removeObject(forKey: "pushFehler")
@@ -90,7 +90,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        UserDefaults.standard.set("iOS: \(error.localizedDescription)", forKey: "pushFehler")
+        UserDefaults.standard.set("iOS: \(error.deutsch)", forKey: "pushFehler")
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {

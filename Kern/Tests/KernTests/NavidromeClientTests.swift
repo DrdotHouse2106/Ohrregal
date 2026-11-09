@@ -73,3 +73,18 @@ final class MusikordnerTests: XCTestCase {
         XCTAssertEqual(ordner?.map(\.id), ["1", "2"])
     }
 }
+
+final class AdresseTests: XCTestCase {
+    func testAufbereiten() {
+        XCTAssertEqual(Adresse.aufbereiten("musik.example.de")?.absoluteString, "https://musik.example.de")
+        XCTAssertEqual(Adresse.aufbereiten("http://musik.example.de/app/")?.absoluteString, "https://musik.example.de")
+        XCTAssertEqual(Adresse.aufbereiten("http://192.168.1.10:4533")?.absoluteString, "http://192.168.1.10:4533")
+        XCTAssertEqual(Adresse.aufbereiten("http://nas.local:13378")?.absoluteString, "http://nas.local:13378")
+        XCTAssertNil(Adresse.aufbereiten(""))
+    }
+
+    func testDeutscheMeldung() {
+        XCTAssertTrue(URLError(.appTransportSecurityRequiresSecureConnection).deutsch.contains("https://"))
+        XCTAssertEqual(ServerFehler("Benutzername oder Passwort falsch.").deutsch, "Benutzername oder Passwort falsch.")
+    }
+}

@@ -90,7 +90,7 @@ struct ErkennenView: View {
         case .noMatch:
             meldung = "Nicht erkannt. Halte das iPhone näher an die Musik und versuche es noch einmal."
         case .error(let fehler, _):
-            meldung = "Erkennen fehlgeschlagen: \(fehler.localizedDescription)"
+            meldung = "Erkennen fehlgeschlagen: \(fehler.deutsch)"
         @unknown default:
             meldung = "Nicht erkannt."
         }

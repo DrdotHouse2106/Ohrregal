@@ -25,7 +25,7 @@ struct StoebernView: View {
         }
         .task {
             guard kategorien.isEmpty, let abs = sitzung.hoerbuchClient else { return }
-            do { kategorien = try await abs.kategorien() } catch { fehler = error.localizedDescription }
+            do { kategorien = try await abs.kategorien() } catch { fehler = error.deutsch }
         }
     }
 
@@ -121,7 +121,7 @@ struct KategorieView: View {
             treffer = try await abs.stoebern(kategorie.id, neueste: neueste, neu: neu)
             fehler = nil
         } catch {
-            fehler = error.localizedDescription
+            fehler = error.deutsch
         }
     }
 }

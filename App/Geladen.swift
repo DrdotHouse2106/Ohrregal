@@ -48,7 +48,7 @@ struct HoerbuchLadenKnopf: View {
                 Button {
                     Task {
                         guard let abs = sitzung.hoerbuchClient else { return }
-                        do { try await offline.lade(hoerbuch: hoerbuch, abs) } catch { fehler = error.localizedDescription }
+                        do { try await offline.lade(hoerbuch: hoerbuch, abs) } catch { fehler = error.deutsch }
                     }
                 } label: {
                     Label("Aufs iPhone laden", systemImage: "arrow.down.circle").frame(maxWidth: .infinity)

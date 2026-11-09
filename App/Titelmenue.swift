@@ -58,7 +58,7 @@ struct PlaylistAuswahl: View {
                                 try await client.zurPlaylist(p.id, titel: titel.map(\.id))
                                 titel.forEach { Protokoll.geteilt.merke("playlist", titel: $0, wert: p.name) }
                                 schliessen()
-                            } catch { fehler = error.localizedDescription }
+                            } catch { fehler = error.deutsch }
                         }
                     } label: {
                         HStack(spacing: 12) {
@@ -79,7 +79,7 @@ struct PlaylistAuswahl: View {
                             try await client.neuePlaylist(name, titel: titel.map(\.id))
                             titel.forEach { Protokoll.geteilt.merke("playlist", titel: $0, wert: name) }
                             schliessen()
-                        } catch { fehler = error.localizedDescription }
+                        } catch { fehler = error.deutsch }
                     }
                 }
                 Button("Abbrechen", role: .cancel) {}

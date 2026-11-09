@@ -58,7 +58,7 @@ struct Anmeldung: View {
         do {
             try await sitzung.anmelden(server: z.server, benutzer: z.benutzer, passwort: z.passwort)
         } catch {
-            fehler = "Anmeldung bei Navidrome fehlgeschlagen: \(error.localizedDescription)"
+            fehler = "Navidrome: \(error.deutsch)"
             return
         }
         do {
@@ -67,7 +67,7 @@ struct Anmeldung: View {
             await Benachrichtigungen.geraetMelden()
             schliessen()
         } catch {
-            fehler = "Navidrome ist verbunden, aber Audiobookshelf nicht: \(error.localizedDescription)"
+            fehler = "Navidrome ist verbunden, Audiobookshelf nicht: \(error.deutsch)"
         }
     }
 }

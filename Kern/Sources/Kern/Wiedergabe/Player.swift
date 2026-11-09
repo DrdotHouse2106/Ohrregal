@@ -166,7 +166,7 @@ public final class Player {
                 Task { try? await Offline.geteilt.lade(hoerbuch: hoerbuch, abs) }
             }
         } catch {
-            fehler = error.localizedDescription
+            fehler = error.deutsch
         }
     }
 
