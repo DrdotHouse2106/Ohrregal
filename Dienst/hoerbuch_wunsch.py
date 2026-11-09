@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.2.1"
+VERSION = "2.2.2"
 
 
 def env(name, standard=None, pflicht=False):
@@ -1116,15 +1116,49 @@ def entdecken(benutzer):
     return treffer
 
 
+ENTDECKEN_LAEUFT = set()
+
+
+def entdecken_neu_berechnen(benutzer):
+    try:
+        treffer = entdecken(benutzer)
+        with ENTDECKEN_SPERRE:
+            ENTDECKEN_CACHE[benutzer] = (time.time() + ENTDECKEN_STUNDEN * 3600, treffer)
+        return treffer
+    finally:
+        with ENTDECKEN_SPERRE:
+            ENTDECKEN_LAEUFT.discard(benutzer)
+
+
 def entdecken_zwischengespeichert(benutzer, neu=False):
+    """Abgelaufene Vorschläge werden sofort geliefert und im Hintergrund erneuert."""
     with ENTDECKEN_SPERRE:
         z = ENTDECKEN_CACHE.get(benutzer)
-        if z and not neu and z[0] > time.time():
+        if z and not neu:
+            if z[0] <= time.time() and benutzer not in ENTDECKEN_LAEUFT:
+                ENTDECKEN_LAEUFT.add(benutzer)
+                threading.Thread(target=entdecken_neu_berechnen, args=(benutzer,), daemon=True).start()
             return z[1]
-    treffer = entdecken(benutzer)
-    with ENTDECKEN_SPERRE:
-        ENTDECKEN_CACHE[benutzer] = (time.time() + ENTDECKEN_STUNDEN * 3600, treffer)
-    return treffer
+        ENTDECKEN_LAEUFT.add(benutzer)
+    return entdecken_neu_berechnen(benutzer)
+
+
+def entdecken_vorwaermen():
+    """Nach dem Start die Vorschläge bekannter Benutzer berechnen, damit die App nicht warten muss."""
+    time.sleep(10)
+    with db() as v:
+        benutzer = [z[0] for z in v.execute("SELECT DISTINCT benutzer FROM wunsch WHERE benutzer LIKE 'abs:%' "
+                                            "UNION SELECT benutzer FROM geraet UNION SELECT benutzer FROM reihe")]
+    for b in benutzer:
+        try:
+            with ENTDECKEN_SPERRE:
+                if b in ENTDECKEN_CACHE or b in ENTDECKEN_LAEUFT:
+                    continue
+                ENTDECKEN_LAEUFT.add(b)
+            entdecken_neu_berechnen(b)
+        except Exception:
+            log("Vorwärmen fehlgeschlagen:", traceback.format_exc())
+        time.sleep(2)
 
 
 # ---------------------------------------------------------------- Stöbern nach Kategorie
@@ -1246,6 +1280,18 @@ class Schnittstelle(BaseHTTPRequestHandler):
 
     def antworte(self, code, daten=None):
         koerper = b"" if daten is None else json.dumps(daten, ensure_ascii=False).encode()
+        pfad = urllib.parse.urlsplit(self.path).path
+        if pfad != "/status":  # kurzes Zugriffsprotokoll ohne Token und ohne Abfrageparameter außer neu
+            neu = "?neu=1" if "neu=1" in self.path else ""
+            dauer = time.time() - getattr(self, "_start", time.time())
+            mehr = ""
+            if isinstance(daten, dict):
+                for k in ("treffer", "wuensche", "reihen", "kategorien"):
+                    if k in daten:
+                        mehr = f" {len(daten[k])} {k}"
+                if "fehler" in daten:
+                    mehr = " " + daten["fehler"]
+            log(f"{self.command} {pfad}{neu} {code}{mehr} {dauer:.1f}s {self.absender()}")
         self.send_response(code)
         if daten is not None:
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -1289,6 +1335,10 @@ class Schnittstelle(BaseHTTPRequestHandler):
     def pfad(self):
         u = urllib.parse.urlsplit(self.path)
         return [t for t in u.path.split("/") if t], urllib.parse.parse_qs(u.query)
+
+    def handle_one_request(self):
+        self._start = time.time()
+        super().handle_one_request()
 
     def do_GET(self):
         teile, abfrage = self.pfad()
@@ -1564,6 +1614,7 @@ def main():
     os.umask(0o002)
     db_anlegen()
     threading.Thread(target=arbeiter, daemon=True).start()
+    threading.Thread(target=entdecken_vorwaermen, daemon=True).start()
     server = ThreadingHTTPServer((E.bind, E.port), Schnittstelle)
     log(f"Hörbuchwunsch {VERSION} hört auf {E.bind}:{E.port}")
     server.serve_forever()

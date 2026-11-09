@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 2.2.1. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.2.2. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 2.2.1. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.2.1"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.2.2"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -144,7 +144,7 @@ Antwort: `204`. Der Benutzer folgt der Reihe nicht mehr. Schon angelegte Wünsch
 ## Entdecken (ab 2.1.0)
 
 ### `GET /entdecken`
-Liefert `{"treffer": [ … ]}` mit höchstens 30 Vorschlägen, die besten zuerst. Mit `?neu=1` wird der Zwischenspeicher übergangen, sonst gilt er 6 Stunden je Benutzer.
+Liefert `{"treffer": [ … ]}` mit höchstens 30 Vorschlägen, die besten zuerst. Mit `?neu=1` wird der Zwischenspeicher übergangen, sonst gilt er 6 Stunden je Benutzer. Abgelaufene Vorschläge liefert der Server sofort aus und erneuert sie im Hintergrund. Nach einem Neustart berechnet er sie für bekannte Benutzer vorab. Antworten dauern deshalb nur beim allerersten Aufruf bzw. mit `neu=1` mehrere Sekunden (bis etwa 10 s). Bitte einen Timeout von mindestens 30 s verwenden.
 
 So entstehen die Vorschläge:
 - **Grundlage** ist der ABS-Hörverlauf des Benutzers, gelesen aus der ABS-Datenbank: Bücher, die fertig gehört oder mindestens 10 Minuten angehört wurden, die neuesten zuerst. Ohne Verlauf nimmt der Server die zuletzt in die Bibliothek gekommenen Bücher.
