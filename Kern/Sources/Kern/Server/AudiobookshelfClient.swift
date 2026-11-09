@@ -113,6 +113,23 @@ public final class AudiobookshelfClient {
         return liste.libraryItems.filter { !verborgen.contains($0.id) }
     }
 
+    /// IDs aller als fertig gehört markierten Hörbücher.
+    public func fertigGehoert() async throws -> Set<String> {
+        struct Ich: Decodable {
+            struct Fortschritt: Decodable { let libraryItemId: String; let isFinished: Bool? }
+            let mediaProgress: [Fortschritt]?
+        }
+        let ich: Ich = try await hole("/api/me")
+        return Set((ich.mediaProgress ?? []).filter { $0.isFinished == true }.map(\.libraryItemId))
+    }
+
+    /// Als gehört bzw. ungehört markieren (wie in Audiobookshelf).
+    public func markiere(_ hoerbuch: String, gehoert: Bool) async throws {
+        let json: [String: Any] = gehoert ? ["isFinished": true] : ["isFinished": false, "progress": 0, "currentTime": 0]
+        let (daten, code) = try await sende("/api/me/progress/\(hoerbuch)", methode: "PATCH", json: json)
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
     /// Wie „Nicht in Weiterhören anzeigen“ in Audiobookshelf.
     public func ausWeiterhoerenEntfernen(_ hoerbuch: String) async throws {
         guard let id = fortschritt[hoerbuch] else { throw ServerFehler("Kein Fortschritt zu diesem Hörbuch gefunden.") }

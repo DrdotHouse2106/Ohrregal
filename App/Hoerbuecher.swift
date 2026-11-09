@@ -92,6 +92,7 @@ struct HoerbuecherView: View {
         do {
             bibliotheken = try await abs.bibliotheken()
             angefangen = try await abs.angefangen()
+            await Gehoert.geteilt.laden(abs)
             // Neu und Genres aus allen Hörbuch-Bibliotheken.
             var neuAlle: [Hoerbuch] = []
             var genresAlle: [(Bibliothek, String, [String])] = []
@@ -172,6 +173,12 @@ struct HoerbuchKarte: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Cover(url: sitzung.hoerbuchClient?.coverURL(hoerbuch.id), groesse: groesse)
+                .overlay(alignment: .topTrailing) {
+                    if Gehoert.geteilt.ids.contains(hoerbuch.id) {
+                        Image(systemName: "checkmark.circle.fill").font(.title3)
+                            .foregroundStyle(.white, Farben.blau).padding(6)
+                    }
+                }
             Text(hoerbuch.titel).font(.subheadline).lineLimit(1)
             Text(hoerbuch.autor).font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
         }
@@ -195,6 +202,7 @@ struct HoerbuchReihe: View {
                         NavigationLink(value: h) { HoerbuchKarte(hoerbuch: h) }
                             .buttonStyle(.plain)
                             .contextMenu {
+                                GehoertKnopf(hoerbuch: h)
                                 if let entfernen {
                                     Button("Aus „Weiterhören“ entfernen", systemImage: "eye.slash") { entfernen(h) }
                                 }
@@ -224,6 +232,7 @@ struct BibliothekView: View {
                 ForEach(treffer ?? hoerbuecher) { h in
                     NavigationLink(value: h) { HoerbuchKarte(hoerbuch: h) }
                         .buttonStyle(.plain)
+                        .contextMenu { GehoertKnopf(hoerbuch: h) }
                         .onAppear { if treffer == nil, h.id == hoerbuecher.last?.id { Task { await nachladen() } } }
                 }
             }
@@ -311,6 +320,16 @@ struct HoerbuchView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(startet)
+                if let abs = sitzung.hoerbuchClient {
+                    let gehoert = Gehoert.geteilt.ids.contains(hoerbuch.id)
+                    Button { Gehoert.geteilt.umschalten(h, abs) } label: {
+                        Label(gehoert ? "Gehört · als ungehört markieren" : "Als gehört markieren",
+                              systemImage: gehoert ? "checkmark.circle.fill" : "checkmark.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                }
                 HoerbuchLadenKnopf(hoerbuch: h)
                 if let fehler = player.fehler {
                     Text(fehler).font(.caption).foregroundStyle(.red)
