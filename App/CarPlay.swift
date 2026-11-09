@@ -49,7 +49,7 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         let nein = CPNowPlayingImageButton(image: UIImage(systemName: "hand.thumbsdown") ?? UIImage()) { _ in
             Task { @MainActor in
                 Hoerverlauf.geteilt.ablehnen(titel)
-                Protokoll.geteilt.merke("gefaellt_nicht_mehr_hoeren", titel: titel, position: player.zeit)
+                Protokoll.geteilt.merke("abgelehnt", titel: titel, position: player.zeit)
                 player.weiter()
             }
         }

@@ -87,7 +87,7 @@ struct UeberMichView: View {
                      "pause": "Pause", "gefaellt": "Gefällt mir", "gefaellt_nicht": "Gefällt mir nicht mehr",
                      "playlist": "Zur Playlist", "als_naechstes": "Als Nächstes", "warteschlange": "Zur Warteschlange",
                      "radio": "Radio gestartet", "suche": "Gesucht", "tempo": "Tempo", "schlaftimer": "Schlaf-Timer",
-                     "hoerbuch_abgebrochen": "Aus Weiterhören entfernt", "hoerbuch_fertig": "Hörbuch fertig"]
+                     "hoerbuch_abgebrochen": "Aus Weiterhören entfernt", "abgelehnt": "Gefällt mir nicht", "mediathek_hinzu": "Zur Mediathek", "mediathek_weg": "Aus der Mediathek", "erkannt": "Erkannt", "hoerbuch_ungehoert": "Als ungehört markiert", "hoerbuch_fertig": "Hörbuch fertig"]
         let typ = typen[e.typ] ?? e.typ
         if let wert = e.wert, was.isEmpty { return "\(typ): \(wert)" }
         return [typ, was.isEmpty ? nil : was, e.wert.map { "(\($0))" }].compactMap { $0 }.joined(separator: " ")
