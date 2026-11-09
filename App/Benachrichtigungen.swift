@@ -61,11 +61,6 @@ enum Benachrichtigungen {
         await geraetMelden()
         return UserDefaults.standard.string(forKey: "pushFehler") ?? "Mitteilungen sind eingeschaltet. Du bekommst Bescheid, wenn ein Hörbuch da ist."
     }
-
-    static func geraetAbmelden() async {
-        guard let token = UserDefaults.standard.string(forKey: "apnsToken"), let abs = geteilteSitzung.hoerbuchClient else { return }
-        try? await abs.geraetAbmelden(token)
-    }
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
