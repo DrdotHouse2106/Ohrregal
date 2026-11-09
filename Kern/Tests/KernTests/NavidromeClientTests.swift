@@ -65,3 +65,11 @@ final class MusikwunschTests: XCTestCase {
         XCTAssertEqual(alben.first?.statusText, "Fehlt")
     }
 }
+
+final class MusikordnerTests: XCTestCase {
+    func testIdAlsZahlOderText() throws {
+        let json = #"{"subsonic-response":{"status":"ok","musicFolders":{"musicFolder":[{"id":1,"name":"Musik"},{"id":"2","name":"Youtube Musik"}]}}}"#
+        let ordner = try NavidromeClient.lies(Data(json.utf8)).musicFolders?.musicFolder
+        XCTAssertEqual(ordner?.map(\.id), ["1", "2"])
+    }
+}

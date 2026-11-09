@@ -135,7 +135,7 @@ public struct Musikordner: Decodable, Hashable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = (try? c.decode(String.self, forKey: .id)) ?? String(try c.decode(Int.self, forKey: .id))
+        if let text = try? c.decode(String.self, forKey: .id) { id = text } else { id = String(try c.decode(Int.self, forKey: .id)) }
         name = (try? c.decode(String.self, forKey: .name)) ?? id
     }
 }
