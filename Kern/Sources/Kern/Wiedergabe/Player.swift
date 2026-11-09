@@ -30,6 +30,12 @@ public final class Player {
     public private(set) var schlafenAmKapitelende = false
     public var fehler: String?
 
+    /// Autoplay wie bei Apple Music: Läuft die Warteschlange aus, geht es mit ähnlichen Titeln weiter.
+    public var autoplay: Bool = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(autoplay, forKey: "autoplay") }
+    }
+    @ObservationIgnored private var autoplayLaeuft = false
+
     /// Geschwindigkeit für Hörbücher.
     public var tempo: Float = UserDefaults.standard.object(forKey: "tempo") as? Float ?? 1 {
         didSet {
@@ -312,8 +318,32 @@ public final class Player {
             anzeige = Anzeige(titel: titel.title, untertitel: titel.artist ?? "",
                               cover: client?.coverURL(titel.coverArt, groesse: 600), dauer: Double(titel.duration ?? 0))
             if let client { Task { try? await client.scrobble(titel.id, fertig: false) } }
+            if autoplay, index >= warteschlange.count - 2 { autoplayNachladen(ab: titel) }
         }
         nowPlaying()
+    }
+
+    /// Hängt ähnliche Titel an (über Last.fm), damit die Musik nicht aufhört; sonst Zufallstitel.
+    private func autoplayNachladen(ab titel: Titel) {
+        guard !autoplayLaeuft, let client else { return }
+        autoplayLaeuft = true
+        Task {
+            defer { autoplayLaeuft = false }
+            let schon = Set(warteschlange.map(\.id))
+            let endeVorher = warteschlange.last?.id
+            var neu = Mixe.bereinigt((try? await client.aehnlicheTitel(titel.id, anzahl: 40)) ?? []).filter { !schon.contains($0.id) }
+            if neu.count < 5 { neu += ((try? await client.zufaelligeTitel(anzahl: 20)) ?? []).filter { !schon.contains($0.id) } }
+            // Inzwischen etwas anderes gestartet? Dann nichts anhängen.
+            guard !neu.isEmpty, !istHoerbuch, !istRadio, warteschlange.last?.id == endeVorher else { return }
+            let anfang = warteschlange.count
+            let dazu = Array(neu.shuffled().prefix(20))
+            warteschlange += dazu
+            spuren += dazu.map { (Offline.geteilt.datei(fuerTitel: $0.id) ?? client.streamURL($0.id), 0) }
+            quelle = "Autoplay"
+            // Nur anhängen, wenn der Player die bisherigen schon alle geladen hat; sonst holt sie eintragGewechselt.
+            if let letzte = stellen.values.max(), letzte == anfang - 1 { haengeAn(ab: anfang) }
+            if player.currentItem == nil { lade(ab: anfang, zeit: 0); player.play() }
+        }
     }
 
     private func tick(_ sekunden: Double) {

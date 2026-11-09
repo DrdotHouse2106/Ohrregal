@@ -118,6 +118,14 @@ struct WarteschlangeView: View {
             }
             .navigationTitle("Warteschlange")
             .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                @Bindable var player = player
+                Toggle(isOn: $player.autoplay) {
+                    Label("Autoplay: danach ähnliche Titel", systemImage: "infinity")
+                }
+                .padding()
+                .background(Farben.flaeche)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { EditButton() }
                 ToolbarItem(placement: .topBarTrailing) { Button("Fertig") { schliessen() } }
