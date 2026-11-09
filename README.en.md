@@ -2,13 +2,16 @@
 
 [![Buy me a coffee](https://img.shields.io/badge/☕_Buy_me_a_coffee-PayPal-0070ba?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/DrdotHouse)
 
+> [!TIP]
+> **Testers wanted!** Want to try my apps before everyone else – on iPhone, Android, Fire TV, Android TV or LG webOS? Send a short e-mail to **tester.entwickler@zockerdb.de** with your name, your devices and the e-mail address of your Apple ID or Google account. I'll add you and let you know whenever there is a new app or version to test. Your details stay private and are only used for this.
+
 Music and audiobooks from your own servers in one iPhone app that feels like Apple Music.
 
 - **Music** from [Navidrome](https://www.navidrome.org/) (Subsonic / OpenSubsonic API)
 - **Audiobooks and radio plays** from [Audiobookshelf](https://www.audiobookshelf.org/)
 - **CarPlay**, offline listening and recommendations based on your listening
 
-Status: version 0.16 (TestFlight). The plan (in German) is in [KONZEPT.md](KONZEPT.md).
+Status: version 0.22 (TestFlight). The plan (in German) is in [KONZEPT.md](KONZEPT.md).
 
 Deutsche Version: [README.md](README.md)
 

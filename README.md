@@ -2,6 +2,9 @@
 
 [![Spendier mir einen Kaffee](https://img.shields.io/badge/☕_Spendier_mir_einen_Kaffee-PayPal-0070ba?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/DrdotHouse)
 
+> [!TIP]
+> **Tester gesucht!** Du möchtest meine Apps vor allen anderen ausprobieren – auf iPhone, Android, Fire TV, Android TV oder LG webOS? Schreib eine kurze E-Mail an **tester.entwickler@zockerdb.de** mit deinem Namen, deinen Geräten und der E-Mail-Adresse deiner Apple-ID bzw. deines Google-Kontos. Ich trage dich ein, und du bekommst Bescheid, sobald es eine neue App oder Version zum Testen gibt. Deine Angaben bleiben privat und werden nur dafür verwendet.
+
 Musik und Hörbücher von den eigenen Servern in einer iPhone-App, die sich anfühlt wie Apple Music.
 
 - **Musik** aus [Navidrome](https://www.navidrome.org/) (Subsonic- bzw. OpenSubsonic-API)
@@ -9,7 +12,7 @@ Musik und Hörbücher von den eigenen Servern in einer iPhone-App, die sich anf�
 - **CarPlay**, offline hören und Vorschläge aus deinem Hörverhalten
 - Optik und Wortwahl passend zu Quallenkino
 
-Stand: Version 0.16 (TestFlight). Plan und Fahrplan stehen in [KONZEPT.md](KONZEPT.md).
+Stand: Version 0.22 (TestFlight). Plan und Fahrplan stehen in [KONZEPT.md](KONZEPT.md).
 
 English version: [README.en.md](README.en.md)
 
