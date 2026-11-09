@@ -56,7 +56,7 @@ final class Sitzung {
         }
         ladeHoerbuch()
         // Hörprotokoll geht an den eigenen Server (Wunsch-Dienst), angemeldet mit dem Navidrome-Konto.
-        Protokoll.geteilt.senden = { ereignisse in await geteilteSitzung.musikwunsch?.sendeEreignisse(ereignisse) ?? false }
+        Protokoll.geteilt.senden = { ereignisse in await geteilteSitzung.musikwunsch?.sendeEreignisse(ereignisse) ?? .spaeter }
         Task { await Protokoll.geteilt.abschicken() }
         // Beobachter greifen im eigenen init nicht; daher hier ausdrücklich.
         geteilterPlayer.client = client

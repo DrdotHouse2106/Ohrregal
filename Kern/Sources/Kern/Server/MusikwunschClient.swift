@@ -176,14 +176,19 @@ public struct MusikwunschClient: Sendable {
         guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
     }
 
-    /// Hörprotokoll schicken; true, wenn der Server es angenommen hat.
-    public func sendeEreignisse(_ ereignisse: [Ereignis]) async -> Bool {
+    /// Hörprotokoll schicken (immer mit der Navidrome-Anmeldung, damit alles bei einem Benutzer landet).
+    public func sendeEreignisse(_ ereignisse: [Ereignis]) async -> Protokoll.Antwort {
         let kodierer = JSONEncoder()
         kodierer.dateEncodingStrategy = .iso8601
         guard let daten = try? kodierer.encode(ereignisse),
               let liste = try? JSONSerialization.jsonObject(with: daten) as? [Any],
-              let (_, code) = try? await sende("/ereignisse", methode: "POST", json: ["ereignisse": liste]) else { return false }
-        return (200..<300).contains(code)
+              let (antwort, code) = try? await sende("/ereignisse", methode: "POST", json: ["ereignisse": liste]) else { return .spaeter }
+        switch code {
+        case 200..<300: return .angenommen
+        case 413: return .zuGross
+        case 400: return .ungueltig(String(data: antwort, encoding: .utf8) ?? "")
+        default: return .spaeter
+        }
     }
 
     /// Gerät für „Album ist da“ anmelden (gehört dann dem Navidrome-Benutzer).
