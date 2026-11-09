@@ -14,7 +14,7 @@ struct StartView: View {
     @State private var fehler: String?
     @State private var geladen = false
     @State private var zugaengeOffen = false
-    @State private var verlaufLoeschen = false
+    @State private var ueberMichOffen = false
     @State private var mitteilungen: String?
 
     struct Reihe: Identifiable, Codable {
@@ -61,17 +61,13 @@ struct StartView: View {
                 Button("Mitteilungen", systemImage: "bell") {
                     Task { mitteilungen = await Benachrichtigungen.einschaltenUndPruefen() }
                 }
-                Button("Hörverlauf löschen", systemImage: "clock.arrow.circlepath") { verlaufLoeschen = true }
+                Button("Was Ohrregal über mich weiß", systemImage: "person.text.rectangle") { ueberMichOffen = true }
                 Button("Abmelden", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { sitzung.abmelden() }
             } label: {
                 Image(systemName: "person.crop.circle")
             }
         }
-        .confirmationDialog("Hörverlauf löschen?", isPresented: $verlaufLoeschen, titleVisibility: .visible) {
-            Button("Löschen", role: .destructive) { Hoerverlauf.geteilt.loeschen() }
-        } message: {
-            Text("Der Verlauf liegt nur auf diesem iPhone und bestimmt deine Mixe. Last.fm und Navidrome bleiben unverändert.")
-        }
+        .navigationDestination(isPresented: $ueberMichOffen) { UeberMichView() }
         .alert("Mitteilungen", isPresented: Binding(get: { mitteilungen != nil }, set: { if !$0 { mitteilungen = nil } })) {
             Button("OK") {}
         } message: {

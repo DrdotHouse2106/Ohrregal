@@ -49,6 +49,14 @@ public final class Protokoll {
         offen = (try? Data(contentsOf: datei)).flatMap { try? JSONDecoder().decode([Ereignis].self, from: $0) } ?? []
     }
 
+    /// Noch nicht an den Server übertragene Ereignisse.
+    public var offenAnzahl: Int { offen.count }
+
+    public func offeneVerwerfen() {
+        offen = []
+        speichern()
+    }
+
     public func merke(_ typ: String, titel t: Titel? = nil, art: String = "musik", position: Double? = nil, dauer: Double? = nil,
                       wert: String? = nil, quelle: String? = nil, id: String? = nil, name: String? = nil, urheber: String? = nil) {
         var e = Ereignis(typ: typ, art: art)

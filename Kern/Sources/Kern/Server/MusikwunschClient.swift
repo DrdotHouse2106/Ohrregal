@@ -191,6 +191,34 @@ public struct MusikwunschClient: Sendable {
         }
     }
 
+    /// Eintrag des Hörprotokolls, wie der Server ihn zurückgibt.
+    public struct ProtokollEintrag: Decodable, Identifiable, Sendable {
+        public let uid: String
+        public let typ: String
+        public let zeit: String
+        public let art: String?
+        public let titel: String?
+        public let kuenstler: String?
+        public let wert: String?
+        public let quelle: String?
+        public let geraet: String?
+        public let ausgabe: String?
+        public var id: String { uid }
+
+        public var datum: Date? { ISO8601DateFormatter().date(from: zeit) }
+    }
+
+    public func protokoll(limit: Int = 300) async throws -> (gesamt: Int, eintraege: [ProtokollEintrag]) {
+        struct Liste: Decodable { let ereignisse: [ProtokollEintrag]; let gesamt: Int? }
+        let liste: Liste = try await hole("/ereignisse?limit=\(limit)")
+        return (liste.gesamt ?? liste.ereignisse.count, liste.ereignisse)
+    }
+
+    public func protokollLoeschen() async throws {
+        let (daten, code) = try await sende("/ereignisse", methode: "DELETE")
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
     /// Gerät für „Album ist da“ anmelden (gehört dann dem Navidrome-Benutzer).
     public func meldeGeraet(_ token: String, umgebung: String) async throws {
         let (daten, code) = try await sende("/geraet", methode: "POST", json: ["apnsToken": token, "umgebung": umgebung])
