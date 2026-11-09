@@ -40,6 +40,20 @@ struct StartVorrat: Codable {
             .init(titel: "Alben mit „Gefällt mir“", alben: (try? await gefaelltAnfrage) ?? []),
             .init(titel: "Zufällige Alben", alben: try await zufallAnfrage),
         ].filter { !$0.alben.isEmpty }
+        // Mehrere Bibliotheken (z. B. Musik und YouTube): je eine „Neu in …“-Reihe, damit kleine nicht verdrängt werden.
+        let ordner = (try? await client.ordner()) ?? []
+        if ordner.count > 1 {
+            var neu: [StartView.Reihe] = []
+            for o in ordner {
+                let alben = (try? await client.alben("newest", anzahl: 20, ordner: o.id)) ?? []
+                guard !alben.isEmpty else { continue }
+                let einzeln = alben.filter { ($0.songCount ?? 0) == 1 }.count * 2 > alben.count
+                neu.append(.init(titel: "Neu in \(o.name)", alben: alben, direkt: einzeln))
+            }
+            if let stelle = vorrat.reihen.firstIndex(where: { $0.titel == "Kürzlich hinzugefügt" }), !neu.isEmpty {
+                vorrat.reihen.replaceSubrange(stelle...stelle, with: neu)
+            }
+        }
         vorrat.mixe = await Mix.laden(client, haeufig: oft)
         return vorrat
     }

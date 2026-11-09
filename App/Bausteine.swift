@@ -143,22 +143,45 @@ struct AlbumKarte: View {
 
 /// Seitlich wischende Reihe. Jedes Cover ist ein eigener Link, damit genau das angetippte öffnet (P2).
 struct AlbenReihe: View {
+    @Environment(\.client) private var client
+    @Environment(Player.self) private var player
     let titel: String
     let alben: [Album]
+    /// Einzeltitel direkt abspielen (z. B. YouTube), mit „Alle abspielen“.
+    var direkt = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(titel).font(.title2.bold()).padding(.horizontal)
+            HStack {
+                Text(titel).font(.title2.bold())
+                Spacer()
+                if direkt {
+                    Button("Alle abspielen", systemImage: "play.fill") { Task { await spielen(ab: 0) } }.font(.subheadline)
+                }
+            }
+            .padding(.horizontal)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
-                    ForEach(alben) { album in
-                        NavigationLink(value: album) { AlbumKarte(album: album) }
-                            .buttonStyle(.plain)
+                    ForEach(Array(alben.enumerated()), id: \.element.id) { i, album in
+                        if direkt && album.songCount == 1 {
+                            Button { Task { await spielen(ab: i) } } label: { AlbumKarte(album: album) }
+                                .buttonStyle(.plain)
+                        } else {
+                            NavigationLink(value: album) { AlbumKarte(album: album) }
+                                .buttonStyle(.plain)
+                        }
                     }
                 }
                 .padding(.horizontal)
             }
         }
+    }
+
+    /// Spielt die Titel der Reihe ab der angetippten Stelle, neueste zuerst.
+    private func spielen(ab start: Int) async {
+        var titel: [Titel] = []
+        for album in alben[start...] { titel += (try? await client.album(album.id))?.song ?? [] }
+        player.spiele(titel, quelle: titel.isEmpty ? nil : self.titel)
     }
 }
 

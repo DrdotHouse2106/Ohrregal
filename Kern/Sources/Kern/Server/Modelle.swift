@@ -91,6 +91,9 @@ struct Antwort: Decodable {
     let playlist: Playlist?
     let lyricsList: Liedtexte?
     let internetRadioStations: Sendertabelle?
+    let musicFolders: Ordnerliste?
+
+    struct Ordnerliste: Decodable { let musicFolder: [Musikordner]? }
 
     struct Sendertabelle: Decodable { let internetRadioStation: [Sender]? }
 
@@ -121,4 +124,18 @@ public struct Sender: Codable, Hashable, Identifiable, Sendable {
     public let name: String
     public let streamUrl: String
     public let homePageUrl: String?
+}
+
+/// Bibliothek („Musikordner“) in Navidrome, z. B. Musik und YouTube.
+public struct Musikordner: Decodable, Hashable, Sendable {
+    public let id: String
+    public let name: String
+
+    enum CodingKeys: String, CodingKey { case id, name }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(String.self, forKey: .id)) ?? String(try c.decode(Int.self, forKey: .id))
+        name = (try? c.decode(String.self, forKey: .name)) ?? id
+    }
 }

@@ -20,6 +20,8 @@ struct StartView: View {
     struct Reihe: Identifiable, Codable {
         let titel: String
         let alben: [Album]
+        /// Fast nur Einzeltitel (z. B. YouTube): Antippen spielt direkt, statt eine Albumseite zu öffnen.
+        var direkt = false
         var id: String { titel }
     }
 
@@ -49,7 +51,7 @@ struct StartView: View {
                     Schnellauswahl(titel: Array(titel.prefix(16)))
                 }
 
-                ForEach(reihen) { AlbenReihe(titel: $0.titel, alben: $0.alben) }
+                ForEach(reihen) { AlbenReihe(titel: $0.titel, alben: $0.alben, direkt: $0.direkt) }
             }
             .padding(.vertical)
         }

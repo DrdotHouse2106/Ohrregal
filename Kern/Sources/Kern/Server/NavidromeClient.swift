@@ -56,8 +56,15 @@ public struct NavidromeClient: Sendable {
     public func ping() async throws { _ = try await hole("ping") }
 
     /// Albenliste: `recent`, `frequent`, `newest`, `random`, `alphabeticalByName`, `starred` …
-    public func alben(_ typ: String, anzahl: Int = 20, ab offset: Int = 0) async throws -> [Album] {
-        try await hole("getAlbumList2", ["type": typ, "size": "\(anzahl)", "offset": "\(offset)"]).albumList2?.album ?? []
+    /// Albenliste; mit `ordner` nur aus einer Bibliothek (Navidrome-Musikordner).
+    public func alben(_ typ: String, anzahl: Int = 20, ab offset: Int = 0, ordner: String? = nil) async throws -> [Album] {
+        var parameter = ["type": typ, "size": "\(anzahl)", "offset": "\(offset)"]
+        parameter["musicFolderId"] = ordner
+        return try await hole("getAlbumList2", parameter).albumList2?.album ?? []
+    }
+
+    public func ordner() async throws -> [Musikordner] {
+        try await hole("getMusicFolders").musicFolders?.musicFolder ?? []
     }
 
     public func album(_ id: String) async throws -> Album? { try await hole("getAlbum", ["id": id]).album }
