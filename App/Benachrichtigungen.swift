@@ -59,7 +59,7 @@ enum Benachrichtigungen {
         guard UserDefaults.standard.string(forKey: "apnsToken") != nil else { return "iOS hat noch keine Adresse für Mitteilungen geliefert. Bitte später noch einmal versuchen." }
         guard geteilteSitzung.hoerbuchClient != nil || geteilteSitzung.client != nil else { return "Es ist kein Server eingetragen." }
         await geraetMelden()
-        return UserDefaults.standard.string(forKey: "pushFehler") ?? "Mitteilungen sind eingeschaltet. Du bekommst Bescheid, wenn ein Hörbuch da ist."
+        return UserDefaults.standard.string(forKey: "pushFehler") ?? "Mitteilungen sind eingeschaltet. Du bekommst Bescheid, wenn ein gewünschtes Hörbuch oder Album da ist."
     }
 }
 
