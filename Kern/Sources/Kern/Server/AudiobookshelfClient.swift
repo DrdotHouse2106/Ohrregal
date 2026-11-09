@@ -135,9 +135,10 @@ public final class AudiobookshelfClient {
         return liste.treffer
     }
 
-    public func entdecken(neu: Bool = false) async -> [BuchTreffer] {
+    public func entdecken(neu: Bool = false) async throws -> [BuchTreffer] {
         struct Liste: Decodable { let treffer: [BuchTreffer] }
-        return ((try? await hole("/wunsch-api/entdecken" + (neu ? "?neu=1" : ""))) as Liste?)?.treffer ?? []
+        let liste: Liste = try await hole("/wunsch-api/entdecken" + (neu ? "?neu=1" : ""))
+        return liste.treffer
     }
 
     /// Seitenweise; optional neueste zuerst und nach Genre gefiltert.

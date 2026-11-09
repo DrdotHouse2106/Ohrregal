@@ -8,6 +8,7 @@ struct HoerbuecherView: View {
     @State private var bibliotheken: [Bibliothek] = []
     @State private var neu: [Hoerbuch] = []
     @State private var entdecken: [BuchTreffer] = []
+    @State private var entdeckenFehler: String?
     /// Deutscher Name → Bibliothek und alle Originalnamen, die darin zusammengefasst sind.
     @State private var genres: [(Bibliothek, String, [String])] = []
     @State private var fehler: String?
@@ -23,7 +24,10 @@ struct HoerbuecherView: View {
                                 Task { try? await abs.ausWeiterhoerenEntfernen(h.id) }
                             }
                         }
-                        if !entdecken.isEmpty {
+                        if let entdeckenFehler {
+                            Label("Entdecken: \(entdeckenFehler)", systemImage: "exclamationmark.triangle")
+                                .font(.caption).foregroundStyle(Farben.textGedaempft).padding(.horizontal)
+                        } else if !entdecken.isEmpty {
                             EntdeckenReihe(treffer: entdecken)
                         }
                         if !neu.isEmpty {
@@ -99,7 +103,12 @@ struct HoerbuecherView: View {
                 }
             }
             neu = Array(neuAlle.prefix(20))
-            entdecken = await abs.entdecken(neu: nachladen)
+            do {
+                entdecken = try await abs.entdecken(neu: nachladen)
+                entdeckenFehler = nil
+            } catch {
+                entdeckenFehler = error.localizedDescription
+            }
             genres = genresAlle.sorted { $0.1.localizedCompare($1.1) == .orderedAscending }
             fehler = nil
         } catch {
