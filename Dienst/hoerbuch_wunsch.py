@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.5.0"
+VERSION = "2.5.1"
 
 
 def env(name, standard=None, pflicht=False):
@@ -1060,16 +1060,28 @@ def als_suchtreffer(p, grund):
     }
 
 
+def verknuepft(benutzer):
+    """Alle Anmeldungen derselben Person, erkannt am gemeinsam angemeldeten Gerät (ABS und Navidrome)."""
+    with db() as v:
+        return {benutzer} | {z[0] for z in v.execute(
+            "SELECT DISTINCT g2.benutzer FROM geraet g1 JOIN geraet g2 ON g1.token=g2.token WHERE g1.benutzer=?",
+            (benutzer,))}
+
+
 def entdecken(benutzer):
-    if not benutzer.startswith("abs:"):
+    abs_ids = sorted(b for b in verknuepft(benutzer) if b.startswith("abs:"))
+    if not abs_ids:
         return []
-    verlauf = hoerverlauf(benutzer[4:])
+    verlauf = hoerverlauf(abs_ids[0][4:])
     autoren_zahl = {}
     for b in verlauf:
         for a in b["autoren"]:
             autoren_zahl[norm(a)] = (autoren_zahl.get(norm(a), (0, a))[0] + 1, a)
     lieblingsautoren = {k: v[1] for k, v in autoren_zahl.items() if v[0] >= 2}
-    saat = [b for b in verlauf if b["asin"]][:6]
+    # Als gehört markierte bzw. ganz gehörte Bücher sind das stärkste Signal, auch ohne Hördauer
+    mit_asin = [b for b in verlauf if b["asin"]]
+    fertig = [b for b in mit_asin if b.get("fertig")][:4]
+    saat = (fertig + [b for b in mit_asin if b not in fertig])[:6]
     kandidaten = {}  # asin -> [punkte, grund, produkt]
 
     def dazu(p, punkte, grund):
@@ -1647,7 +1659,7 @@ def navidrome_benutzer(u, t, s_):
 
 EREIGNIS_TYPEN = {"start", "ende", "uebersprungen", "gespult", "pause", "gefaellt", "gefaellt_nicht", "playlist",
                   "als_naechstes", "warteschlange", "radio", "suche", "tempo", "schlaftimer",
-                  "hoerbuch_fertig", "hoerbuch_abgebrochen"}
+                  "hoerbuch_fertig", "hoerbuch_abgebrochen", "hoerbuch_ungehoert"}
 EREIGNIS_TEXT = ("id", "titel", "kuenstler", "kuenstlerId", "albumId", "wert", "quelle", "geraet", "ausgabe")
 
 
@@ -1862,7 +1874,8 @@ class Schnittstelle(BaseHTTPRequestHandler):
                         mehr = f" {len(daten[k])} {k}"
                 if "fehler" in daten:
                     mehr = " " + daten["fehler"]
-            log(f"{self.command} {pfad}{neu} {code}{mehr} {dauer:.1f}s {self.absender()}")
+            wer = getattr(self, "_benutzer", "") or "-"
+            log(f"{self.command} {pfad}{neu} {code}{mehr} {dauer:.1f}s {wer[:12]} {self.absender()}")
         self.send_response(code)
         if daten is not None:
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -1891,6 +1904,7 @@ class Schnittstelle(BaseHTTPRequestHandler):
         if not name and self.headers.get("X-Subsonic-U"):
             name = navidrome_benutzer(self.headers.get("X-Subsonic-U"), self.headers.get("X-Subsonic-T"),
                                       self.headers.get("X-Subsonic-S"))
+        self._benutzer = name
         if not name:
             fehlversuch(ip)
             self.fehler(401, "nicht_angemeldet", "Token fehlt oder ist ungültig")

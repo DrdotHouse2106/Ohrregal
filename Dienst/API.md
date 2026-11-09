@@ -2,7 +2,7 @@
 
 Ein kleiner Dienst im Media-Stack. Er nimmt Hörbuch-Wünsche aus Ohrregal an, sucht sie über Prowlarr, lädt sie mit SABnzbd und sortiert sie in Audiobookshelf ein. Den Ablauf beschreibt `KONZEPT.md`, Kapitel 9.
 
-Stand: 08.11.2026, Dienst-Version 2.5.0. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
+Stand: 08.11.2026, Dienst-Version 2.5.1. Die Beschreibung kommt aus der Server-Sitzung „Heimnetz“.
 
 ## Grundsätzliches
 
@@ -12,7 +12,7 @@ Stand: 08.11.2026, Dienst-Version 2.5.0. Die Beschreibung kommt aus der Server-S
 - **hinweis-Texte** sind für die Anzeige gedacht. Adressen, Pfade und Schlüssel sind daraus entfernt.
 - **Format:** JSON (UTF-8), Zeiten im Format ISO 8601 mit Zeitzone.
 - **Fehler:** `{"fehler": "<schluessel>", "text": "<deutscher Klartext>"}`
-- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.5.0"}`. Gedacht für „Verbindung testen“.
+- **`GET /status`** (ohne Auth) liefert `{"ok": true, "version": "2.5.1"}`. Gedacht für „Verbindung testen“.
 
 ## Wunsch-Objekt
 
@@ -147,7 +147,7 @@ Antwort: `204`. Der Benutzer folgt der Reihe nicht mehr. Schon angelegte Wünsch
 Liefert `{"treffer": [ … ]}` mit höchstens 30 Vorschlägen, die besten zuerst. Mit `?neu=1` wird der Zwischenspeicher übergangen, sonst gilt er 6 Stunden je Benutzer. Abgelaufene Vorschläge liefert der Server sofort aus und erneuert sie im Hintergrund. Nach einem Neustart berechnet er sie für bekannte Benutzer vorab. Antworten dauern deshalb nur beim allerersten Aufruf bzw. mit `neu=1` mehrere Sekunden (bis etwa 10 s). Bitte einen Timeout von mindestens 30 s verwenden.
 
 So entstehen die Vorschläge:
-- **Grundlage** ist der ABS-Hörverlauf des Benutzers, gelesen aus der ABS-Datenbank: Bücher, die fertig gehört oder mindestens 10 Minuten angehört wurden, die neuesten zuerst. Ohne Verlauf nimmt der Server die zuletzt in die Bibliothek gekommenen Bücher.
+- **Grundlage** ist der ABS-Hörverlauf des Benutzers. Als gehört markierte oder ganz gehörte Bücher (isFinished) zählen zuerst, auch ohne Hördauer, ab 2.5.1. Wird ein Buch in ABS wieder als ungehört markiert, zählt es nicht mehr als fertig. Mit Navidrome-Anmeldung nimmt der Server den ABS-Benutzer, der auf demselben Gerät angemeldet ist (über /geraet). Der Rest dieses Punkts:, gelesen aus der ABS-Datenbank: Bücher, die fertig gehört oder mindestens 10 Minuten angehört wurden, die neuesten zuerst. Ohne Verlauf nimmt der Server die zuletzt in die Bibliothek gekommenen Bücher.
 - **Kandidaten:** Audible-„Ähnliche Titel“ (sims) zu den bis zu 6 zuletzt gehörten Büchern, dazu die Bestseller der 2 häufigsten Audible-Kategorien darunter.
 - **Ausgefiltert** wird alles, was nicht deutsch oder noch nicht erschienen ist, Sammelboxen, Titel, die schon in ABS liegen (auch nicht zugeordnete, erkannt über Ordnernamen) oder schon gewünscht sind, und doppelte Fassungen desselben Titels. Pro Autor gibt es höchstens 3 Vorschläge.
 
@@ -210,7 +210,7 @@ Ereignis:
  "id": "…", "titel": "…", "kuenstler": "…", "kuenstlerId": "…", "albumId": "…",
  "position": 40, "dauer": 200, "wert": "…", "quelle": "…", "geraet": "iPhone", "ausgabe": "Kopfhörer"}
 ```
-Pflicht sind `uid`, `typ` und `zeit`. Erlaubte `typ`: start, ende, uebersprungen, gespult, pause, gefaellt, gefaellt_nicht, playlist, als_naechstes, warteschlange, radio, suche, tempo, schlaftimer, hoerbuch_fertig, hoerbuch_abgebrochen. Textfelder werden nach 300 Zeichen abgeschnitten.
+Pflicht sind `uid`, `typ` und `zeit`. Erlaubte `typ`: start, ende, uebersprungen, gespult, pause, gefaellt, gefaellt_nicht, playlist, als_naechstes, warteschlange, radio, suche, tempo, schlaftimer, hoerbuch_fertig, hoerbuch_abgebrochen, hoerbuch_ungehoert (ab 2.5.1). Textfelder werden nach 300 Zeichen abgeschnitten.
 
 ### `GET /ereignisse?von=&bis=&limit=`
 Liefert `{"ereignisse": [ … ], "gesamt": <Anzahl insgesamt>}`, neueste zuerst. `von`/`bis` als ISO-Datum, `limit` 1–5000, Standard 500. Zeiten kommen in UTC zurück.
