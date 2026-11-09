@@ -171,7 +171,12 @@ public struct MusikwunschClient: Sendable {
         return liste.alben
     }
 
-    /// Gerät für „Album ist da“ anmelden (für Nutzer ohne Audiobookshelf).
+    public func geraetAbmelden(_ token: String) async throws {
+        let (daten, code) = try await sende("/geraet/\(token)", methode: "DELETE")
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
+    /// Gerät für „Album ist da“ anmelden (gehört dann dem Navidrome-Benutzer).
     public func meldeGeraet(_ token: String, umgebung: String) async throws {
         let (daten, code) = try await sende("/geraet", methode: "POST", json: ["apnsToken": token, "umgebung": umgebung])
         guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }

@@ -94,7 +94,8 @@ final class Sitzung {
     }
 
     func abmelden() {
-        Task { await Benachrichtigungen.geraetAbmelden() }
+        let abs = hoerbuchClient, dienst = musikwunsch
+        Task { await Benachrichtigungen.geraetAbmelden(abs, dienst) }
         Schluesselbund.loesche("navidrome")
         client = nil
     }

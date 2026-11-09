@@ -19,19 +19,28 @@ enum Benachrichtigungen {
         if erlaubt { UIApplication.shared.registerForRemoteNotifications() }
     }
 
+    /// Meldet das Gerät für beide Konten an: Hörbuch-Wünsche gehören dem Audiobookshelf-, Musikwünsche dem Navidrome-Konto.
     static func geraetMelden() async {
         guard let token = UserDefaults.standard.string(forKey: "apnsToken") else { return }
-        do {
-            // Mit Audiobookshelf-Konto über dieses, sonst mit der Navidrome-Anmeldung.
-            if let abs = geteilteSitzung.hoerbuchClient {
-                try await abs.meldeGeraet(token, umgebung: umgebung)
-            } else if let dienst = geteilteSitzung.musikwunsch {
-                try await dienst.meldeGeraet(token, umgebung: umgebung)
-            } else { return }
-            UserDefaults.standard.removeObject(forKey: "pushFehler")
-        } catch {
-            UserDefaults.standard.set("Anmeldung beim Wunsch-Dienst: \(error.localizedDescription)", forKey: "pushFehler")
+        var fehler: [String] = []
+        if let abs = geteilteSitzung.hoerbuchClient {
+            do { try await abs.meldeGeraet(token, umgebung: umgebung) } catch { fehler.append("Audiobookshelf: \(error.localizedDescription)") }
         }
+        if let dienst = geteilteSitzung.musikwunsch {
+            do { try await dienst.meldeGeraet(token, umgebung: umgebung) } catch { fehler.append("Navidrome: \(error.localizedDescription)") }
+        }
+        if fehler.isEmpty {
+            UserDefaults.standard.removeObject(forKey: "pushFehler")
+        } else {
+            UserDefaults.standard.set("Anmeldung beim Wunsch-Dienst – " + fehler.joined(separator: "; "), forKey: "pushFehler")
+        }
+    }
+
+    /// Die Zugänge werden übergeben, weil sie beim Abmelden gleich danach gelöscht werden.
+    static func geraetAbmelden(_ abs: AudiobookshelfClient?, _ dienst: MusikwunschClient?) async {
+        guard let token = UserDefaults.standard.string(forKey: "apnsToken") else { return }
+        try? await abs?.geraetAbmelden(token)
+        try? await dienst?.geraetAbmelden(token)
     }
 
     /// Schaltet Mitteilungen ein und beschreibt den Stand in einem Satz (für „Mitteilungen“ im Profilmenü).
