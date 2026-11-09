@@ -58,14 +58,14 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
 
         var zeilen: [CPListImageRowItem] = []
         if !mixe.isEmpty {
-            zeilen.append(await bildzeile("Für dich", mixe.map { m in
+            zeilen.append(await bildzeile("Für dich", mixe.map { m -> Bildeintrag in
                 (client.coverURL(m.cover.first, groesse: 300), { geteilterPlayer.spiele(m.titel, quelle: "CarPlay: Mix: \(m.name)") })
             }))
         }
         if let abs = geteilteSitzung.hoerbuchClient {
             let hoerbuecher = (try? await abs.angefangen()) ?? []
             if !hoerbuecher.isEmpty {
-                zeilen.append(await bildzeile("Hörbücher weiterhören", hoerbuecher.map { h in
+                zeilen.append(await bildzeile("Hörbücher weiterhören", hoerbuecher.map { h -> Bildeintrag in
                     (abs.coverURL(h.id), { await geteilterPlayer.spiele(hoerbuch: h) })
                 }))
             }
@@ -75,7 +75,7 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         async let haeufig = client.alben("frequent", anzahl: 12)
         for (titel, alben) in [("Zuletzt gespielt", (try? await zuletzt) ?? []), ("Kürzlich hinzugefügt", (try? await neu) ?? []),
                                ("Am häufigsten gespielt", (try? await haeufig) ?? [])] where !alben.isEmpty {
-            zeilen.append(await bildzeile(titel, alben.map { a in
+            zeilen.append(await bildzeile(titel, alben.map { a -> Bildeintrag in
                 (client.coverURL(a.coverArt, groesse: 300), {
                     geteilterPlayer.spiele((try? await client.album(a.id))?.song ?? [], quelle: "CarPlay: \(titel)")
                 })
@@ -85,7 +85,9 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     }
 
     /// Zeile mit Covern; die Bilder werden geladen, bevor die Zeile erscheint.
-    @MainActor private func bildzeile(_ titel: String, _ eintraege: [(URL?, @MainActor () async -> Void)],
+    typealias Bildeintrag = (URL?, @MainActor () async -> Void)
+
+    @MainActor private func bildzeile(_ titel: String, _ eintraege: [Bildeintrag],
                                       liste: [CPListItem]? = nil) async -> CPListImageRowItem {
         let teil = Array(eintraege.prefix(Int(CPMaximumNumberOfGridImages)))
         var bilder = Array(repeating: UIImage(systemName: "music.note") ?? UIImage(), count: teil.count)
