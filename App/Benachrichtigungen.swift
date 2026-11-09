@@ -99,8 +99,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let info = response.notification.request.content.userInfo
-        let id = info["absItemId"] as? String
-        let musik = info["musikWunschId"] != nil
-        await MainActor.run { geteilteSitzung.sprung = musik ? Sitzung.Sprung.musikwuensche : id.map { Sitzung.Sprung.hoerbuch($0) } ?? .wuensche }
+        let ziel: Sitzung.Sprung?
+        if info["musikWunschId"] != nil {
+            ziel = .musikwuensche
+        } else if let id = info["absItemId"] as? String {
+            ziel = .hoerbuch(id)
+        } else if info["wunschId"] != nil {
+            ziel = .wuensche
+        } else {
+            ziel = nil // z. B. Testnachricht: einfach die App öffnen
+        }
+        await MainActor.run { geteilteSitzung.sprung = ziel }
     }
 }

@@ -66,7 +66,7 @@ public final class Protokoll {
         offen.append(e)
         if offen.count > 20_000 { offen.removeFirst(offen.count - 20_000) }
         speichern()
-        if offen.count >= 20 { Task { await abschicken() } }
+        if offen.count >= 10 { Task { await abschicken() } }
     }
 
     /// Schickt alles Offene in Stapeln bis 200 Ereignisse und etwa 80 KB (der Proxy nimmt höchstens 100 KB).
