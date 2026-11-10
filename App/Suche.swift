@@ -27,7 +27,7 @@ struct SucheView: View {
                 guard text.count >= 2 else { ergebnis = nil; return }
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }
-                ergebnis = try? await client.suche(text)
+                ergebnis = try? await client.sucheUnscharf(text)
                 Protokoll.geteilt.merke("suche", wert: text)
             }
     }

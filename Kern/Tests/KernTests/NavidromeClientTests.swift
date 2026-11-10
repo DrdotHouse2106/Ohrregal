@@ -88,3 +88,12 @@ final class AdresseTests: XCTestCase {
         XCTAssertEqual(ServerFehler("Benutzername oder Passwort falsch.").deutsch, "Benutzername oder Passwort falsch.")
     }
 }
+
+final class UnscharfTests: XCTestCase {
+    func testTippfehlerUndUmlaute() {
+        XCTAssertGreaterThan(Unscharf.aehnlichkeit("Grönemeier", "Herbert Grönemeyer"), 0.7)
+        XCTAssertGreaterThan(Unscharf.aehnlichkeit("groenemeyer", "Herbert Grönemeyer"), 0.9)
+        XCTAssertGreaterThan(Unscharf.aehnlichkeit("fitzk", "Sebastian Fitzek"), 0.7)
+        XCTAssertLessThan(Unscharf.aehnlichkeit("Metallica", "Herbert Grönemeyer"), 0.5)
+    }
+}

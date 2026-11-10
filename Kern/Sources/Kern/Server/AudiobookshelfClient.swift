@@ -263,8 +263,20 @@ public final class AudiobookshelfClient {
     // MARK: Hörbücher suchen und wünschen
 
     /// Sucht über die Metadatendienste von Audiobookshelf (Audible Deutschland).
+    /// Sucht nach Titel und nach Autor; die besten Treffer zuerst.
     public func sucheBuecher(_ text: String) async throws -> [BuchTreffer] {
-        try await hole("/api/search/books?provider=audible.de&title=\(Self.kodiert(text))")
+        let wert = Self.kodiert(text)
+        async let nachTitel: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=\(wert)")
+        async let nachAutor: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=&author=\(wert)")
+        let titel = (try? await nachTitel) ?? []
+        let autor = (try? await nachAutor) ?? []
+        var gesehen = Set<String>()
+        return (titel + autor)
+            .filter { gesehen.insert($0.id).inserted }
+            .enumerated()
+            .map { (eintrag: $0.element, wert: max(Unscharf.aehnlichkeit(text, $0.element.title ?? ""), Unscharf.aehnlichkeit(text, $0.element.author ?? "")), stelle: $0.offset) }
+            .sorted { $0.wert != $1.wert ? $0.wert > $1.wert : $0.stelle < $1.stelle }
+            .map(\.eintrag)
     }
 
     public func wuensche() async throws -> [Wunsch] {
