@@ -270,13 +270,19 @@ public final class AudiobookshelfClient {
         async let nachAutor: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=&author=\(wert)")
         let titel = (try? await nachTitel) ?? []
         let autor = (try? await nachAutor) ?? []
+        // Doppelte entfernen, dann nach Ähnlichkeit (Titel oder Autor) sortieren; bei Gleichstand bleibt die Reihenfolge.
         var gesehen = Set<String>()
-        return (titel + autor)
-            .filter { gesehen.insert($0.id).inserted }
-            .enumerated()
-            .map { (eintrag: $0.element, wert: max(Unscharf.aehnlichkeit(text, $0.element.title ?? ""), Unscharf.aehnlichkeit(text, $0.element.author ?? "")), stelle: $0.offset) }
-            .sorted { $0.wert != $1.wert ? $0.wert > $1.wert : $0.stelle < $1.stelle }
-            .map(\.eintrag)
+        var liste: [BuchTreffer] = []
+        for t in titel + autor where gesehen.insert(t.id).inserted { liste.append(t) }
+        var wert: [String: Double] = [:]
+        for t in liste {
+            wert[t.id] = max(Unscharf.aehnlichkeit(text, t.title ?? ""), Unscharf.aehnlichkeit(text, t.author ?? ""))
+        }
+        let stelle = Dictionary(uniqueKeysWithValues: liste.enumerated().map { ($1.id, $0) })
+        return liste.sorted { a, b in
+            let wa = wert[a.id] ?? 0, wb = wert[b.id] ?? 0
+            return wa != wb ? wa > wb : (stelle[a.id] ?? 0) < (stelle[b.id] ?? 0)
+        }
     }
 
     public func wuensche() async throws -> [Wunsch] {
