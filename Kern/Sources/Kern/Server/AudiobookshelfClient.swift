@@ -265,9 +265,9 @@ public final class AudiobookshelfClient {
     /// Sucht über die Metadatendienste von Audiobookshelf (Audible Deutschland).
     /// Sucht nach Titel und nach Autor; die besten Treffer zuerst.
     public func sucheBuecher(_ text: String) async throws -> [BuchTreffer] {
-        let wert = Self.kodiert(text)
-        async let nachTitel: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=\(wert)")
-        async let nachAutor: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=&author=\(wert)")
+        let suchtext = Self.kodiert(text)
+        async let nachTitel: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=\(suchtext)")
+        async let nachAutor: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=&author=\(suchtext)")
         let titel = (try? await nachTitel) ?? []
         let autor = (try? await nachAutor) ?? []
         // Doppelte entfernen, dann nach Ähnlichkeit (Titel oder Autor) sortieren; bei Gleichstand bleibt die Reihenfolge.
