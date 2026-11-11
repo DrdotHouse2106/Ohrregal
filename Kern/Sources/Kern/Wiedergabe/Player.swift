@@ -85,7 +85,27 @@ public final class Player {
             let schluessel = ObjectIdentifier(eintrag)
             Task { @MainActor in self?.gehoert(schluessel) }
         })
+        #if os(iOS)
+        // Anruf, Siri oder Navigationsansage: danach weiterspielen wie Apple Music.
+        beobachter.append(NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] meldung in
+            let info = meldung.userInfo
+            let beginn = (info?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue
+            let weiter = AVAudioSession.InterruptionOptions(rawValue: info?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0).contains(.shouldResume)
+            MainActor.assumeIsolated { self?.unterbrochen(beginn: beginn, weiter: weiter) }
+        })
+        #endif
         fernsteuerung()
+    }
+
+    @ObservationIgnored private var liefVorUnterbrechung = false
+
+    private func unterbrochen(beginn: Bool, weiter: Bool) {
+        if beginn {
+            liefVorUnterbrechung = spielt || player.rate > 0
+        } else if liefVorUnterbrechung && weiter {
+            liefVorUnterbrechung = false
+            player.play()
+        }
     }
 
     // MARK: Starten
