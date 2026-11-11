@@ -24,7 +24,7 @@ jobs:
           mkdir fotos
           for TAB in 0 1 2 3; do
             xcrun simctl launch "$GERAET" de.drdothouse.Ohrregal -startTab $TAB \
-              -server https://demo.navidrome.org -benutzer demo -absServer https://audiobooks.dev -absBenutzer demo -demoPasswort demo
+              -server https://demo.navidrome.org -benutzer demo -absServer https://audiobooks.dev -absBenutzer demo -demoPasswort demo -suchtext Natasha
             sleep 20
             xcrun simctl io "$GERAET" screenshot "fotos/$TAB.png"
             xcrun simctl terminate "$GERAET" de.drdothouse.Ohrregal

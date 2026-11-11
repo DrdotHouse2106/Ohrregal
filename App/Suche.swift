@@ -4,11 +4,13 @@ import SwiftUI
 struct SucheView: View {
     @Environment(Sitzung.self) private var sitzung
     @Environment(\.client) private var client
-    @State private var text = ""
+    @State private var text = UserDefaults.standard.string(forKey: "suchtext") ?? ""
     @State private var ergebnis: Suchergebnis?
 
     var body: some View {
         ErgebnisAnsicht(ergebnis: ergebnis)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Farben.hintergrund)
             .safeAreaInset(edge: .bottom) {
                 // Nichts gefunden? Direkt bei Lidarr weitersuchen und wünschen.
                 if text.count >= 2 && sitzung.dienstDa {
