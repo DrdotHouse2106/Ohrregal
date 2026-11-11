@@ -11,7 +11,7 @@ Music and audiobooks from your own servers in one iPhone app that feels like App
 - **Audiobooks and radio plays** from [Audiobookshelf](https://www.audiobookshelf.org/)
 - **CarPlay**, offline listening and recommendations based on your listening
 
-Status: version 0.22 (TestFlight). The plan (in German) is in [KONZEPT.md](KONZEPT.md).
+Status: version 1.0 (TestFlight, App Store in preparation). The plan (in German) is in [KONZEPT.md](KONZEPT.md).
 
 Deutsche Version: [README.md](README.md)
 
@@ -43,6 +43,8 @@ Requests, discover, browse, series, notifications and the listening log run thro
 ## Privacy
 
 Credentials stay on the iPhone (passwords in the Keychain). The listening log only goes to your own server, is used for recommendations only and can be viewed and deleted in the app. Played tracks go to Last.fm via Navidrome only if you set that up there.
+
+Full privacy policy: [DATENSCHUTZ.en.md](DATENSCHUTZ.en.md)
 
 ## Setup
 

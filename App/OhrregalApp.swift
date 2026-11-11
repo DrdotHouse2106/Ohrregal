@@ -65,7 +65,7 @@ final class Sitzung {
     init() {
         let d = UserDefaults.standard
         if let text = d.string(forKey: "server"), let url = URL(string: text),
-           let benutzer = d.string(forKey: "benutzer"), let passwort = Schluesselbund.lies("navidrome") {
+           let benutzer = d.string(forKey: "benutzer"), let passwort = Schluesselbund.lies("navidrome") ?? Self.demoPasswort {
             client = NavidromeClient(server: url, benutzer: benutzer, passwort: passwort)
         }
         ladeHoerbuch()
@@ -89,12 +89,19 @@ final class Sitzung {
         let d = UserDefaults.standard
         hoerbuchClient = nil
         guard let text = d.string(forKey: "absServer"), !text.isEmpty, let benutzer = d.string(forKey: "absBenutzer"),
-              let passwort = Schluesselbund.lies("audiobookshelf"), let url = Adresse.aufbereiten(text) else { return }
+              let passwort = Schluesselbund.lies("audiobookshelf") ?? Self.demoPasswort, let url = Adresse.aufbereiten(text) else { return }
         hoerbuchClient = AudiobookshelfClient(server: url, benutzer: benutzer.trimmingCharacters(in: .whitespacesAndNewlines),
                                               passwort: passwort.trimmingCharacters(in: .newlines))
         // Offline gehörte Stellen nachtragen, sobald der Server erreichbar ist.
         if let abs = hoerbuchClient { Task { await Offline.geteilt.nachtragen(abs) } }
     }
+
+    /// Nur für die App-Store-Bildschirmfotos im Simulator (Startargument `-demoPasswort`).
+    #if DEBUG
+    static let demoPasswort = UserDefaults.standard.string(forKey: "demoPasswort")
+    #else
+    static let demoPasswort: String? = nil
+    #endif
 
     func anmelden(server: String, benutzer: String, passwort: String) async throws {
         // Leerzeichen am Rand fügt die iPhone-Tastatur gern selbst an (Wortvorschläge, Einfügen) – sie führen zu „falsches Passwort“.
@@ -136,7 +143,7 @@ struct Hauptansicht: View {
     @Environment(Player.self) private var player
     @Environment(\.client) private var client
     @State private var playerOffen = false
-    @State private var tab = 0
+    @State private var tab = UserDefaults.standard.integer(forKey: "startTab")
     @State private var hoerbuchPfad = NavigationPath()
     @State private var musikPfad = NavigationPath()
 

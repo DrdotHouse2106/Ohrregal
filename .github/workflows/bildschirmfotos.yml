@@ -1,0 +1,36 @@
+name: Bildschirmfotos für den App Store
+
+# Startet die App im Simulator (6,9 Zoll) mit den öffentlichen Demo-Servern und fotografiert jeden Tab.
+on: workflow_dispatch
+
+jobs:
+  fotos:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: App bauen (Simulator)
+        run: |
+          brew install xcodegen && xcodegen
+          xcodebuild build -project Ohrregal.xcodeproj -scheme Ohrregal -configuration Debug \
+            -sdk iphonesimulator -derivedDataPath build -quiet
+
+      - name: Fotografieren
+        run: |
+          GERAET=$(xcrun simctl list devices available | grep -m1 "iPhone .* Pro Max" | grep -oE '[0-9A-F-]{36}')
+          xcrun simctl boot "$GERAET" && xcrun simctl bootstatus "$GERAET"
+          xcrun simctl status_bar "$GERAET" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+          xcrun simctl install "$GERAET" build/Build/Products/Debug-iphonesimulator/Ohrregal.app
+          mkdir fotos
+          for TAB in 0 1 2 3; do
+            xcrun simctl launch "$GERAET" de.drdothouse.Ohrregal -startTab $TAB \
+              -server https://demo.navidrome.org -benutzer demo -absServer https://audiobooks.dev -absBenutzer demo -demoPasswort demo
+            sleep 20
+            xcrun simctl io "$GERAET" screenshot "fotos/$TAB.png"
+            xcrun simctl terminate "$GERAET" de.drdothouse.Ohrregal
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bildschirmfotos
+          path: fotos

@@ -12,7 +12,7 @@ Musik und Hörbücher von den eigenen Servern in einer iPhone-App, die sich anf�
 - **CarPlay**, offline hören und Vorschläge aus deinem Hörverhalten
 - Optik und Wortwahl passend zu Quallenkino
 
-Stand: Version 0.22 (TestFlight). Plan und Fahrplan stehen in [KONZEPT.md](KONZEPT.md).
+Stand: Version 1.0 (TestFlight, App Store in Vorbereitung). Plan und Fahrplan stehen in [KONZEPT.md](KONZEPT.md).
 
 English version: [README.en.md](README.en.md)
 
@@ -50,6 +50,8 @@ Ohne den Dienst funktioniert alles andere: Musik, Hörbücher, CarPlay, Offline 
 - Zugangsdaten bleiben auf dem iPhone, Passwörter im Schlüsselbund.
 - Das Hörprotokoll (was du hörst, überspringst, markierst, suchst und wünschst, mit Uhrzeit, Gerät und Ausgabe) geht nur an deinen eigenen Server. Es dient allein den Vorschlägen und lässt sich in der App einsehen und löschen.
 - Nach außen gehen nur die gehörten Titel über Navidrome an Last.fm (falls dort eingerichtet). Der Server-Dienst fragt außerdem den öffentlichen Audible-Katalog ab.
+
+Vollständige Datenschutzerklärung: [DATENSCHUTZ.md](DATENSCHUTZ.md)
 
 ## Einrichten
 
