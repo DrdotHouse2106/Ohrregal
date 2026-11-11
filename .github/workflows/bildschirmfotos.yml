@@ -26,7 +26,7 @@ jobs:
             xcrun simctl launch "$GERAET" de.drdothouse.Ohrregal -startTab $TAB \
               -server https://demo.navidrome.org -benutzer demo -absServer https://audiobooks.dev -absBenutzer demo -demoPasswort demo -suchtext Natasha
             sleep 20
-            xcrun simctl io "$GERAET" screenshot "fotos/$TAB.png"
+            xcrun simctl io "$GERAET" screenshot --type=jpeg "fotos/ohrregal-$TAB.jpg"
             xcrun simctl terminate "$GERAET" de.drdothouse.Ohrregal
           done
 
