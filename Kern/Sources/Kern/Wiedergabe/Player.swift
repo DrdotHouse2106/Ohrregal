@@ -218,7 +218,8 @@ public final class Player {
         guard !spuren.isEmpty else { return }
         Protokoll.geteilt.merke("gespult", titel: aktuell, art: istHoerbuch ? "hoerbuch" : "musik", position: zeit,
                                 wert: String(Int(ziel)), id: hoerbuchId, name: istHoerbuch ? anzeige?.titel : nil)
-        let neu = spuren.lastIndex { $0.start <= ziel } ?? 0
+        // Hörbuch: Datei zur Stelle suchen. Musik: immer im laufenden Titel (alle beginnen bei 0).
+        let neu = istHoerbuch ? (spuren.lastIndex { $0.start <= ziel } ?? 0) : spur
         if neu == spur, player.currentItem != nil {
             player.seek(to: CMTime(seconds: ziel - spuren[neu].start, preferredTimescale: 600))
             zeit = ziel
