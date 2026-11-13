@@ -222,6 +222,23 @@ Hinweis: Ereignisse mit X-Subsonic-Anmeldung landen bei `nd:<name>`, mit ABS-Tok
 
 Das Profil (`GET /profil`), die Nutzung in `/entdecken`, `/musik/fuerdich` und der Status „abgebrochen nach 30 Tagen“ kommen in einer späteren Version.
 
+## Podcasts suchen und abonnieren (ab 2.7.0)
+
+In Audiobookshelf dürfen nur Admins Podcasts anlegen. Der Dienst erledigt das deshalb mit einem ABS-Admin-Schlüssel (`ABS_ADMIN_KEY`) für alle angemeldeten Benutzer. Ohne diesen Schlüssel antworten POST und DELETE mit `503 nicht_eingerichtet`.
+
+### `GET /podcast/suche?q=<Text>`
+Liefert `{"treffer": [{"feedUrl", "titel", "autor", "cover", "genre", "folgen", "itunesId", "absItemId"}]}` aus dem Apple-Podcast-Verzeichnis (Land `PODCAST_LAND`, Standard de), höchstens 25 Treffer. `absItemId` ist gesetzt, wenn der Podcast schon in ABS liegt, sonst `null`. Eine Beschreibung liefert das Verzeichnis nicht. Fehler: `400 ungueltig`, `502 suche_nicht_erreichbar`.
+
+### `POST /podcast`
+Body: `{"feedUrl": "…", "ersteFolgen": 3}` (`ersteFolgen` 0–10, Standard 3). Der Dienst liest den Feed über ABS, legt den Podcast in der Podcast-Bibliothek an (Ordner = Podcast-Titel) und schaltet „neue Folgen automatisch laden“ ein (Zeitplan `PODCAST_ZEITPLAN`, Standard stündlich, je Prüfung höchstens 3 neue). Die neuesten `ersteFolgen` Folgen lädt er sofort.
+Antworten: `201 {"status": "abonniert", "absItemId", "titel"}`, `200 {"status": "schon_da", "absItemId"}`, `400 ungueltig`, `422 feed_ungueltig`, `502 abs_fehler`, `503 nicht_eingerichtet` (kein Admin-Schlüssel oder keine Podcast-Bibliothek).
+
+### `GET /podcast`
+Liefert `{"abos": [{"absItemId", "titel", "feedUrl", "vonMir", "erstellt"}], "eingerichtet": true|false}`, alle Abos, die über den Dienst angelegt wurden, neueste zuerst. `eingerichtet` sagt der App, ob sie „Abonnieren“ anbieten kann.
+
+### `DELETE /podcast/{absItemId}`
+`204`. Erlaubt ist das nur für den Benutzer, der abonniert hat, oder für ABS-Admins, sonst kommt `403 nicht_erlaubt`. Für Podcasts, die nicht über den Dienst angelegt wurden, kommt `404`. **Abbestellen beendet nur das automatische Laden. Vorhandene Folgen und der Podcast bleiben in ABS**, gelöscht wird nichts. Ganz entfernen kann man einen Podcast nur in der ABS-Oberfläche.
+
 ## Ruhezeiten und Vorrat (ab 2.3.0)
 
 Der Server rechnet nur, wenn es nicht stört, und liefert sonst aus seinem Vorrat aus:

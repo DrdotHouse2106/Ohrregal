@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.6.2"
+VERSION = "2.7.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -68,6 +68,11 @@ class Einstellungen:
         # Anmeldung mit dem Audiobookshelf-Token der App (GET /api/me)
         self.abs_url = env("ABS_URL", "").rstrip("/")
         self.abs_bibliothek = env("ABS_BIBLIOTHEK_ID", "")
+        # API-Schlüssel eines ABS-Admins: nur für Podcast-Abos (ABS erlaubt sie sonst nur Admins)
+        self.abs_admin_key = env("ABS_ADMIN_KEY", "")
+        self.podcast_bibliothek = env("ABS_PODCAST_BIBLIOTHEK", "Podcasts")
+        self.podcast_zeitplan = env("PODCAST_ZEITPLAN", "0 * * * *")
+        self.podcast_land = env("PODCAST_LAND", "de")
         # Pfad der Bibliothek, wie Audiobookshelf ihn sieht (für absItemId)
         self.abs_pfad = env("ABS_BIBLIOTHEK_PFAD", "").rstrip("/")
         self.ntfy = env("NTFY_URL", "")
@@ -154,6 +159,8 @@ def db_anlegen():
           titel TEXT, kuenstler TEXT, cover TEXT, status TEXT NOT NULL, hinweis TEXT,
           lidarrId INTEGER, gesucht TEXT, erstellt TEXT NOT NULL, aktualisiert TEXT NOT NULL,
           zurueckgezogen INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS podcast_abo (
+          absItemId TEXT PRIMARY KEY, benutzer TEXT NOT NULL, feedUrl TEXT, titel TEXT, erstellt TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS ereignis (
           benutzer TEXT NOT NULL, uid TEXT NOT NULL, typ TEXT NOT NULL, zeit TEXT NOT NULL,
           art TEXT, daten TEXT NOT NULL, empfangen TEXT NOT NULL, PRIMARY KEY (benutzer, uid));
@@ -1838,6 +1845,121 @@ def yt_zuordnen(hoechstens=400, nur_pruefen=False):
     return erledigt
 
 
+# ---------------------------------------------------------------- Podcasts suchen und abonnieren
+
+def abs_admin(pfad, daten=None, methode=None, zeit=60):
+    kopf = {"Authorization": "Bearer " + E.abs_admin_key, "Content-Type": "application/json"}
+    roh = hole(E.abs_url + pfad, json.dumps(daten).encode() if daten is not None else None, kopf,
+               zeit=zeit, methode=methode)
+    return json.loads(roh) if roh and roh[:1] in (b"{", b"[") else None
+
+
+def podcast_bibliothek():
+    """(libraryId, folderId, folderPath) der Podcast-Bibliothek aus der ABS-Datenbank."""
+    v = abs_db()
+    if not v:
+        return None
+    try:
+        z = v.execute("SELECT l.id, f.id, f.path FROM libraries l JOIN libraryFolders f ON f.libraryId=l.id "
+                      "WHERE l.mediaType='podcast' ORDER BY (l.name=?) DESC, l.createdAt LIMIT 1",
+                      (E.podcast_bibliothek,)).fetchone()
+        return tuple(z) if z else None
+    finally:
+        v.close()
+
+
+def podcast_vorhanden(feed_url):
+    v = abs_db()
+    if not v:
+        return None
+    try:
+        z = v.execute("SELECT li.id FROM podcasts p JOIN libraryItems li ON li.mediaId=p.id "
+                      "WHERE lower(rtrim(p.feedURL,'/'))=lower(rtrim(?,'/')) AND li.isMissing=0 LIMIT 1",
+                      (feed_url,)).fetchone()
+        return z[0] if z else None
+    finally:
+        v.close()
+
+
+def abs_ist_admin(benutzer):
+    v = abs_db()
+    if not v:
+        return False
+    try:
+        for b in verknuepft(benutzer):
+            if b.startswith("abs:"):
+                z = v.execute("SELECT type FROM users WHERE id=?", (b[4:],)).fetchone()
+                if z and z[0] in ("root", "admin"):
+                    return True
+        return False
+    finally:
+        v.close()
+
+
+def podcast_suche(q):
+    url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(
+        dict(media="podcast", entity="podcast", country=E.podcast_land, limit=25, term=q))
+    erg = json.loads(hole(url, zeit=20)).get("results") or []
+    treffer = []
+    for x in erg:
+        if not x.get("feedUrl"):
+            continue
+        treffer.append({"feedUrl": x["feedUrl"], "titel": x.get("collectionName"), "autor": x.get("artistName"),
+                        "cover": x.get("artworkUrl600") or x.get("artworkUrl100"), "genre": x.get("primaryGenreName"),
+                        "folgen": x.get("trackCount"), "itunesId": str(x.get("collectionId") or "") or None,
+                        "absItemId": podcast_vorhanden(x["feedUrl"])})
+    return treffer
+
+
+def podcast_abonnieren(benutzer, feed_url, erste_folgen=3):
+    vorhanden = podcast_vorhanden(feed_url)
+    if vorhanden:
+        return 200, {"status": "schon_da", "absItemId": vorhanden}
+    bib = podcast_bibliothek()
+    if not bib:
+        return 503, {"fehler": "nicht_eingerichtet", "text": "In Audiobookshelf gibt es keine Podcast-Bibliothek"}
+    lib_id, folder_id, folder_pfad = bib
+    feed = (abs_admin("/api/podcasts/feed", {"rssFeed": feed_url}, "POST", zeit=60) or {}).get("podcast") or {}
+    meta = dict(feed.get("metadata") or {})
+    if not meta.get("title"):
+        return 422, {"fehler": "feed_ungueltig", "text": "Der Feed ließ sich nicht lesen"}
+    meta["feedUrl"] = meta.get("feedUrl") or feed_url
+    pfad = folder_pfad.rstrip("/") + "/" + dateiname(meta["title"])
+    item = abs_admin("/api/podcasts", {
+        "libraryId": lib_id, "folderId": folder_id, "path": pfad,
+        "media": {"metadata": meta, "autoDownloadEpisodes": True, "autoDownloadSchedule": E.podcast_zeitplan,
+                  "maxNewEpisodesToDownload": 3, "maxEpisodesToKeep": 0}}, "POST", zeit=60) or {}
+    item_id = item.get("id")
+    if not item_id:
+        return 502, {"fehler": "abs_fehler", "text": "Audiobookshelf hat den Podcast nicht angelegt"}
+    folgen = sorted(feed.get("episodes") or [], key=lambda e: e.get("publishedAt") or 0, reverse=True)
+    if erste_folgen and folgen:
+        try:
+            abs_admin(f"/api/podcasts/{item_id}/download-episodes", folgen[:erste_folgen], "POST")
+        except Exception as f:
+            log("Erste Folgen nicht angestoßen:", f)
+    with DB_SPERRE, db() as v:
+        v.execute("INSERT OR REPLACE INTO podcast_abo VALUES (?,?,?,?,?)",
+                  (item_id, benutzer, meta["feedUrl"], meta["title"], jetzt().isoformat()))
+    log(f"Podcast abonniert von {benutzer[:12]}: {item_id}")
+    return 201, {"status": "abonniert", "absItemId": item_id, "titel": meta["title"]}
+
+
+def podcast_abbestellen(benutzer, item_id):
+    with db() as v:
+        z = v.execute("SELECT * FROM podcast_abo WHERE absItemId=?", (item_id,)).fetchone()
+    if not z:
+        return 404, {"fehler": "unbekannt", "text": "Dieses Abo wurde nicht über den Dienst angelegt"}
+    if z["benutzer"] not in verknuepft(benutzer) and not abs_ist_admin(benutzer):
+        return 403, {"fehler": "nicht_erlaubt", "text": "Nur wer abonniert hat oder ein Admin kann abbestellen"}
+    # Nur das automatische Laden beenden; vorhandene Folgen bleiben, gelöscht wird nichts
+    abs_admin(f"/api/items/{item_id}/media", {"autoDownloadEpisodes": False}, "PATCH")
+    with DB_SPERRE, db() as v:
+        v.execute("DELETE FROM podcast_abo WHERE absItemId=?", (item_id,))
+    log(f"Podcast abbestellt von {benutzer[:12]}: {item_id}")
+    return 204, None
+
+
 # ---------------------------------------------------------------- Ruhezeiten und Vorrat
 
 LEERLAUF = {"zeit": 0, "wert": True, "grund": ""}
@@ -2083,6 +2205,28 @@ class Schnittstelle(BaseHTTPRequestHandler):
             if not name:
                 return
             return self.musik_get(teile, abfrage, name)
+        if teile[:1] == ["podcast"]:
+            name = self.benutzer()
+            if not name:
+                return
+            if teile == ["podcast", "suche"]:
+                q = (abfrage.get("q", [""])[0] or "").strip()
+                if len(q) < 2:
+                    return self.fehler(400, "ungueltig", "q (mindestens 2 Zeichen) nötig")
+                try:
+                    return self.antworte(200, {"treffer": podcast_suche(q[:200])})
+                except Exception as f:
+                    log("Podcast-Suche fehlgeschlagen:", f)
+                    return self.fehler(502, "suche_nicht_erreichbar", "Die Podcast-Suche ist gerade nicht erreichbar")
+            if teile == ["podcast"]:
+                eigene = verknuepft(name)
+                with db() as v:
+                    zeilen = v.execute("SELECT * FROM podcast_abo ORDER BY erstellt DESC").fetchall()
+                return self.antworte(200, {"abos": [
+                    {"absItemId": z["absItemId"], "titel": z["titel"], "feedUrl": z["feedUrl"],
+                     "vonMir": z["benutzer"] in eigene, "erstellt": iso(datetime.fromisoformat(z["erstellt"]))}
+                    for z in zeilen], "eingerichtet": bool(E.abs_admin_key and podcast_bibliothek())})
+            return self.fehler(404, "unbekannt", "Diesen Pfad gibt es nicht")
         if teile == ["ereignisse"]:
             name = self.benutzer()
             if not name:
@@ -2168,6 +2312,29 @@ class Schnittstelle(BaseHTTPRequestHandler):
             return
         if teile == ["reihe"]:
             return self.reihe_folgen(name)
+        if teile == ["podcast"]:
+            if not E.abs_admin_key:
+                return self.fehler(503, "nicht_eingerichtet", "Podcast-Abos sind am Server noch nicht eingerichtet")
+            try:
+                d = self.koerper()
+            except (ValueError, json.JSONDecodeError):
+                return self.fehler(400, "ungueltig", "Kein gültiges JSON-Objekt")
+            feed = str(d.get("feedUrl") or "").strip()
+            if not re.match(r"https?://", feed):
+                return self.fehler(400, "ungueltig", "feedUrl ist Pflicht")
+            try:
+                n = max(0, min(10, int(d.get("ersteFolgen", 3))))
+            except (TypeError, ValueError):
+                n = 3
+            try:
+                code, daten = podcast_abonnieren(name, feed[:1000], n)
+            except urllib.error.HTTPError as f:
+                log("Podcast-Abo: ABS antwortet", f.code)
+                return self.fehler(502, "abs_fehler", f"Audiobookshelf antwortet {f.code}")
+            except Exception:
+                log("Podcast-Abo fehlgeschlagen:", traceback.format_exc())
+                return self.fehler(502, "abs_fehler", "Audiobookshelf ist gerade nicht erreichbar")
+            return self.antworte(code, daten)
         if teile == ["ereignisse"]:
             try:
                 d = self.koerper(grenze=2_000_000)
@@ -2337,6 +2504,15 @@ class Schnittstelle(BaseHTTPRequestHandler):
                 n = v.execute(sql, werte).rowcount
             log(f"Hörprotokoll: {n} Ereignisse von {name} gelöscht")
             return self.antworte(204)
+        if len(teile) == 2 and teile[0] == "podcast":
+            if not E.abs_admin_key:
+                return self.fehler(503, "nicht_eingerichtet", "Podcast-Abos sind am Server noch nicht eingerichtet")
+            try:
+                code, daten = podcast_abbestellen(name, teile[1])
+            except Exception:
+                log("Abbestellen fehlgeschlagen:", traceback.format_exc())
+                return self.fehler(502, "abs_fehler", "Audiobookshelf ist gerade nicht erreichbar")
+            return self.antworte(code, daten)
         if len(teile) == 3 and teile[:2] == ["musik", "folgen"]:
             try:
                 code, daten = musik_folgen(name, {"kuenstlerMbid": teile[2]}, False)
