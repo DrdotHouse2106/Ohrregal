@@ -222,6 +222,16 @@ Hinweis: Ereignisse mit X-Subsonic-Anmeldung landen bei `nd:<name>`, mit ABS-Tok
 
 Das Profil (`GET /profil`), die Nutzung in `/entdecken`, `/musik/fuerdich` und der Status „abgebrochen nach 30 Tagen“ kommen in einer späteren Version.
 
+## Radiosender in Navidrome (ab 2.8.0)
+
+In Navidrome dürfen nur Admins Internetradio-Sender anlegen oder löschen. Der Dienst erledigt das mit einem Navidrome-Admin-Zugang (`NAVIDROME_ADMIN_USER`, `NAVIDROME_ADMIN_PASS`). **Sender gelten in Navidrome für alle Benutzer**, nicht pro Person. Navidrome speichert keine Logos, deshalb merkt sich der Dienst `bild` je Sender.
+
+- `GET /musik/sender` liefert `{"sender": [{"id", "name", "streamUrl", "homepage", "bild", "vonMir"}], "eingerichtet": bool}`, alphabetisch sortiert. Ohne Admin-Zugang kommt `eingerichtet: false` mit leerer Liste. Dann bleibt die App bei ihrer lokalen Liste.
+- `POST /musik/sender` mit `{"name", "streamUrl", "homepage"?, "bild"?}` liefert `201 {"status": "angelegt", "id"}`, `200 {"status": "schon_da", "id"}` (gleiche streamUrl; ein fehlendes Bild wird dabei ergänzt), `400 ungueltig` oder `503 nicht_eingerichtet`. `bild` nur als https-Adresse.
+- `PATCH /musik/sender/{id}` mit `{"name"?, "bild"?}` liefert `204`. Umbenennen bzw. Bild setzen.
+- `DELETE /musik/sender/{id}` liefert `204`. Für alle anderen kommt `403 nicht_erlaubt`, erlaubt ist es nur für den, der den Sender über den Dienst angelegt hat, oder für Navidrome-Admins.
+- Fehler bei Störungen: `502 navidrome_fehler`.
+
 ## Podcasts suchen und abonnieren (ab 2.7.0)
 
 In Audiobookshelf dürfen nur Admins Podcasts anlegen. Der Dienst erledigt das deshalb mit einem ABS-Admin-Schlüssel (`ABS_ADMIN_KEY`) für alle angemeldeten Benutzer. Ohne diesen Schlüssel antworten POST und DELETE mit `503 nicht_eingerichtet`.

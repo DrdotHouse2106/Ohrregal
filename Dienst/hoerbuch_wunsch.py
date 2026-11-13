@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.7.0"
+VERSION = "2.8.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -95,6 +95,10 @@ class Einstellungen:
         self.lidarr_qualitaet = int(env("LIDARR_QUALITAETSPROFIL", "1"))
         self.lidarr_metadaten = int(env("LIDARR_METADATENPROFIL", "1"))
         self.navidrome = env("NAVIDROME_URL", "").rstrip("/")
+        # Navidrome-Admin nur für Radiosender (Navidrome erlaubt das Anlegen sonst nur Admins)
+        self.navidrome_admin = env("NAVIDROME_ADMIN_USER", "")
+        self.navidrome_admin_pw = env("NAVIDROME_ADMIN_PASS", "")
+        self.navidrome_db = env("NAVIDROME_DATENBANK", "")
         # Musik aus YouTube-Downloads (z. B. Pinchflat): echte Künstler nachts über MusicBrainz zuordnen
         self.youtube_musik = env("YOUTUBE_MUSIK", "").rstrip("/")
         self.lastfm_key = env("LASTFM_KEY", "")
@@ -161,6 +165,8 @@ def db_anlegen():
           zurueckgezogen INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS podcast_abo (
           absItemId TEXT PRIMARY KEY, benutzer TEXT NOT NULL, feedUrl TEXT, titel TEXT, erstellt TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS radio_sender (
+          id TEXT PRIMARY KEY, streamUrl TEXT, bild TEXT, benutzer TEXT, erstellt TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS ereignis (
           benutzer TEXT NOT NULL, uid TEXT NOT NULL, typ TEXT NOT NULL, zeit TEXT NOT NULL,
           art TEXT, daten TEXT NOT NULL, empfangen TEXT NOT NULL, PRIMARY KEY (benutzer, uid));
@@ -1960,6 +1966,59 @@ def podcast_abbestellen(benutzer, item_id):
     return 204, None
 
 
+# ---------------------------------------------------------------- Radiosender in Navidrome
+
+def nd_admin(methode, **param):
+    salz = secrets.token_hex(6)
+    param.update(u=E.navidrome_admin, s=salz, t=hashlib.md5((E.navidrome_admin_pw + salz).encode()).hexdigest(),
+                 v="1.16.1", c="hoerbuchwunsch", f="json")
+    d = json.loads(hole(f"{E.navidrome}/rest/{methode}?" + urllib.parse.urlencode(param), zeit=20))
+    antwort = d.get("subsonic-response") or {}
+    if antwort.get("status") != "ok":
+        raise RuntimeError((antwort.get("error") or {}).get("message") or "Navidrome-Fehler")
+    return antwort
+
+
+def radio_eingerichtet():
+    return bool(E.navidrome and E.navidrome_admin and E.navidrome_admin_pw)
+
+
+def sender_liste(benutzer):
+    st = nd_admin("getInternetRadioStations").get("internetRadioStations") or {}
+    eigene = verknuepft(benutzer)
+    with db() as v:
+        extra = {z["id"]: z for z in v.execute("SELECT * FROM radio_sender")}
+    aus = []
+    for x in st.get("internetRadioStation") or []:
+        e = extra.get(x.get("id"))
+        aus.append({"id": x.get("id"), "name": x.get("name"), "streamUrl": x.get("streamUrl"),
+                    "homepage": x.get("homePageUrl") or None, "bild": e["bild"] if e else None,
+                    "vonMir": bool(e and e["benutzer"] in eigene)})
+    aus.sort(key=lambda x: (x["name"] or "").lower())
+    return aus
+
+
+def nd_ist_admin(benutzer):
+    if not E.navidrome_db:
+        return False
+    namen = [b[3:] for b in verknuepft(benutzer) if b.startswith("nd:")]
+    if not namen:
+        return False
+    try:
+        v = sqlite3.connect(f"file:{E.navidrome_db}?mode=ro", uri=True, timeout=10)
+        try:
+            return bool(v.execute("SELECT 1 FROM user WHERE is_admin=1 AND user_name IN (%s)"
+                                  % ",".join("?" * len(namen)), namen).fetchone())
+        finally:
+            v.close()
+    except sqlite3.Error:
+        return False
+
+
+def url_ok(u):
+    return isinstance(u, str) and re.match(r"https?://\S+$", u.strip() or "") and len(u) < 1000
+
+
 # ---------------------------------------------------------------- Ruhezeiten und Vorrat
 
 LEERLAUF = {"zeit": 0, "wert": True, "grund": ""}
@@ -2350,7 +2409,9 @@ class Schnittstelle(BaseHTTPRequestHandler):
             except (ValueError, json.JSONDecodeError):
                 return self.fehler(400, "ungueltig", "Kein gültiges JSON-Objekt")
             try:
-                if teile == ["musik", "wunsch"]:
+                if teile == ["musik", "sender"]:
+                    code, daten = self.sender_anlegen(name, d)
+                elif teile == ["musik", "wunsch"]:
                     code, daten = musik_wunsch_anlegen(name, d)
                 elif teile == ["musik", "folgen"]:
                     code, daten = musik_folgen(name, d, True)
@@ -2427,6 +2488,14 @@ class Schnittstelle(BaseHTTPRequestHandler):
 
     def musik_get(self, teile, abfrage, name):
         q = lambda k: (abfrage.get(k, [""])[0] or "").strip()
+        if teile == ["musik", "sender"]:
+            if not radio_eingerichtet():
+                return self.antworte(200, {"sender": [], "eingerichtet": False})
+            try:
+                return self.antworte(200, {"sender": sender_liste(name), "eingerichtet": True})
+            except Exception as f:
+                log("Radiosender nicht abrufbar:", f)
+                return self.fehler(502, "navidrome_fehler", "Navidrome ist gerade nicht erreichbar")
         try:
             if teile == ["musik", "suche"]:
                 if len(q("q")) < 2:
@@ -2451,6 +2520,36 @@ class Schnittstelle(BaseHTTPRequestHandler):
             log("Musik fehlgeschlagen:", traceback.format_exc())
             return self.fehler(502, "lidarr_nicht_erreichbar", "Lidarr bzw. MusicBrainz gerade nicht erreichbar")
         return self.fehler(404, "unbekannt", "Diesen Pfad gibt es nicht")
+
+    def sender_anlegen(self, name, d):
+        if not radio_eingerichtet():
+            return 503, {"fehler": "nicht_eingerichtet", "text": "Radiosender sind am Server noch nicht eingerichtet"}
+        stream, titel = str(d.get("streamUrl") or "").strip(), str(d.get("name") or "").strip()[:200]
+        if not url_ok(stream) or not titel:
+            return 400, {"fehler": "ungueltig", "text": "name und streamUrl (http/https) sind Pflicht"}
+        homepage = str(d.get("homepage") or "").strip()
+        bild = str(d.get("bild") or "").strip()
+        bild = bild if url_ok(bild) and bild.startswith("https://") else None
+        for x in sender_liste(name):
+            if (x["streamUrl"] or "").rstrip("/") == stream.rstrip("/"):
+                if bild and not x["bild"]:
+                    with DB_SPERRE, db() as v:
+                        v.execute("INSERT OR IGNORE INTO radio_sender VALUES (?,?,?,?,?)",
+                                  (x["id"], stream, bild, None, jetzt().isoformat()))
+                        v.execute("UPDATE radio_sender SET bild=? WHERE id=? AND bild IS NULL", (bild, x["id"]))
+                return 200, {"status": "schon_da", "id": x["id"]}
+        param = {"streamUrl": stream, "name": titel}
+        if url_ok(homepage):
+            param["homepageUrl"] = homepage
+        nd_admin("createInternetRadioStation", **param)
+        neu = [x for x in sender_liste(name) if (x["streamUrl"] or "").rstrip("/") == stream.rstrip("/")]
+        if not neu:
+            return 502, {"fehler": "navidrome_fehler", "text": "Navidrome hat den Sender nicht angelegt"}
+        with DB_SPERRE, db() as v:
+            v.execute("INSERT OR REPLACE INTO radio_sender VALUES (?,?,?,?,?)",
+                      (neu[0]["id"], stream, bild, name, jetzt().isoformat()))
+        log(f"Radiosender angelegt von {name[:12]}: {neu[0]['id']}")
+        return 201, {"status": "angelegt", "id": neu[0]["id"]}
 
     def reihe_folgen(self, name):
         try:
@@ -2486,6 +2585,41 @@ class Schnittstelle(BaseHTTPRequestHandler):
             r_ = v.execute("SELECT * FROM reihe WHERE id=?", (rid,)).fetchone()
             return self.antworte(201, reihe_json(v, r_))
 
+    def do_PATCH(self):
+        teile, _ = self.pfad()
+        name = self.benutzer()
+        if not name:
+            return
+        if len(teile) != 3 or teile[:2] != ["musik", "sender"]:
+            return self.fehler(404, "unbekannt", "Diesen Pfad gibt es nicht")
+        if not radio_eingerichtet():
+            return self.fehler(503, "nicht_eingerichtet", "Radiosender sind am Server noch nicht eingerichtet")
+        try:
+            d = self.koerper()
+        except (ValueError, json.JSONDecodeError):
+            return self.fehler(400, "ungueltig", "Kein gültiges JSON-Objekt")
+        with db() as v:
+            z = v.execute("SELECT * FROM radio_sender WHERE id=?", (teile[2],)).fetchone()
+        if not ((z and z["benutzer"] in verknuepft(name)) or nd_ist_admin(name)):
+            return self.fehler(403, "nicht_erlaubt", "Nur wer den Sender angelegt hat oder ein Admin kann ihn ändern")
+        alt = next((x for x in sender_liste(name) if x["id"] == teile[2]), None)
+        if not alt:
+            return self.fehler(404, "unbekannt", "Diesen Sender gibt es nicht")
+        titel = str(d.get("name") or alt["name"]).strip()[:200]
+        param = {"id": teile[2], "streamUrl": alt["streamUrl"], "name": titel}
+        if alt["homepage"]:
+            param["homepageUrl"] = alt["homepage"]
+        try:
+            nd_admin("updateInternetRadioStation", **param)
+        except Exception as f:
+            return self.fehler(502, "navidrome_fehler", f"Navidrome: {f}"[:200])
+        if url_ok(d.get("bild") or "") and str(d["bild"]).startswith("https://"):
+            with DB_SPERRE, db() as v:
+                v.execute("INSERT OR IGNORE INTO radio_sender VALUES (?,?,?,?,?)",
+                          (teile[2], alt["streamUrl"], None, None, jetzt().isoformat()))
+                v.execute("UPDATE radio_sender SET bild=? WHERE id=?", (d["bild"], teile[2]))
+        return self.antworte(204)
+
     def do_DELETE(self):
         teile, _ = self.pfad()
         name = self.benutzer()
@@ -2513,6 +2647,21 @@ class Schnittstelle(BaseHTTPRequestHandler):
                 log("Abbestellen fehlgeschlagen:", traceback.format_exc())
                 return self.fehler(502, "abs_fehler", "Audiobookshelf ist gerade nicht erreichbar")
             return self.antworte(code, daten)
+        if len(teile) == 3 and teile[:2] == ["musik", "sender"]:
+            if not radio_eingerichtet():
+                return self.fehler(503, "nicht_eingerichtet", "Radiosender sind am Server noch nicht eingerichtet")
+            with db() as v:
+                z = v.execute("SELECT * FROM radio_sender WHERE id=?", (teile[2],)).fetchone()
+            if not ((z and z["benutzer"] in verknuepft(name)) or nd_ist_admin(name)):
+                return self.fehler(403, "nicht_erlaubt", "Nur wer den Sender angelegt hat oder ein Admin kann ihn entfernen")
+            try:
+                nd_admin("deleteInternetRadioStation", id=teile[2])
+            except Exception as f:
+                return self.fehler(502, "navidrome_fehler", f"Navidrome: {f}"[:200])
+            with DB_SPERRE, db() as v:
+                v.execute("DELETE FROM radio_sender WHERE id=?", (teile[2],))
+            log(f"Radiosender entfernt von {name[:12]}: {teile[2]}")
+            return self.antworte(204)
         if len(teile) == 3 and teile[:2] == ["musik", "folgen"]:
             try:
                 code, daten = musik_folgen(name, {"kuenstlerMbid": teile[2]}, False)
