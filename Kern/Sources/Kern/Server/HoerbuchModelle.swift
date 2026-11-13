@@ -224,11 +224,8 @@ public struct Folge: Decodable, Hashable, Identifiable, Sendable {
         podcastTitel = (try? c.decode(Podcast.self, forKey: .podcast))?.metadata?.title
     }
 
-    /// Mit Schalter „Großbuchstaben-Titel normal schreiben“ (nur Anzeige).
-    public var titel: String {
-        let t = title ?? "Ohne Titel"
-        return UserDefaults.standard.bool(forKey: "titelNormal") ? t.ohneGrossbuchstaben : t
-    }
+    /// Titel ganz in Großbuchstaben (YouTube) werden für die Anzeige normal geschrieben.
+    public var titel: String { (title ?? "Ohne Titel").ohneGrossbuchstaben }
     public var datum: Date? { (publishedAt ?? addedAt).map { Date(timeIntervalSince1970: $0 / 1000) } }
 }
 
