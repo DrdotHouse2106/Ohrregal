@@ -264,7 +264,7 @@ public final class AudiobookshelfClient {
 
     /// Sucht über die Metadatendienste von Audiobookshelf (Audible Deutschland).
     /// Sucht nach Titel und nach Autor; die besten Treffer zuerst.
-    public func sucheBuecher(_ text: String) async throws -> [BuchTreffer] {
+    public func sucheBuecher(_ text: String, korrigieren: Bool = true) async throws -> [BuchTreffer] {
         let suchtext = Self.kodiert(text)
         async let nachTitel: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=\(suchtext)")
         async let nachAutor: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=&author=\(suchtext)")
@@ -277,6 +277,10 @@ public final class AudiobookshelfClient {
         var wert: [String: Double] = [:]
         for t in liste {
             wert[t.id] = max(Unscharf.aehnlichkeit(text, t.title ?? ""), Unscharf.aehnlichkeit(text, t.author ?? ""))
+        }
+        // Nichts gefunden? Vermutlich ein Tippfehler – mit Audibles Vorschlag noch einmal.
+        if liste.isEmpty, korrigieren, let neu = await AudibleKatalog.vorschlag(text), neu.lowercased() != text.lowercased() {
+            return try await sucheBuecher(neu, korrigieren: false)
         }
         let stelle = Dictionary(uniqueKeysWithValues: liste.enumerated().map { ($1.id, $0) })
         return liste.sorted { a, b in
