@@ -262,26 +262,18 @@ public final class AudiobookshelfClient {
 
     // MARK: Hörbücher suchen und wünschen
 
-    /// Sucht über die Metadatendienste von Audiobookshelf (Audible Deutschland).
-    /// Sucht nach Titel und nach Autor; die besten Treffer zuerst.
+    /// Sucht direkt im Audible-Katalog (Deutschland) per Stichwort: Titel, Autor und Reihe zugleich.
+    /// Bei keinem Treffer wird ein Tippfehler über Audibles Vorschläge korrigiert.
     public func sucheBuecher(_ text: String, korrigieren: Bool = true) async throws -> [BuchTreffer] {
-        let suchtext = Self.kodiert(text)
-        async let nachTitel: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=\(suchtext)")
-        async let nachAutor: [BuchTreffer] = hole("/api/search/books?provider=audible.de&title=&author=\(suchtext)")
-        let titel = (try? await nachTitel) ?? []
-        let autor = (try? await nachAutor) ?? []
-        // Doppelte entfernen, dann nach Ähnlichkeit (Titel oder Autor) sortieren; bei Gleichstand bleibt die Reihenfolge.
         var gesehen = Set<String>()
-        var liste: [BuchTreffer] = []
-        for t in titel + autor where gesehen.insert(t.id).inserted { liste.append(t) }
-        var wert: [String: Double] = [:]
-        for t in liste {
-            wert[t.id] = max(Unscharf.aehnlichkeit(text, t.title ?? ""), Unscharf.aehnlichkeit(text, t.author ?? ""))
-        }
+        let liste = try await AudibleKatalog.suche(text).filter { gesehen.insert($0.id).inserted }
         // Nichts gefunden? Vermutlich ein Tippfehler – mit Audibles Vorschlag noch einmal.
         if liste.isEmpty, korrigieren, let neu = await AudibleKatalog.vorschlag(text), neu.lowercased() != text.lowercased() {
             return try await sucheBuecher(neu, korrigieren: false)
         }
+        // Audible sortiert nach Beliebtheit; nah am Suchtext (Titel oder Autor) kommt trotzdem nach oben.
+        var wert: [String: Double] = [:]
+        for t in liste { wert[t.id] = max(Unscharf.aehnlichkeit(text, t.title ?? ""), Unscharf.aehnlichkeit(text, t.author ?? "")) }
         let stelle = Dictionary(uniqueKeysWithValues: liste.enumerated().map { ($1.id, $0) })
         return liste.sorted { a, b in
             let wa = wert[a.id] ?? 0, wb = wert[b.id] ?? 0

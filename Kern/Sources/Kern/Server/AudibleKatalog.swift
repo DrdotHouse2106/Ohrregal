@@ -14,6 +14,32 @@ public enum AudibleKatalog {
         return antwort.product.sample_url.flatMap(URL.init(string:))
     }
 
+    /// Stichwortsuche im Katalog (Titel, Autor, Sprecher, Reihe gemischt), Treffer im Format der Audiobookshelf-Suche.
+    public static func suche(_ text: String) async throws -> [BuchTreffer] {
+        var teile = URLComponents(string: "https://api.audible.de/1.0/catalog/products")!
+        teile.queryItems = [URLQueryItem(name: "keywords", value: text), URLQueryItem(name: "num_results", value: "30"),
+                            URLQueryItem(name: "products_sort_by", value: "Relevance"),
+                            URLQueryItem(name: "response_groups", value: "contributors,media,series,product_attrs,product_desc")]
+        let (daten, _) = try await URLSession.shared.data(from: teile.url!)
+        let produkte = (try JSONSerialization.jsonObject(with: daten) as? [String: Any])?["products"] as? [[String: Any]] ?? []
+        func namen(_ p: [String: Any], _ feld: String) -> String? {
+            (p[feld] as? [[String: Any]])?.compactMap { $0["name"] as? String }.joined(separator: ", ")
+        }
+        let liste: [[String: Any]] = produkte.map { p in
+            let felder: [String: Any?] = [
+                "asin": p["asin"], "title": p["title"], "subtitle": p["subtitle"],
+                "author": namen(p, "authors"), "narrator": namen(p, "narrators"),
+                "cover": (p["product_images"] as? [String: Any])?["500"], "language": p["language"],
+                "duration": p["runtime_length_min"], "publisher": p["publisher_name"],
+                "description": p["publisher_summary"] ?? p["merchandising_summary"],
+                "publishedYear": (p["release_date"] as? String).map { String($0.prefix(4)) },
+                "series": (p["series"] as? [[String: Any]])?.map { ["series": $0["title"] ?? "", "sequence": $0["sequence"] ?? ""] },
+            ]
+            return felder.compactMapValues { $0 }
+        }
+        return try JSONDecoder().decode([BuchTreffer].self, from: JSONSerialization.data(withJSONObject: liste))
+    }
+
     /// Tippfehler: Audible korrigiert sie nicht, schlägt aber schon ab dem Wortanfang vor.
     /// Kürzt den Suchtext von hinten, bis ein Autor oder Titel vorgeschlagen wird („Peinkover“ → „Michael Peinkofer“).
     public static func vorschlag(_ text: String) async -> String? {
