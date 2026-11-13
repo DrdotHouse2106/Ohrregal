@@ -116,3 +116,12 @@ final class PodcastTests: XCTestCase {
         XCTAssertEqual(p.mediaType, "podcast")
     }
 }
+
+final class SenderTests: XCTestCase {
+    func testNavidromeSenderOhneBild() throws {
+        let json = #"{"subsonic-response":{"status":"ok","internetRadioStations":{"internetRadioStation":[{"id":"1","name":"WDR 4","streamUrl":"https://icecast.wdr.de/wdr/wdr4/rheinruhr/mp3/128/stream.mp3"}]}}}"#
+        let s = try NavidromeClient.lies(Data(json.utf8)).internetRadioStations?.internetRadioStation?.first
+        XCTAssertEqual(s?.name, "WDR 4")
+        XCTAssertNil(s?.bild)
+    }
+}

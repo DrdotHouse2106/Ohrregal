@@ -135,7 +135,7 @@ public final class Player {
         kapitel = []
         warteschlange = []
         spuren = [(url, 0)]
-        anzeige = Anzeige(titel: sender.name, untertitel: "Internetradio", cover: nil, dauer: 0)
+        anzeige = Anzeige(titel: sender.name, untertitel: "Internetradio", cover: sender.bild.flatMap(URL.init(string:)), dauer: 0)
         player.defaultRate = 1
         Protokoll.geteilt.merke("start", art: "musik", quelle: "Internetradio", id: sender.id, name: sender.name)
         lade(ab: 0, zeit: 0)

@@ -124,6 +124,12 @@ public struct Sender: Codable, Hashable, Identifiable, Sendable {
     public let name: String
     public let streamUrl: String
     public let homePageUrl: String?
+    /// Senderlogo (nur aus dem Senderverzeichnis).
+    public let bild: String?
+
+    public init(id: String, name: String, streamUrl: String, homePageUrl: String? = nil, bild: String? = nil) {
+        self.id = id; self.name = name; self.streamUrl = streamUrl; self.homePageUrl = homePageUrl; self.bild = bild
+    }
 }
 
 /// Bibliothek („Musikordner“) in Navidrome, z. B. Musik und YouTube.

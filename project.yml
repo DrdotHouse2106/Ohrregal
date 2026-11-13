@@ -29,6 +29,8 @@ targets:
         NSMicrophoneUsageDescription: Ohrregal hört kurz zu, um den gerade laufenden Titel zu erkennen.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+          # Viele Radiosender streamen nur über http://.
+          NSAllowsArbitraryLoadsForMedia: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations:
