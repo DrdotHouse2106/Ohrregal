@@ -267,9 +267,17 @@ public final class AudiobookshelfClient {
     public func sucheBuecher(_ text: String, korrigieren: Bool = true) async throws -> [BuchTreffer] {
         var gesehen = Set<String>()
         let liste = try await AudibleKatalog.suche(text).filter { gesehen.insert($0.id).inserted }
-        // Nichts gefunden? Vermutlich ein Tippfehler – mit Audibles Vorschlag noch einmal.
-        if liste.isEmpty, korrigieren, let neu = await AudibleKatalog.vorschlag(text), neu.lowercased() != text.lowercased() {
-            return try await sucheBuecher(neu, korrigieren: false)
+        // Enthält kein Treffer alle Suchwörter („michael peinkover“ findet nur andere Michaels), ist wohl ein Tippfehler drin:
+        // mit Audibles Vorschlag noch einmal suchen.
+        let einfach = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        let woerter = einfach(text).split(separator: " ")
+        let passt = liste.contains { t in
+            let alles = einfach([t.title, t.author, t.narrator, t.series?.first?.series].compactMap { $0 }.joined(separator: " "))
+            return woerter.allSatisfy { alles.contains($0) }
+        }
+        if !passt, korrigieren, let neu = await AudibleKatalog.vorschlag(text), einfach(neu) != einfach(text) {
+            let besser = try await sucheBuecher(neu, korrigieren: false)
+            if !besser.isEmpty { return besser }
         }
         // Audible sortiert nach Beliebtheit; nah am Suchtext (Titel oder Autor) kommt trotzdem nach oben.
         var wert: [String: Double] = [:]
