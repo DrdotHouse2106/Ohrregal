@@ -40,7 +40,7 @@ struct NeueFolgenReihe: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Cover(url: f.libraryItemId.flatMap { sitzung.hoerbuchClient?.coverURL($0) }, groesse: 160)
                                 Text(f.titel).font(.subheadline).lineLimit(2)
-                                Text([f.podcastTitel, f.datum?.formatted(date: .abbreviated, time: .omitted)].compactMap { $0 }.joined(separator: " · "))
+                                Text([f.podcastTitel, FolgenZeile.info(f)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                                     .font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
                             }
                             .frame(width: 160, alignment: .leading)
@@ -85,7 +85,19 @@ struct PodcastView: View {
                     .buttonStyle(.plain)
                     .listRowBackground(Farben.flaeche)
                     .swipeActions { gehoertKnopf(f) }
-                    .contextMenu { gehoertKnopf(f) }
+                    .contextMenu {
+                        gehoertKnopf(f)
+                    } preview: {
+                        // Langes Drücken: ganzer Titel und Beschreibung.
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(f.titel).font(.headline)
+                            Text(FolgenZeile.info(f)).font(.caption).foregroundStyle(Farben.textGedaempft)
+                            if let text = f.description, !text.isEmpty { Text(text).font(.callout).lineLimit(12) }
+                        }
+                        .padding()
+                        .frame(width: 340, alignment: .leading)
+                        .background(Farben.hintergrund)
+                    }
                 }
             }
         }
@@ -131,9 +143,9 @@ struct FolgenZeile: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
+                Text(Self.info(folge)).font(.caption).foregroundStyle(Farben.textGedaempft)
                 Text(folge.titel).lineLimit(2)
                     .foregroundStyle((anteil ?? 0) >= 1 ? Farben.textGedaempft : .primary)
-                Text(info).font(.caption).foregroundStyle(Farben.textGedaempft)
             }
             Spacer()
             if let anteil, anteil >= 1 {
@@ -147,9 +159,13 @@ struct FolgenZeile: View {
         .contentShape(Rectangle())
     }
 
-    private var info: String {
+    /// „12. Nov. · 13 Min.“ (Jahr nur, wenn es nicht dieses ist).
+    static func info(_ folge: Folge) -> String {
         var teile: [String] = []
-        if let d = folge.datum { teile.append(d.formatted(date: .abbreviated, time: .omitted)) }
+        if let d = folge.datum {
+            let diesesJahr = Calendar.current.isDate(d, equalTo: .now, toGranularity: .year)
+            teile.append(d.formatted(diesesJahr ? .dateTime.day().month(.abbreviated) : .dateTime.day().month(.abbreviated).year()))
+        }
         if let s = folge.duration, s > 0 { teile.append("\(max(Int(s / 60), 1)) Min.") }
         return teile.joined(separator: " · ")
     }

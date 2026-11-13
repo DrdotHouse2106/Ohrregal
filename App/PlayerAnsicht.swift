@@ -69,7 +69,8 @@ struct VollPlayer: View {
             Cover(url: player.anzeige?.cover, groesse: 300)
                 .shadow(color: .black.opacity(0.5), radius: 24, y: 10)
             VStack(spacing: 4) {
-                Text(player.anzeige?.titel ?? "").font(.title2.bold()).lineLimit(2).multilineTextAlignment(.center)
+                // Lange Folgentitel (YouTube) ganz zeigen, notfalls etwas kleiner.
+                Text(player.anzeige?.titel ?? "").font(.title2.bold()).lineLimit(4).minimumScaleFactor(0.75).multilineTextAlignment(.center)
                 Text(player.anzeige?.untertitel ?? "").font(.title3).foregroundStyle(Farben.textGedaempft).lineLimit(1)
                 if let k = player.aktuellesKapitel {
                     Button { kapitelOffen = true } label: {
