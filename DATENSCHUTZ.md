@@ -10,6 +10,8 @@ Ohrregal ist eine App für deine **eigenen** Server (Navidrome und Audiobookshel
 - **Gehörte Titel, Hörpositionen, Playlists und „Gefällt mir“** gehen nur an die Server, die du selbst einträgst.
 - **Hörprotokoll:** Nur wenn auf deinem Server der optionale Ohrregal-Dienst läuft, schickt die App ihm, was du hörst, überspringst, suchst und wünschst. Es dient allein den Vorschlägen und lässt sich in der App unter „Was Ohrregal über mich weiß“ einsehen und löschen.
 - **Musikerkennung:** Tippst du auf „Erkennen“, nutzt die App kurz das Mikrofon und Apples ShazamKit. Es wird keine Aufnahme gespeichert.
+- **Radio-Sendersuche:** Suchst du unter „Radio“ nach einem Sender, geht nur der Suchbegriff an das freie Senderverzeichnis radio-browser.info. Gemerkte Sender bleiben auf deinem Gerät.
+- **Hörbuch-Suche und Hörproben:** Suchbegriffe gehen an den öffentlichen Audible-Katalog (ohne Konto).
 - **Mitteilungen:** Erlaubst du Mitteilungen, gibt die App die Gerätekennung für Push-Mitteilungen an deinen eigenen Server weiter, damit er dir „Hörbuch ist da“ melden kann.
 
 ## Was nicht passiert
