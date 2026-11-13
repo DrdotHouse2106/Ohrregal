@@ -171,7 +171,13 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     }
 
     @MainActor private func fuelleRadio(_ liste: CPListTemplate, _ client: NavidromeClient) async {
-        let sender = MeineSender.geteilt.liste + ((try? await client.sender()) ?? [])
+        // Mit eigenem Dienst kommen die Sender samt Logo vom Dienst (sie liegen in Navidrome).
+        var sender = MeineSender.geteilt.liste
+        if geteilteSitzung.dienstDa, let dienst = geteilteSitzung.musikwunsch, let antwort = try? await dienst.sender(), antwort.eingerichtet {
+            sender += antwort.liste.map(\.sender)
+        } else {
+            sender += (try? await client.sender()) ?? []
+        }
         let eintraege = sender.map { s in
             let e = abspielen(s.name, nil, bild: s.bild.flatMap(URL.init(string:))) { geteilterPlayer.spiele(sender: s) }
             if s.bild == nil { e.setImage(UIImage(systemName: "dot.radiowaves.left.and.right")) }

@@ -44,4 +44,15 @@ public final class MeineSender {
         if enthaelt(s) { liste.removeAll { $0.id == s.id } } else { liste.append(s) }
         UserDefaults.standard.set(try? JSONEncoder().encode(liste), forKey: "meineSender")
     }
+
+    /// Einmalig: lokal gemerkte Sender nach Navidrome übertragen (nacheinander); übertragene verschwinden lokal.
+    public func uebertragen(_ dienst: MusikwunschClient) async {
+        for s in liste where (try? await dienst.senderAnlegen(s)) != nil { umschalten(s) }
+    }
+
+    /// Gleicher Stream? (ohne Schrägstrich am Ende verglichen)
+    public static func gleich(_ a: String, _ b: String) -> Bool {
+        func n(_ s: String) -> String { s.hasSuffix("/") ? String(s.dropLast()) : s }
+        return n(a) == n(b)
+    }
 }

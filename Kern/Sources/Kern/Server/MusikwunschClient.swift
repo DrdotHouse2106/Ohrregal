@@ -150,6 +150,38 @@ public struct MusikwunschClient: Sendable {
         return liste.wuensche
     }
 
+    // MARK: Radiosender in Navidrome (über den Dienst, weil Navidrome dafür Admin verlangt)
+
+    public struct ServerSender: Decodable, Hashable, Identifiable, Sendable {
+        public let id: String
+        public let name: String
+        public let streamUrl: String
+        public let homepage: String?
+        public let bild: String?
+        public let vonMir: Bool?
+        public var sender: Sender { Sender(id: id, name: name, streamUrl: streamUrl, homePageUrl: homepage, bild: bild) }
+    }
+
+    public func sender() async throws -> (liste: [ServerSender], eingerichtet: Bool) {
+        struct Liste: Decodable { let sender: [ServerSender]; let eingerichtet: Bool }
+        let liste: Liste = try await hole("/musik/sender")
+        return (liste.sender, liste.eingerichtet)
+    }
+
+    /// Legt den Sender in Navidrome an (oder ergänzt das Logo, wenn es ihn schon gibt).
+    public func senderAnlegen(_ s: Sender) async throws {
+        var json: [String: Any] = ["name": s.name, "streamUrl": s.streamUrl]
+        json["homepage"] = s.homePageUrl
+        if let bild = s.bild, bild.hasPrefix("https://") { json["bild"] = bild }
+        let (daten, code) = try await sende("/musik/sender", methode: "POST", json: json)
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
+    public func senderLoeschen(_ id: String) async throws {
+        let (daten, code) = try await sende("/musik/sender/\(id)", methode: "DELETE")
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
     public func zurueckziehen(_ id: String) async throws {
         let (daten, code) = try await sende("/musik/wunsch/\(id)", methode: "DELETE")
         guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
