@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.6.1"
+VERSION = "2.6.2"
 
 
 def env(name, standard=None, pflicht=False):
@@ -1689,7 +1689,7 @@ def ereignisse_speichern(name, liste):
         uid, typ, z = str(e.get("uid") or "")[:80], e.get("typ"), zeit_lesen(e.get("zeit"))
         # Neue typ-Werte der App werden angenommen, solange sie wie ein Schlüssel aussehen
         if not uid or not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", str(typ or "")) or not z \
-                or e.get("art") not in ("musik", "hoerbuch", None):
+                or e.get("art") not in ("musik", "hoerbuch", "podcast", None):
             return f"ungültiges Ereignis {uid or '?'}: uid, typ, zeit und art prüfen"
         d = {}
         for k, w in e.items():

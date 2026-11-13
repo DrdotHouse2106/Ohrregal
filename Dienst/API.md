@@ -206,7 +206,7 @@ Body: `{"ereignisse": [Ereignis]}`, höchstens 200 pro Aufruf, alte zuerst. Antw
 
 Ereignis:
 ```json
-{"uid": "…", "typ": "start", "zeit": "2026-11-09T08:00:00+01:00", "art": "musik" | "hoerbuch",
+{"uid": "…", "typ": "start", "zeit": "2026-11-09T08:00:00+01:00", "art": "musik" | "hoerbuch" | "podcast",
  "id": "…", "titel": "…", "kuenstler": "…", "kuenstlerId": "…", "albumId": "…",
  "position": 40, "dauer": 200, "wert": "…", "quelle": "…", "geraet": "iPhone", "ausgabe": "Kopfhörer"}
 ```
