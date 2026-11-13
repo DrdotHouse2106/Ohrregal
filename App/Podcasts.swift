@@ -63,6 +63,7 @@ struct PodcastView: View {
     @State private var folgen: [Folge] = []
     @State private var fortschritt: [String: Double] = [:]
     @State private var fehler: String?
+    @AppStorage("titelNormal") private var titelNormal = false
 
     var body: some View {
         List {
@@ -105,6 +106,13 @@ struct PodcastView: View {
         .background(Farben.hintergrund)
         .navigationTitle(podcast.titel)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            Menu {
+                Toggle("Großbuchstaben-Titel normal schreiben", isOn: $titelNormal)
+            } label: {
+                Image(systemName: "textformat")
+            }
+        }
         .overlay {
             if let fehler, folgen.isEmpty {
                 ContentUnavailableView("Folgen nicht geladen", systemImage: "wifi.exclamationmark", description: Text(fehler))

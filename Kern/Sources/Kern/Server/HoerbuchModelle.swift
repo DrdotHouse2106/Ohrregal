@@ -224,7 +224,11 @@ public struct Folge: Decodable, Hashable, Identifiable, Sendable {
         podcastTitel = (try? c.decode(Podcast.self, forKey: .podcast))?.metadata?.title
     }
 
-    public var titel: String { title ?? "Ohne Titel" }
+    /// Mit Schalter „Großbuchstaben-Titel normal schreiben“ (nur Anzeige).
+    public var titel: String {
+        let t = title ?? "Ohne Titel"
+        return UserDefaults.standard.bool(forKey: "titelNormal") ? t.ohneGrossbuchstaben : t
+    }
     public var datum: Date? { (publishedAt ?? addedAt).map { Date(timeIntervalSince1970: $0 / 1000) } }
 }
 
@@ -256,4 +260,20 @@ public struct PodcastAbos: Decodable, Sendable {
     }
     public let abos: [Abo]
     public let eingerichtet: Bool
+}
+
+extension String {
+    /// „DIE WAHRHEIT ÜBER DIE CDU“ → „Die Wahrheit Über Die CDU“: Wörter ganz in Großbuchstaben ab 4 Buchstaben
+    /// und häufige kurze Wörter werden normal geschrieben, kurze Abkürzungen (CDU, USA) bleiben.
+    public var ohneGrossbuchstaben: String {
+        let kurz: Set<String> = ["DER", "DIE", "DAS", "UND", "IST", "EIN", "MIT", "VON", "FÜR", "WIE", "WAS", "WER", "WIR", "IHR",
+                                 "SIE", "ER", "ES", "ICH", "DU", "IN", "IM", "AM", "AN", "AUF", "AUS", "BEI", "ZU", "ZUM", "ZUR",
+                                 "NUR", "NOCH", "NICHT", "DEN", "DEM", "DES", "SO", "JA", "NEIN", "WO", "ALS", "AB", "UM", "VOR"]
+        return split(separator: " ", omittingEmptySubsequences: false).map { wort -> String in
+            let buchstaben = wort.filter(\.isLetter)
+            guard !buchstaben.isEmpty, buchstaben == buchstaben.uppercased(), buchstaben != buchstaben.lowercased(),
+                  buchstaben.count >= 4 || kurz.contains(String(buchstaben)) else { return String(wort) }
+            return String(wort).lowercased().capitalized(with: Locale(identifier: "de_DE"))
+        }.joined(separator: " ")
+    }
 }

@@ -139,3 +139,11 @@ final class PodcastAboTests: XCTestCase {
         XCTAssertEqual(a.abos.first?.vonMir, true)
     }
 }
+
+final class TitelTests: XCTestCase {
+    func testGrossbuchstaben() {
+        XCTAssertEqual("DIE WAHRHEIT ÜBER DIE CDU".ohneGrossbuchstaben, "Die Wahrheit Über Die CDU")
+        XCTAssertEqual("Landwirtschaft erLEEben mit Anthony Lee".ohneGrossbuchstaben, "Landwirtschaft erLEEben mit Anthony Lee")
+        XCTAssertEqual("Das sagt die USA!".ohneGrossbuchstaben, "Das sagt die USA!")
+    }
+}
