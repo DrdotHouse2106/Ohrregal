@@ -125,3 +125,17 @@ final class SenderTests: XCTestCase {
         XCTAssertNil(s?.bild)
     }
 }
+
+final class PodcastAboTests: XCTestCase {
+    func testSucheUndAbos() throws {
+        let suche = #"{"treffer":[{"feedUrl":"https://f.example/rss","titel":"Beispiel","autor":"Sender","cover":null,"genre":"News","folgen":120,"itunesId":123,"absItemId":null}]}"#
+        struct Liste: Decodable { let treffer: [PodcastTreffer] }
+        let t = try JSONDecoder().decode(Liste.self, from: Data(suche.utf8)).treffer[0]
+        XCTAssertNil(t.absItemId)
+        XCTAssertEqual(PodcastTreffer(kopie: t, absItemId: "li-9").absItemId, "li-9")
+        let abos = #"{"abos":[{"absItemId":"li-9","titel":"Beispiel","feedUrl":"https://f.example/rss","vonMir":true,"erstellt":"2026-11-13T20:00:00Z"}],"eingerichtet":false}"#
+        let a = try JSONDecoder().decode(PodcastAbos.self, from: Data(abos.utf8))
+        XCTAssertFalse(a.eingerichtet)
+        XCTAssertEqual(a.abos.first?.vonMir, true)
+    }
+}

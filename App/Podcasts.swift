@@ -154,3 +154,118 @@ struct FolgenZeile: View {
         return teile.joined(separator: " · ")
     }
 }
+
+/// Podcast im Apple-Verzeichnis suchen und über den eigenen Dienst abonnieren.
+struct PodcastSucheView: View {
+    @Environment(Sitzung.self) private var sitzung
+    @State private var text = ""
+    @State private var treffer: [PodcastTreffer] = []
+    @State private var abos: [PodcastAbos.Abo] = []
+    @State private var laeuft: Set<String> = []
+    @State private var meldung: String?
+
+    var body: some View {
+        List {
+            if let meldung { Text(meldung).font(.callout).listRowBackground(Farben.flaeche) }
+            if !treffer.isEmpty {
+                Section("Gefunden") {
+                    ForEach(treffer) { t in
+                        HStack(spacing: 12) {
+                            AsyncImage(url: t.cover.flatMap(URL.init(string:))) { $0.resizable().scaledToFill() } placeholder: { Farben.flaeche }
+                                .frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 8))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(t.titel).lineLimit(2)
+                                Text([t.autor, t.genre, t.folgen.map { "\($0) Folgen" }].compactMap { $0 }.joined(separator: " · "))
+                                    .font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
+                            }
+                            Spacer()
+                            if let id = t.absItemId {
+                                NavigationLink("Öffnen", value: Ziel.podcastNachId(id)).fixedSize()
+                            } else if laeuft.contains(t.id) {
+                                ProgressView()
+                            } else {
+                                Button("Abonnieren") { Task { await abonniere(t) } }.buttonStyle(.bordered).tint(Farben.blau)
+                            }
+                        }
+                        .listRowBackground(Farben.flaeche)
+                    }
+                }
+            }
+            if !abos.isEmpty {
+                Section {
+                    ForEach(abos) { a in
+                        NavigationLink(value: Ziel.podcastNachId(a.absItemId)) { Text(a.titel ?? "Podcast") }
+                            .listRowBackground(Farben.flaeche)
+                            .swipeActions {
+                                if a.vonMir == true {
+                                    Button("Keine neuen Folgen mehr laden", role: .destructive) { Task { await abbestellen(a) } }
+                                }
+                            }
+                    }
+                } header: {
+                    Text("Abonniert")
+                } footer: {
+                    Text("Neue Folgen lädt der Server stündlich. Zum Beenden nach links wischen; vorhandene Folgen bleiben.")
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Farben.hintergrund)
+        .navigationTitle("Podcast suchen")
+        .safeAreaInset(edge: .top) { Suchfeld(prompt: "Podcast suchen", text: $text) }
+        .task(id: text) {
+            guard text.count >= 2, let abs = sitzung.hoerbuchClient else { treffer = []; return }
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            do { treffer = try await abs.podcastSuche(text); meldung = nil } catch { meldung = "Suche fehlgeschlagen: \(error.deutsch)" }
+        }
+        .task { abos = (try? await sitzung.hoerbuchClient?.podcastAbos())?.abos ?? [] }
+    }
+
+    private func abonniere(_ t: PodcastTreffer) async {
+        guard let abs = sitzung.hoerbuchClient else { return }
+        laeuft.insert(t.id)
+        defer { laeuft.remove(t.id) }
+        do {
+            let id = try await abs.abonniere(t.feedUrl)
+            meldung = "„\(t.titel)“ abonniert. Die neuesten 3 Folgen kommen gleich."
+            treffer = treffer.map { $0.id == t.id ? PodcastTreffer(kopie: $0, absItemId: id) : $0 }
+            abos = (try? await abs.podcastAbos())?.abos ?? abos
+        } catch {
+            meldung = "Abonnieren fehlgeschlagen: \(error.deutsch)"
+        }
+    }
+
+    private func abbestellen(_ a: PodcastAbos.Abo) async {
+        do {
+            try await sitzung.hoerbuchClient?.abbestellen(a.absItemId)
+            abos.removeAll { $0.id == a.id }
+            meldung = "Für „\(a.titel ?? "den Podcast")“ werden keine neuen Folgen mehr geladen."
+        } catch {
+            meldung = "Hat nicht geklappt: \(error.deutsch)"
+        }
+    }
+}
+
+/// Podcast, von dem nur die Audiobookshelf-ID bekannt ist.
+struct PodcastNachId: View {
+    @Environment(Sitzung.self) private var sitzung
+    let id: String
+    @State private var podcast: Hoerbuch?
+    @State private var fehler: String?
+
+    var body: some View {
+        Group {
+            if let podcast {
+                PodcastView(podcast: podcast)
+            } else if let fehler {
+                ContentUnavailableView("Podcast nicht gefunden", systemImage: "exclamationmark.triangle", description: Text(fehler))
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            do { podcast = try await sitzung.hoerbuchClient?.hoerbuch(id) } catch { fehler = error.deutsch }
+        }
+    }
+}

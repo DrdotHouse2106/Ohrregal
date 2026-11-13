@@ -9,6 +9,7 @@ struct HoerbuecherView: View {
     @State private var neu: [Hoerbuch] = []
     @State private var podcasts: [Hoerbuch] = []
     @State private var neueFolgen: [Folge] = []
+    @State private var podcastAbos = false
     @State private var entdecken: [BuchTreffer] = []
     @State private var entdeckenFehler: String?
     /// Deutscher Name → Bibliothek und alle Originalnamen, die darin zusammengefasst sind.
@@ -74,6 +75,11 @@ struct HoerbuecherView: View {
                                 NavigationLink(value: Ziel.wuensche) {
                                     Zeile(text: "Hörbuch wünschen", symbol: "sparkles")
                                 }
+                                if podcastAbos {
+                                    NavigationLink(value: Ziel.podcastSuche) {
+                                        Zeile(text: "Podcast suchen", symbol: "magnifyingglass")
+                                    }
+                                }
                             }
                         }
                         .buttonStyle(.plain)
@@ -129,6 +135,7 @@ struct HoerbuecherView: View {
             }
             podcasts = podcastsAlle
             neueFolgen = (try? await abs.neueFolgen()) ?? []
+            if sitzung.dienstDa { podcastAbos = (try? await abs.podcastAbos())?.eingerichtet ?? false }
             if !podcasts.isEmpty { Task { await Offline.geteilt.podcastsAbgleichen(abs) } }
             do {
                 if sitzung.dienstDa { entdecken = try await abs.entdecken(neu: nachladen) }

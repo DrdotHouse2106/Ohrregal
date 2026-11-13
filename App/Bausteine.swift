@@ -55,6 +55,8 @@ enum Ziel: Hashable {
     case albumFinden(String, String)
     case kategorie(Kategorie)
     case podcast(Hoerbuch)
+    case podcastNachId(String)
+    case podcastSuche
 
     @ViewBuilder var ansicht: some View {
         switch self {
@@ -77,6 +79,8 @@ enum Ziel: Hashable {
         case .albumFinden(let titel, let kuenstler): AlbumFinden(titel: titel, kuenstler: kuenstler)
         case .kategorie(let k): KategorieView(kategorie: k)
         case .podcast(let p): PodcastView(podcast: p)
+        case .podcastNachId(let id): PodcastNachId(id: id)
+        case .podcastSuche: PodcastSucheView()
         }
     }
 }

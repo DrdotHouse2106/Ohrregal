@@ -227,3 +227,33 @@ public struct Folge: Decodable, Hashable, Identifiable, Sendable {
     public var titel: String { title ?? "Ohne Titel" }
     public var datum: Date? { (publishedAt ?? addedAt).map { Date(timeIntervalSince1970: $0 / 1000) } }
 }
+
+/// Treffer aus dem Apple-Podcast-Verzeichnis (über den eigenen Dienst).
+public struct PodcastTreffer: Decodable, Hashable, Identifiable, Sendable {
+    public let feedUrl: String
+    public let titel: String
+    public let autor: String?
+    public let cover: String?
+    public let genre: String?
+    public let folgen: Int?
+    /// Gesetzt, wenn der Podcast schon in Audiobookshelf liegt.
+    public let absItemId: String?
+    public var id: String { feedUrl }
+
+    /// Gleicher Treffer, jetzt mit Audiobookshelf-ID (nach dem Abonnieren).
+    public init(kopie t: PodcastTreffer, absItemId: String) {
+        feedUrl = t.feedUrl; titel = t.titel; autor = t.autor; cover = t.cover; genre = t.genre; folgen = t.folgen; self.absItemId = absItemId
+    }
+}
+
+/// Über den Dienst angelegte Abos; `eingerichtet` sagt, ob Abonnieren möglich ist.
+public struct PodcastAbos: Decodable, Sendable {
+    public struct Abo: Decodable, Hashable, Identifiable, Sendable {
+        public let absItemId: String
+        public let titel: String?
+        public let vonMir: Bool?
+        public var id: String { absItemId }
+    }
+    public let abos: [Abo]
+    public let eingerichtet: Bool
+}

@@ -112,6 +112,30 @@ public final class AudiobookshelfClient {
         return Array(alle.sorted { ($0.datum ?? .distantPast) > ($1.datum ?? .distantPast) }.prefix(anzahl))
     }
 
+    /// Podcasts im Apple-Verzeichnis suchen (über den eigenen Dienst).
+    public func podcastSuche(_ text: String) async throws -> [PodcastTreffer] {
+        struct Liste: Decodable { let treffer: [PodcastTreffer] }
+        let liste: Liste = try await hole("/wunsch-api/podcast/suche?q=\(Self.kodiert(text))")
+        return liste.treffer
+    }
+
+    public func podcastAbos() async throws -> PodcastAbos {
+        try await hole("/wunsch-api/podcast")
+    }
+
+    /// Abonniert und lädt die neuesten 3 Folgen sofort; liefert die Audiobookshelf-ID.
+    public func abonniere(_ feedUrl: String) async throws -> String {
+        struct Antwort: Decodable { let absItemId: String }
+        let antwort: Antwort = try await hole("/wunsch-api/podcast", methode: "POST", json: ["feedUrl": feedUrl, "ersteFolgen": 3])
+        return antwort.absItemId
+    }
+
+    /// Beendet nur das automatische Laden; Podcast und Folgen bleiben in Audiobookshelf.
+    public func abbestellen(_ absItemId: String) async throws {
+        let (daten, code) = try await sende("/wunsch-api/podcast/\(absItemId)", methode: "DELETE")
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
     /// Fortschritt je Folge (0…1, fertig = 1).
     public func folgenFortschritt() async throws -> [String: Double] {
         struct Ich: Decodable {
