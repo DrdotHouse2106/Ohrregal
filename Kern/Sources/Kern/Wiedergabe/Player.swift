@@ -155,11 +155,18 @@ public final class Player {
         await starte(id: podcast, titel: folge.titel, autor: podcastTitel, folge: folge.id)
     }
 
+    /// Geladene Podcast-Folge (aus „Geladen“).
+    public func spiele(geladeneFolge h: OfflineHoerbuch) async {
+        guard let podcast = h.podcast else { return }
+        await starte(id: podcast, titel: h.titel, autor: h.autor, folge: h.id)
+    }
+
     private func starte(id: String, titel: String, autor: String, hoerbuch: Hoerbuch? = nil, folge: String? = nil) async {
         guard let abs = hoerbuchClient else { return }
         beendeHoerbuch()
         player.pause()
-        let offline = folge == nil ? Offline.geteilt.hoerbuch(id) : nil
+        // Geladene Podcast-Folgen liegen unter der ID der Folge.
+        let offline = Offline.geteilt.hoerbuch(folge ?? id)
         if offline != nil { await Offline.geteilt.nachtragen(abs) }
         do {
             // Sitzung beim Server: für Fortschritt und Statistik. Ohne Verbindung geht es mit der Datei weiter.
@@ -414,14 +421,14 @@ public final class Player {
         let zeit = zeit, dauer = dauer, gehoert = gehoertSeitSync
         gehoertSeitSync = 0
         // Geladene Hörbücher merken sich die Stelle immer selbst; ohne Server-Sitzung wird sie später nachgetragen.
-        // Podcast-Folgen merkt sich nur der Server (die Offline-Stelle gilt dem ganzen Eintrag).
-        if let id = hoerbuchId, folgeId == nil { Offline.geteilt.merke(position: zeit, hoerbuch: id, offen: sitzung == nil) }
+        // Podcast-Folgen liegen offline unter der ID der Folge.
+        if let id = folgeId ?? hoerbuchId { Offline.geteilt.merke(position: zeit, hoerbuch: id, offen: sitzung == nil) }
         guard let sitzung else { return }
         Task {
             do {
                 try await abs.synchronisiere(sitzung, zeit: zeit, gehoert: gehoert, dauer: dauer, schliessen: schliessen)
             } catch {
-                if let id = self.hoerbuchId, self.folgeId == nil { Offline.geteilt.merke(position: zeit, hoerbuch: id, offen: true) }
+                if let id = self.folgeId ?? self.hoerbuchId { Offline.geteilt.merke(position: zeit, hoerbuch: id, offen: true) }
             }
         }
     }

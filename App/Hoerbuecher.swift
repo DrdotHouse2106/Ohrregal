@@ -129,6 +129,7 @@ struct HoerbuecherView: View {
             }
             podcasts = podcastsAlle
             neueFolgen = (try? await abs.neueFolgen()) ?? []
+            if !podcasts.isEmpty { Task { await Offline.geteilt.podcastsAbgleichen(abs) } }
             do {
                 if sitzung.dienstDa { entdecken = try await abs.entdecken(neu: nachladen) }
                 entdeckenFehler = nil

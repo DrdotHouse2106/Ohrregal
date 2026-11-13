@@ -69,7 +69,10 @@ enum Hintergrund {
                 if let client = geteilteSitzung.client, let vorrat = try? await StartVorrat.berechnen(client) {
                     vorrat.speichern()
                 }
-                if let abs = geteilteSitzung.hoerbuchClient { await Offline.geteilt.nachtragen(abs) }
+                if let abs = geteilteSitzung.hoerbuchClient {
+                    await Offline.geteilt.nachtragen(abs)
+                    await Offline.geteilt.podcastsAbgleichen(abs)
+                }
                 await Protokoll.geteilt.abschicken()
                 aufgabe.setTaskCompleted(success: true)
                 planen()

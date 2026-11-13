@@ -71,15 +71,32 @@ struct GeladenView: View {
         @Bindable var offline = Offline.geteilt
         List {
             Section {
-                Toggle("Gehörte Hörbücher automatisch laden", isOn: $offline.hoerbuecherAutomatisch)
+                Toggle("Hörbücher und neue Podcast-Folgen automatisch laden", isOn: $offline.hoerbuecherAutomatisch)
                 Toggle("Nur im WLAN laden", isOn: $offline.nurWLAN)
                 LabeledContent("Belegt", value: ByteCountFormatter.string(fromByteCount: offline.belegt, countStyle: .file))
             } footer: {
                 Text("Geladenes spielt ohne Server und ohne mobile Daten. Hörpositionen werden offline gemerkt und später an Audiobookshelf gemeldet.")
             }
-            if !offline.hoerbuecher.isEmpty {
+            if offline.hoerbuecher.contains(where: { $0.podcast != nil }) {
+                Section("Podcast-Folgen") {
+                    ForEach(offline.hoerbuecher.filter { $0.podcast != nil }) { h in
+                        Button { Task { await player.spiele(geladeneFolge: h) } } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(h.titel).lineLimit(1)
+                                if let anteil = offline.laedt("h:\(h.id)") {
+                                    ProgressView(value: anteil)
+                                } else {
+                                    Text(h.autor).font(.caption).foregroundStyle(Farben.textGedaempft)
+                                }
+                            }
+                        }
+                        .swipeActions { Button("Löschen", role: .destructive) { offline.loesche(hoerbuch: h.id) } }
+                    }
+                }
+            }
+            if offline.hoerbuecher.contains(where: { $0.podcast == nil }) {
                 Section("Hörbücher") {
-                    ForEach(offline.hoerbuecher) { h in
+                    ForEach(offline.hoerbuecher.filter { $0.podcast == nil }) { h in
                         NavigationLink(value: Ziel.hoerbuch(h.id)) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(h.titel).lineLimit(1)

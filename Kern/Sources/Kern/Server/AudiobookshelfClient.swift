@@ -259,8 +259,8 @@ public final class AudiobookshelfClient {
     }
 
     /// Meldet eine (offline gehörte) Stelle an Audiobookshelf.
-    public func fortschrittMelden(_ id: String, zeit: Double, dauer: Double) async throws {
-        let (daten, code) = try await sende("/api/me/progress/\(id)", methode: "PATCH",
+    public func fortschrittMelden(_ id: String, folge: String? = nil, zeit: Double, dauer: Double) async throws {
+        let (daten, code) = try await sende("/api/me/progress/\(id)" + (folge.map { "/\($0)" } ?? ""), methode: "PATCH",
                                             json: ["currentTime": zeit, "duration": dauer, "progress": dauer > 0 ? min(zeit / dauer, 1) : 0])
         guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
     }

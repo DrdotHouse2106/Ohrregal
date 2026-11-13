@@ -201,9 +201,12 @@ public struct Folge: Decodable, Hashable, Identifiable, Sendable {
     public let duration: Double?
     /// Nur bei „Neue Folgen“: Name des Podcasts.
     public let podcastTitel: String?
+    /// Datei für den Download (`/api/items/{podcast}/file/{ino}`).
+    public let ino: String?
+    public let endung: String?
 
     enum CodingKeys: String, CodingKey { case id, libraryItemId, title, description, publishedAt, addedAt, duration, audioFile, podcast }
-    struct Datei: Decodable { let duration: Double? }
+    struct Datei: Decodable { struct Meta: Decodable { let ext: String? }; let duration: Double?; let ino: String?; let metadata: Meta? }
     struct Podcast: Decodable { struct Meta: Decodable { let title: String? }; let metadata: Meta? }
 
     public init(from decoder: Decoder) throws {
@@ -214,7 +217,10 @@ public struct Folge: Decodable, Hashable, Identifiable, Sendable {
         description = (try? c.decode(String.self, forKey: .description))?.ohneHTML
         publishedAt = try? c.decode(Double.self, forKey: .publishedAt)
         addedAt = try? c.decode(Double.self, forKey: .addedAt)
-        duration = (try? c.decode(Double.self, forKey: .duration)) ?? (try? c.decode(Datei.self, forKey: .audioFile))?.duration
+        let datei = try? c.decode(Datei.self, forKey: .audioFile)
+        duration = (try? c.decode(Double.self, forKey: .duration)) ?? datei?.duration
+        ino = datei?.ino
+        endung = datei?.metadata?.ext.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: ".")) }
         podcastTitel = (try? c.decode(Podcast.self, forKey: .podcast))?.metadata?.title
     }
 

@@ -12,6 +12,8 @@ public struct OfflineHoerbuch: Codable, Identifiable, Sendable {
     /// Zuletzt gehörte Stelle; wird offline gemerkt und später an Audiobookshelf gemeldet.
     public var position: Double = 0
     public var positionOffen = false
+    /// Bei Podcast-Folgen die ID des Podcasts; `id` ist dann die Folge.
+    public var podcast: String?
 
     public struct Datei: Codable, Sendable {
         public let name: String
@@ -150,6 +152,40 @@ public final class Offline {
         }
     }
 
+    /// Podcasts: je Podcast die neuesten 3 ungehörten Folgen laden, gehörte wieder löschen.
+    /// Angefangene Folgen bleiben, bis sie zu Ende gehört sind.
+    public func podcastsAbgleichen(_ abs: AudiobookshelfClient) async {
+        guard hoerbuecherAutomatisch, let bibliotheken = try? await abs.bibliotheken(typ: "podcast"),
+              let stand = try? await abs.folgenFortschritt() else { return }
+        var behalten = Set<String>()
+        for b in bibliotheken {
+            for p in (try? await abs.hoerbuecher(in: b.id, seite: 0, anzahl: 200)) ?? [] {
+                let folgen = (try? await abs.folgen(p.id)) ?? []
+                for f in folgen where (stand[f.id] ?? 0) > 0 && (stand[f.id] ?? 0) < 1 { behalten.insert(f.id) }
+                for f in folgen.filter({ (stand[$0.id] ?? 0) < 1 }).prefix(3) {
+                    behalten.insert(f.id)
+                    try? await lade(folge: f, podcast: p.id, podcastTitel: p.titel, abs)
+                }
+            }
+        }
+        for h in hoerbuecher where h.podcast != nil && !behalten.contains(h.id) { loesche(hoerbuch: h.id) }
+    }
+
+    public func lade(folge: Folge, podcast: String, podcastTitel: String, _ abs: AudiobookshelfClient) async throws {
+        guard !hoerbuecher.contains(where: { $0.id == folge.id }), let ino = folge.ino else { return }
+        let datei = OfflineHoerbuch.Datei(name: "000.\(folge.endung ?? "m4a")", start: 0)
+        var neu = OfflineHoerbuch(id: folge.id, titel: folge.titel, autor: podcastTitel, dauer: folge.duration ?? 0, kapitel: [], dateien: [datei])
+        neu.podcast = podcast
+        hoerbuecher.append(neu)
+        fortschritt["h:\(folge.id)"] = 0
+        speichern()
+        var anfrage = URLRequest(url: try await abs.dateiURL("/api/items/\(podcast)/file/\(ino)"))
+        anfrage.allowsCellularAccess = !nurWLAN
+        let aufgabe = sitzung.downloadTask(with: anfrage)
+        aufgabe.taskDescription = "h|\(folge.id)|\(datei.name)"
+        aufgabe.resume()
+    }
+
     // MARK: Löschen
 
     public func loesche(hoerbuch id: String) {
@@ -199,7 +235,14 @@ public final class Offline {
     /// Meldet offline gehörte Stellen an Audiobookshelf nach.
     public func nachtragen(_ abs: AudiobookshelfClient) async {
         for h in hoerbuecher where h.positionOffen {
-            if (try? await abs.fortschrittMelden(h.id, zeit: h.position, dauer: h.dauer)) != nil,
+            // Podcast-Folgen: Fortschritt gehört zum Podcast und zur Folge.
+            let gemeldet: Void?
+            if let podcast = h.podcast {
+                gemeldet = try? await abs.fortschrittMelden(podcast, folge: h.id, zeit: h.position, dauer: h.dauer)
+            } else {
+                gemeldet = try? await abs.fortschrittMelden(h.id, zeit: h.position, dauer: h.dauer)
+            }
+            if gemeldet != nil,
                let i = hoerbuecher.firstIndex(where: { $0.id == h.id }) {
                 hoerbuecher[i].positionOffen = false
             }
