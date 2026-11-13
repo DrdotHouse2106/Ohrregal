@@ -7,6 +7,8 @@ struct HoerbuecherView: View {
     @State private var angefangen: [Hoerbuch] = []
     @State private var bibliotheken: [Bibliothek] = []
     @State private var neu: [Hoerbuch] = []
+    @State private var podcasts: [Hoerbuch] = []
+    @State private var neueFolgen: [Folge] = []
     @State private var entdecken: [BuchTreffer] = []
     @State private var entdeckenFehler: String?
     /// Deutscher Name → Bibliothek und alle Originalnamen, die darin zusammengefasst sind.
@@ -25,6 +27,8 @@ struct HoerbuecherView: View {
                                 Task { try? await abs.ausWeiterhoerenEntfernen(h.id) }
                             }
                         }
+                        if !neueFolgen.isEmpty { NeueFolgenReihe(folgen: neueFolgen) }
+                        if !podcasts.isEmpty { PodcastReihe(podcasts: podcasts) }
                         if !sitzung.dienstDa {
                             EmptyView()
                         } else if let entdeckenFehler {
@@ -119,6 +123,12 @@ struct HoerbuecherView: View {
                 }
             }
             neu = Array(neuAlle.prefix(20))
+            var podcastsAlle: [Hoerbuch] = []
+            for b in (try? await abs.bibliotheken(typ: "podcast")) ?? [] {
+                podcastsAlle += (try? await abs.hoerbuecher(in: b.id, seite: 0, anzahl: 100)) ?? []
+            }
+            podcasts = podcastsAlle
+            neueFolgen = (try? await abs.neueFolgen()) ?? []
             do {
                 if sitzung.dienstDa { entdecken = try await abs.entdecken(neu: nachladen) }
                 entdeckenFehler = nil

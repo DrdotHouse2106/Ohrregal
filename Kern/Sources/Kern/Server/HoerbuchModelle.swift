@@ -9,6 +9,8 @@ public struct Bibliothek: Decodable, Hashable, Identifiable, Sendable {
 /// Eintrag einer Audiobookshelf-Bibliothek (gekürzte Form).
 public struct Hoerbuch: Decodable, Hashable, Identifiable, Sendable {
     public let id: String
+    /// „book“ oder „podcast“.
+    public let mediaType: String?
     public let media: Medium
 
     public struct Medium: Decodable, Hashable, Sendable {
@@ -24,7 +26,7 @@ public struct Hoerbuch: Decodable, Hashable, Identifiable, Sendable {
         public let seriesName: String?
         public let description: String?
 
-        enum CodingKeys: String, CodingKey { case title, authorName, narratorName, seriesName, description, authors, narrators, series }
+        enum CodingKeys: String, CodingKey { case title, authorName, narratorName, seriesName, description, authors, narrators, series, author }
         struct Name: Decodable { let name: String; let sequence: String? }
 
         public init(from decoder: Decoder) throws {
@@ -32,7 +34,8 @@ public struct Hoerbuch: Decodable, Hashable, Identifiable, Sendable {
             func leer(_ s: String?) -> String? { s?.isEmpty == false ? s : nil }
             title = try? c.decode(String.self, forKey: .title)
             authorName = leer((try? c.decode(String.self, forKey: .authorName))
-                ?? (try? c.decode([Name].self, forKey: .authors))?.map(\.name).joined(separator: ", "))
+                ?? (try? c.decode([Name].self, forKey: .authors))?.map(\.name).joined(separator: ", ")
+                ?? (try? c.decode(String.self, forKey: .author)))
             narratorName = leer((try? c.decode(String.self, forKey: .narratorName))
                 ?? (try? c.decode([String].self, forKey: .narrators))?.joined(separator: ", "))
             seriesName = leer((try? c.decode(String.self, forKey: .seriesName))
@@ -184,4 +187,37 @@ extension String {
             .replacingOccurrences(of: "&nbsp;", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+}
+
+/// Folge eines Podcasts in Audiobookshelf (Bibliothek vom Typ „podcast“).
+public struct Folge: Decodable, Hashable, Identifiable, Sendable {
+    public let id: String
+    public let libraryItemId: String?
+    public let title: String?
+    public let description: String?
+    /// Millisekunden seit 1970; bei Dateien ohne RSS oft leer, dann zählt `addedAt`.
+    public let publishedAt: Double?
+    public let addedAt: Double?
+    public let duration: Double?
+    /// Nur bei „Neue Folgen“: Name des Podcasts.
+    public let podcastTitel: String?
+
+    enum CodingKeys: String, CodingKey { case id, libraryItemId, title, description, publishedAt, addedAt, duration, audioFile, podcast }
+    struct Datei: Decodable { let duration: Double? }
+    struct Podcast: Decodable { struct Meta: Decodable { let title: String? }; let metadata: Meta? }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        libraryItemId = try? c.decode(String.self, forKey: .libraryItemId)
+        title = try? c.decode(String.self, forKey: .title)
+        description = (try? c.decode(String.self, forKey: .description))?.ohneHTML
+        publishedAt = try? c.decode(Double.self, forKey: .publishedAt)
+        addedAt = try? c.decode(Double.self, forKey: .addedAt)
+        duration = (try? c.decode(Double.self, forKey: .duration)) ?? (try? c.decode(Datei.self, forKey: .audioFile))?.duration
+        podcastTitel = (try? c.decode(Podcast.self, forKey: .podcast))?.metadata?.title
+    }
+
+    public var titel: String { title ?? "Ohne Titel" }
+    public var datum: Date? { (publishedAt ?? addedAt).map { Date(timeIntervalSince1970: $0 / 1000) } }
 }

@@ -97,3 +97,22 @@ final class UnscharfTests: XCTestCase {
         XCTAssertLessThan(Unscharf.aehnlichkeit("Metallica", "Herbert Grönemeyer"), 0.5)
     }
 }
+
+final class PodcastTests: XCTestCase {
+    func testNeueFolgeLesen() throws {
+        let json = #"{"episodes":[{"libraryItemId":"li-1","id":"ep-1","title":"Folge 1","description":"<p>Text</p>","publishedAt":null,"addedAt":1762992000000,"duration":1234.5,"audioFile":{"duration":1234.5},"podcast":{"metadata":{"title":"Nachrichten","author":"Kanal"}}}],"limit":20,"page":0}"#
+        struct Liste: Decodable { let episodes: [Folge] }
+        let f = try JSONDecoder().decode(Liste.self, from: Data(json.utf8)).episodes[0]
+        XCTAssertEqual(f.podcastTitel, "Nachrichten")
+        XCTAssertEqual(f.duration, 1234.5)
+        XCTAssertEqual(f.description?.trimmingCharacters(in: .whitespacesAndNewlines), "Text")
+        XCTAssertNotNil(f.datum)
+    }
+
+    func testPodcastAutor() throws {
+        let json = #"{"id":"li-1","mediaType":"podcast","media":{"metadata":{"title":"Nachrichten","author":"Kanal"}}}"#
+        let p = try JSONDecoder().decode(Hoerbuch.self, from: Data(json.utf8))
+        XCTAssertEqual(p.autor, "Kanal")
+        XCTAssertEqual(p.mediaType, "podcast")
+    }
+}

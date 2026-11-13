@@ -82,10 +82,46 @@ public final class AudiobookshelfClient {
 
     // MARK: Bibliothek
 
-    public func bibliotheken() async throws -> [Bibliothek] {
+    /// Bibliotheken eines Typs: „book“ (Hörbücher) oder „podcast“.
+    public func bibliotheken(typ: String = "book") async throws -> [Bibliothek] {
         struct Liste: Decodable { let libraries: [Bibliothek] }
         let liste: Liste = try await hole("/api/libraries")
-        return liste.libraries.filter { $0.mediaType == "book" }
+        return liste.libraries.filter { $0.mediaType == typ }
+    }
+
+    // MARK: Podcasts
+
+    /// Alle Folgen eines Podcasts, neueste zuerst.
+    public func folgen(_ podcast: String) async throws -> [Folge] {
+        struct Voll: Decodable { struct Medium: Decodable { let episodes: [Folge]? }; let media: Medium }
+        let voll: Voll = try await hole("/api/items/\(podcast)?expanded=1")
+        return (voll.media.episodes ?? []).sorted { ($0.datum ?? .distantPast) > ($1.datum ?? .distantPast) }
+    }
+
+    /// Neue, noch nicht fertig gehörte Folgen einer Podcast-Bibliothek.
+    public func neueFolgen(in bibliothek: String, anzahl: Int = 20) async throws -> [Folge] {
+        struct Liste: Decodable { let episodes: [Folge] }
+        let liste: Liste = try await hole("/api/libraries/\(bibliothek)/recent-episodes?limit=\(anzahl)&page=0")
+        return liste.episodes.sorted { ($0.datum ?? .distantPast) > ($1.datum ?? .distantPast) }
+    }
+
+    /// Neue Folgen aus allen Podcast-Bibliotheken.
+    public func neueFolgen(anzahl: Int = 20) async throws -> [Folge] {
+        var alle: [Folge] = []
+        for b in try await bibliotheken(typ: "podcast") { alle += (try? await neueFolgen(in: b.id, anzahl: anzahl)) ?? [] }
+        return Array(alle.sorted { ($0.datum ?? .distantPast) > ($1.datum ?? .distantPast) }.prefix(anzahl))
+    }
+
+    /// Fortschritt je Folge (0…1, fertig = 1).
+    public func folgenFortschritt() async throws -> [String: Double] {
+        struct Ich: Decodable {
+            struct Fortschritt: Decodable { let episodeId: String?; let progress: Double?; let isFinished: Bool? }
+            let mediaProgress: [Fortschritt]?
+        }
+        let ich: Ich = try await hole("/api/me")
+        var werte: [String: Double] = [:]
+        for f in ich.mediaProgress ?? [] { if let id = f.episodeId { werte[id] = f.isFinished == true ? 1 : (f.progress ?? 0) } }
+        return werte
     }
 
     /// Fortschritt-ID je Hörbuch, zum Entfernen aus „Weiterhören“.
@@ -110,23 +146,25 @@ public final class AudiobookshelfClient {
             fortschritt[f.libraryItemId] = f.id
             if f.hideFromContinueListening == true || f.isFinished == true { verborgen.insert(f.libraryItemId) }
         }
-        return liste.libraryItems.filter { !verborgen.contains($0.id) }
+        // Podcasts haben eigene „Neue Folgen“.
+        return liste.libraryItems.filter { !verborgen.contains($0.id) && $0.mediaType != "podcast" }
     }
 
     /// IDs aller als fertig gehört markierten Hörbücher.
     public func fertigGehoert() async throws -> Set<String> {
         struct Ich: Decodable {
-            struct Fortschritt: Decodable { let libraryItemId: String; let isFinished: Bool? }
+            struct Fortschritt: Decodable { let libraryItemId: String; let episodeId: String?; let isFinished: Bool? }
             let mediaProgress: [Fortschritt]?
         }
         let ich: Ich = try await hole("/api/me")
-        return Set((ich.mediaProgress ?? []).filter { $0.isFinished == true }.map(\.libraryItemId))
+        // Gehörte Podcast-Folgen zählen nicht als „ganzer Eintrag gehört“.
+        return Set((ich.mediaProgress ?? []).filter { $0.isFinished == true && $0.episodeId == nil }.map(\.libraryItemId))
     }
 
     /// Als gehört bzw. ungehört markieren (wie in Audiobookshelf).
-    public func markiere(_ hoerbuch: String, gehoert: Bool) async throws {
+    public func markiere(_ hoerbuch: String, folge: String? = nil, gehoert: Bool) async throws {
         let json: [String: Any] = gehoert ? ["isFinished": true] : ["isFinished": false, "progress": 0, "currentTime": 0]
-        let (daten, code) = try await sende("/api/me/progress/\(hoerbuch)", methode: "PATCH", json: json)
+        let (daten, code) = try await sende("/api/me/progress/\(hoerbuch)" + (folge.map { "/\($0)" } ?? ""), methode: "PATCH", json: json)
         guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
     }
 
@@ -233,8 +271,8 @@ public final class AudiobookshelfClient {
 
     // MARK: Wiedergabe
 
-    public func starte(_ id: String) async throws -> HoerbuchSitzung {
-        try await hole("/api/items/\(id)/play", methode: "POST", json: [
+    public func starte(_ id: String, folge: String? = nil) async throws -> HoerbuchSitzung {
+        try await hole("/api/items/\(id)/play" + (folge.map { "/\($0)" } ?? ""), methode: "POST", json: [
             "deviceInfo": ["clientName": "Ohrregal", "deviceId": geraeteId],
             "forceDirectPlay": true,
             "mediaPlayer": "AVPlayer",

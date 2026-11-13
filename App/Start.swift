@@ -9,6 +9,7 @@ struct StartView: View {
     @Environment(Player.self) private var player
     @State private var mixe: [Mix] = []
     @State private var hoerbuecher: [Hoerbuch] = []
+    @State private var neueFolgen: [Folge] = []
     @State private var zuletzt: [Album] = []
     @State private var reihen: [Reihe] = []
     @State private var fehler: String?
@@ -45,6 +46,7 @@ struct StartView: View {
                 if !mixe.isEmpty { MixReihe(mixe: mixe) }
 
                 if !hoerbuecher.isEmpty { HoerbuchReihe(titel: "Hörbücher weiterhören", hoerbuecher: hoerbuecher) }
+                if !neueFolgen.isEmpty { NeueFolgenReihe(folgen: neueFolgen) }
                 if !zuletzt.isEmpty { AlbenReihe(titel: "Zuletzt gespielt", alben: zuletzt) }
 
                 if let titel = mixe.first?.titel, titel.count > 4 {
@@ -104,6 +106,7 @@ struct StartView: View {
     private func laden(neu: Bool = false) async {
         if !geladen, let vorrat = StartVorrat.laden() { anwenden(vorrat) }
         hoerbuecher = (try? await sitzung.hoerbuchClient?.angefangen()) ?? hoerbuecher
+        neueFolgen = (try? await sitzung.hoerbuchClient?.neueFolgen(anzahl: 10)) ?? neueFolgen
         if !neu, let vorrat = StartVorrat.laden(), Date().timeIntervalSince(vorrat.zeit) < 6 * 3600 { return }
         do {
             let vorrat = try await StartVorrat.berechnen(client)
