@@ -137,15 +137,21 @@ struct VollPlayer: View {
                 Spacer()
                 AirPlayKnopf().frame(width: 44, height: 44)
                 Spacer()
-                if player.istHoerbuch {
-                    Menu {
-                        Button("Aus") { player.schlafen(in: nil) }
-                        Button("Ende des Kapitels") { player.schlafenAmEndeDesKapitels() }
-                        ForEach([15, 30, 45, 60], id: \.self) { m in Button("\(m) Minuten") { player.schlafen(in: m) } }
-                    } label: {
+                // Schlaf-Timer für alles: Hörbuch, Podcast, Musik und Radio; mit Restzeit.
+                Menu {
+                    Button("Aus") { player.schlafen(in: nil) }
+                    if let ende = player.schlafEnde { Button(ende) { player.schlafenAmEndeDesKapitels() } }
+                    ForEach([15, 30, 45, 60, 90], id: \.self) { m in Button("\(m) Minuten") { player.schlafen(in: m) } }
+                } label: {
+                    HStack(spacing: 4) {
                         Image(systemName: player.schlafenUm != nil || player.schlafenAmKapitelende ? "moon.zzz.fill" : "moon.zzz")
-                            .font(.title3).frame(width: 60, height: 44)
+                        if let um = player.schlafenUm {
+                            Text(timerInterval: Date.now...max(um, .now), countsDown: true).font(.caption.monospacedDigit())
+                        } else if player.schlafenAmKapitelende {
+                            Text("Ende").font(.caption)
+                        }
                     }
+                    .font(.title3).frame(minWidth: 44, minHeight: 44)
                 }
             }
             .foregroundStyle(Farben.text)

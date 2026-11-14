@@ -317,12 +317,21 @@ public final class Player {
                                 wert: minuten.map(String.init) ?? "aus", id: hoerbuchId, name: anzeige?.titel)
         schlafenAmKapitelende = false
         schlafenUm = minuten.map { Date().addingTimeInterval(Double($0) * 60) }
+        player.volume = 1
+    }
+
+    /// Wofür „Ende“ beim Schlaf-Timer steht; nil beim Radio (kein Ende).
+    public var schlafEnde: String? {
+        if !kapitel.isEmpty { return "Ende des Kapitels" }
+        if istRadio || dauer <= 0 { return nil }
+        return istHoerbuch ? "Ende der Folge" : "Ende des Titels"
     }
 
     public func schlafenAmEndeDesKapitels() {
         Protokoll.geteilt.merke("schlaftimer", art: "hoerbuch", position: zeit, wert: "kapitel", id: hoerbuchId, name: anzeige?.titel)
         schlafenUm = nil
         schlafenAmKapitelende = true
+        player.volume = 1
     }
 
     // MARK: Intern
@@ -397,8 +406,17 @@ public final class Player {
         guard spuren.indices.contains(spur) else { return }
         zeit = spuren[spur].start + sekunden
         guard spielt else { return }
-        if let um = schlafenUm, Date() >= um { player.pause(); schlafenUm = nil }
-        if schlafenAmKapitelende, let k = aktuellesKapitel, zeit >= k.end - 0.6 { player.pause(); schlafenAmKapitelende = false }
+        // Schlaf-Timer: die letzten 10 Sekunden leiser werden, dann anhalten.
+        if let um = schlafenUm {
+            let rest = um.timeIntervalSinceNow
+            player.volume = Float(min(max(rest / 10, 0), 1))
+            if rest <= 0 { player.pause(); schlafenUm = nil; player.volume = 1 }
+        }
+        // „Ende“: Kapitel, sonst Folge bzw. Titel (bei Musik ist `zeit` die Stelle im Titel).
+        if schlafenAmKapitelende {
+            let ende = aktuellesKapitel?.end ?? dauer
+            if ende > 0, zeit >= ende - 1 { player.pause(); schlafenAmKapitelende = false }
+        }
         if istHoerbuch {
             gehoertSeitSync += 0.5 * Double(tempo)
             if gehoertSeitSync >= 15 { synchronisiere() }
