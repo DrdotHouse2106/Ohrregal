@@ -206,7 +206,7 @@ struct HoerbuchKarte: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Cover(url: sitzung.hoerbuchClient?.coverURL(hoerbuch.id), groesse: groesse)
+            Cover(url: sitzung.hoerbuchClient?.coverURL(hoerbuch.id, stand: hoerbuch.updatedAt), groesse: groesse)
                 .overlay(alignment: .topTrailing) {
                     if Gehoert.geteilt.ids.contains(hoerbuch.id) {
                         Image(systemName: "checkmark.circle.fill").font(.title3)

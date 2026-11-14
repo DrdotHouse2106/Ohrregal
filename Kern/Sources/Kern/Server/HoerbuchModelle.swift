@@ -11,6 +11,8 @@ public struct Hoerbuch: Decodable, Hashable, Identifiable, Sendable {
     public let id: String
     /// „book“ oder „podcast“.
     public let mediaType: String?
+    /// Zuletzt geändert (ms), z. B. neues Cover.
+    public let updatedAt: Double?
     public let media: Medium
 
     public struct Medium: Decodable, Hashable, Sendable {

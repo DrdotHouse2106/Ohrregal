@@ -67,7 +67,7 @@ struct PodcastView: View {
     var body: some View {
         List {
             HStack(spacing: 16) {
-                Cover(url: sitzung.hoerbuchClient?.coverURL(podcast.id), groesse: 110)
+                Cover(url: sitzung.hoerbuchClient?.coverURL(podcast.id, stand: podcast.updatedAt), groesse: 110)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(podcast.titel).font(.title3.bold())
                     if !podcast.autor.isEmpty { Text(podcast.autor).foregroundStyle(Farben.textGedaempft) }

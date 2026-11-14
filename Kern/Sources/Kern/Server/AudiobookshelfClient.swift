@@ -289,8 +289,9 @@ public final class AudiobookshelfClient {
         guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
     }
 
-    public func coverURL(_ id: String) -> URL? {
-        token.map { adresse("/api/items/\(id)/cover?token=\($0)") }
+    /// `stand` (updatedAt) macht die Adresse neu, wenn sich das Cover ändert; sonst zeigt iOS das alte aus dem Zwischenspeicher.
+    public func coverURL(_ id: String, stand: Double? = nil) -> URL? {
+        token.map { adresse("/api/items/\(id)/cover?token=\($0)" + (stand.map { "&ts=\(Int($0))" } ?? "")) }
     }
 
     // MARK: Wiedergabe
