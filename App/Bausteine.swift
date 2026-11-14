@@ -124,10 +124,16 @@ struct Cover: View {
     var url: URL?
     var groesse: CGFloat = 160
     var rund = false
+    /// Ganzes Bild zeigen statt quadratisch zuschneiden (z. B. YouTube-Vorschaubilder 16:9).
+    var ganz = false
 
     var body: some View {
         AsyncImage(url: url ?? client.coverURL(id, groesse: Int(groesse * 2))) { bild in
-            bild.resizable().scaledToFill()
+            if ganz {
+                bild.resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.black)
+            } else {
+                bild.resizable().scaledToFill()
+            }
         } placeholder: {
             Farben.flaeche.overlay(Image(systemName: rund ? "music.mic" : "music.note").foregroundStyle(Farben.textGedaempft))
         }

@@ -36,7 +36,7 @@ struct MiniPlayer: View {
 
     private func inhalt(_ a: Anzeige) -> some View {
             HStack(spacing: 12) {
-                Cover(url: a.cover, groesse: kompakt ? 32 : 44)
+                Cover(url: a.cover, groesse: kompakt ? 32 : 44, ganz: a.cover?.isFileURL == true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(a.titel).font(.subheadline.bold()).lineLimit(1)
                     Text(player.aktuellesKapitel?.title ?? a.untertitel).font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
@@ -66,7 +66,8 @@ struct VollPlayer: View {
         @Bindable var player = player
         VStack(spacing: 24) {
             Spacer(minLength: 20)
-            Cover(url: player.anzeige?.cover, groesse: 300)
+            // Folgenbilder (aus der Datei, meist 16:9) ganz zeigen.
+            Cover(url: player.anzeige?.cover, groesse: 300, ganz: player.anzeige?.cover?.isFileURL == true)
                 .shadow(color: .black.opacity(0.5), radius: 24, y: 10)
             VStack(spacing: 4) {
                 // Lange Folgentitel (YouTube) ganz zeigen, notfalls etwas kleiner.

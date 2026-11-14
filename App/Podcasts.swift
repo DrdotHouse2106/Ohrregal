@@ -298,7 +298,8 @@ struct FolgenCover: View {
     @State private var bild: URL?
 
     var body: some View {
-        Cover(url: bild ?? FolgenBild.vorhanden(folge.id) ?? sitzung.hoerbuchClient?.coverURL(podcast), groesse: groesse)
+        let eigenes = bild ?? FolgenBild.vorhanden(folge.id)
+        Cover(url: eigenes ?? sitzung.hoerbuchClient?.coverURL(podcast), groesse: groesse, ganz: eigenes != nil)
             .task(id: folge.id) {
                 guard let abs = sitzung.hoerbuchClient, !podcast.isEmpty else { return }
                 bild = await FolgenBild.bild(folge, podcast: podcast, abs)
