@@ -89,10 +89,12 @@ struct HoerbuecherView: View {
                 .refreshable { await laden(abs, neu: true) }
                 .task {
                     // Nach dem Markieren als gehört passen sich die Vorschläge sofort an.
-                    if bibliotheken.isEmpty || Gehoert.geteilt.geaendert {
+                    // Auch nachladen, wenn „Entdecken“ beim letzten Mal nicht fertig wurde.
+                    if bibliotheken.isEmpty || Gehoert.geteilt.geaendert || (sitzung.dienstDa && entdecken.isEmpty) {
                         let neu = Gehoert.geteilt.geaendert
                         Gehoert.geteilt.geaendert = false
-                        await laden(abs, neu: neu)
+                        // Eigene Aufgabe: Baut SwiftUI die Seite neu auf, bricht das Laden nicht ab.
+                        await Task { await laden(abs, neu: neu) }.value
                     }
                 }
                 .overlay {
