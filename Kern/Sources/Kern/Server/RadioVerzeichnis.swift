@@ -3,7 +3,22 @@ import Observation
 
 /// Öffentliches Senderverzeichnis radio-browser.info (frei, ohne Anmeldung).
 public enum RadioVerzeichnis {
+    /// Sucht tolerant: „krone hit“ findet auch „KroneHit“ (erst wie eingegeben, dann ohne Leerzeichen,
+    /// dann nach dem längsten Wort, gefiltert auf Namen mit allen Wörtern).
     public static func suche(_ text: String) async throws -> [Sender] {
+        let woerter = text.lowercased().split(separator: " ").map(String.init)
+        var treffer = try await abfrage(text)
+        if treffer.isEmpty, woerter.count > 1 { treffer = try await abfrage(woerter.joined()) }
+        if treffer.isEmpty, woerter.count > 1, let laengstes = woerter.max(by: { $0.count < $1.count }) {
+            treffer = try await abfrage(laengstes).filter { s in
+                let name = s.name.lowercased().replacingOccurrences(of: " ", with: "")
+                return woerter.allSatisfy { name.contains($0) }
+            }
+        }
+        return treffer
+    }
+
+    static func abfrage(_ text: String) async throws -> [Sender] {
         struct Eintrag: Decodable {
             let stationuuid: String
             let name: String

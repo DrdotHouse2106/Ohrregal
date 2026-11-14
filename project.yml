@@ -3,6 +3,7 @@
 name: Ohrregal
 options:
   bundleIdPrefix: de.drdothouse
+  developmentLanguage: de
   deploymentTarget:
     iOS: "17.0"
 packages:
@@ -19,6 +20,9 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Ohrregal
+        # Deutsch als Sprache der App, damit auch Systemtexte („Keine Ergebnisse“) deutsch sind.
+        CFBundleDevelopmentRegion: de
+        CFBundleLocalizations: [de]
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
