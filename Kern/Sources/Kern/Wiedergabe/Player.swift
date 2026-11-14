@@ -190,7 +190,15 @@ public final class Player {
             kapitel = neu?.chapters ?? offline?.kapitel ?? []
             spuren = dateien
             anzeige = Anzeige(titel: folge != nil ? titel : neu?.displayTitle ?? titel, untertitel: folge != nil ? autor : neu?.displayAuthor ?? autor,
-                              cover: abs.coverURL(id), dauer: neu?.duration ?? offline?.dauer ?? 0)
+                              cover: folge.flatMap { FolgenBild.vorhanden($0) } ?? abs.coverURL(id), dauer: neu?.duration ?? offline?.dauer ?? 0)
+            // Eigenes Bild der Folge nachladen (steckt in der Datei).
+            if let folge, FolgenBild.vorhanden(folge) == nil, let quelle = dateien.first?.url {
+                Task {
+                    guard let bild = await FolgenBild.bild(folge, quelle: quelle), folgeId == folge, let a = anzeige else { return }
+                    anzeige = Anzeige(titel: a.titel, untertitel: a.untertitel, cover: bild, dauer: a.dauer)
+                    nowPlaying()
+                }
+            }
             let start = neu?.currentTime ?? offline?.position ?? 0
             player.defaultRate = tempo
             Protokoll.geteilt.merke("start", art: folge != nil ? "podcast" : "hoerbuch", position: start, dauer: anzeige?.dauer,

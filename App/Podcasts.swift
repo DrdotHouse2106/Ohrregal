@@ -38,7 +38,7 @@ struct NeueFolgenReihe: View {
                             Task { await player.spiele(folge: f, podcast: id, podcastTitel: f.podcastTitel ?? "") }
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                Cover(url: f.libraryItemId.flatMap { sitzung.hoerbuchClient?.coverURL($0) }, groesse: 160)
+                                FolgenCover(folge: f, podcast: f.libraryItemId ?? "", groesse: 160)
                                 Text(f.titel).font(.subheadline).lineLimit(2)
                                 Text([f.podcastTitel, FolgenZeile.info(f)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                                     .font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
@@ -80,7 +80,10 @@ struct PodcastView: View {
                     Button {
                         Task { await player.spiele(folge: f, podcast: podcast.id, podcastTitel: podcast.titel) }
                     } label: {
-                        FolgenZeile(folge: f, anteil: fortschritt[f.id])
+                        HStack(spacing: 12) {
+                            FolgenCover(folge: f, podcast: podcast.id, groesse: 64)
+                            FolgenZeile(folge: f, anteil: fortschritt[f.id])
+                        }
                     }
                     .buttonStyle(.plain)
                     .listRowBackground(Farben.flaeche)
@@ -283,5 +286,22 @@ struct PodcastNachId: View {
         .task {
             do { podcast = try await sitzung.hoerbuchClient?.hoerbuch(id) } catch { fehler = error.deutsch }
         }
+    }
+}
+
+/// Bild der Folge (aus der Datei); bis es da ist, das Bild des Podcasts.
+struct FolgenCover: View {
+    @Environment(Sitzung.self) private var sitzung
+    let folge: Folge
+    let podcast: String
+    var groesse: CGFloat = 64
+    @State private var bild: URL?
+
+    var body: some View {
+        Cover(url: bild ?? FolgenBild.vorhanden(folge.id) ?? sitzung.hoerbuchClient?.coverURL(podcast), groesse: groesse)
+            .task(id: folge.id) {
+                guard let abs = sitzung.hoerbuchClient, !podcast.isEmpty else { return }
+                bild = await FolgenBild.bild(folge, podcast: podcast, abs)
+            }
     }
 }

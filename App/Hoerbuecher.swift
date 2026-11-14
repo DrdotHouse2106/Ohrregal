@@ -140,6 +140,9 @@ struct HoerbuecherView: View {
             do {
                 if sitzung.dienstDa { entdecken = try await abs.entdecken(neu: nachladen) }
                 entdeckenFehler = nil
+            } catch let e as URLError where e.code == .cancelled {
+                // Seite verlassen, während geladen wurde: kein Fehler, beim nächsten Mal geht es weiter.
+            } catch is CancellationError {
             } catch {
                 entdeckenFehler = error.deutsch
             }
