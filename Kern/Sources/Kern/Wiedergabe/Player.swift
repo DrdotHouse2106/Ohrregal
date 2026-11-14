@@ -64,6 +64,7 @@ public final class Player {
     @ObservationIgnored private var letzterStart: String?
     @ObservationIgnored private var hoerbuchId: String?
     @ObservationIgnored private var folgeId: String?
+    @ObservationIgnored private var sender: Sender?
     @ObservationIgnored private var gehoertSeitSync: Double = 0
     @ObservationIgnored private var beobachter: [Any] = []
 
@@ -132,6 +133,7 @@ public final class Player {
         beendeHoerbuch()
         istHoerbuch = false
         istRadio = true
+        self.sender = sender
         kapitel = []
         warteschlange = []
         spuren = [(url, 0)]
@@ -214,6 +216,31 @@ public final class Player {
         } catch {
             fehler = error.deutsch
         }
+    }
+
+    // MARK: Fernseher
+
+    /// Was gerade läuft, zum Übergeben an die TV-App (nur IDs und Stellen; die Zugänge hat der Fernseher selbst).
+    public var uebergabe: [String: Any]? {
+        if istRadio, let s = sender { return ["art": "radio", "id": s.id, "name": s.name, "url": s.streamUrl] }
+        if istHoerbuch, let id = hoerbuchId {
+            var j: [String: Any] = ["art": "hoerbuch", "id": id]
+            j["folge"] = folgeId
+            return j
+        }
+        guard !warteschlange.isEmpty else { return nil }
+        return ["art": "musik", "ab": index, "zeit": zeit, "titel": warteschlange.map { t -> [String: Any] in
+            ["id": t.id, "titel": t.title, "kuenstler": t.artist ?? "", "album": t.album ?? "", "cover": t.coverArt ?? NSNull(), "dauer": t.duration ?? 0]
+        }]
+    }
+
+    /// Hält an und meldet die Hörstelle sofort an Audiobookshelf, damit der Fernseher genau dort weitermacht.
+    public func abgeben() async {
+        player.pause()
+        guard istHoerbuch, let abs = hoerbuchClient, let s = sitzung else { return }
+        try? await abs.synchronisiere(s, zeit: zeit, gehoert: gehoertSeitSync, dauer: dauer, schliessen: true)
+        sitzung = nil
+        gehoertSeitSync = 0
     }
 
     // MARK: Steuerung

@@ -30,6 +30,9 @@ fun AnmeldungSeite(alt: Zugang, fertig: (Zugang) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 160.dp, vertical = 40.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Ohrregal", style = MaterialTheme.typography.displaySmall, color = Color.White)
         Text("Musik von Navidrome, Hörbücher und Podcasts von Audiobookshelf.", color = Farben.gedaempft)
+        Text("Am einfachsten vom iPhone aus: In Ohrregal den großen Player öffnen → Fernseher-Symbol → „Fernseher einrichten“ und diesen Code eingeben: ${Empfaenger.code}",
+            color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp))
+        Text("Oder hier eintragen:", color = Farben.gedaempft)
         Feld("Navidrome-Adresse", z.server) { z = z.copy(server = it) }
         Feld("Benutzer", z.benutzer) { z = z.copy(benutzer = it) }
         Feld("Passwort", z.passwort, geheim = true) { z = z.copy(passwort = it) }

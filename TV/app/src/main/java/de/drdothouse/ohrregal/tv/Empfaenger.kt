@@ -1,0 +1,120 @@
+package de.drdothouse.ohrregal.tv
+
+import android.content.Context
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
+import android.os.Build
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.ServerSocket
+import java.net.Socket
+
+/**
+ * „Vom iPhone auf den Fernseher“: Die TV-App meldet sich im Heimnetz als _ohrregal._tcp und nimmt kleine
+ * HTTP-Anfragen an. Das iPhone schickt, was gerade läuft (Titel-IDs, Hörbuch, Sender); gestreamt wird
+ * direkt vom eigenen Server. Zugänge übernimmt der Fernseher nur mit dem Code, den er gerade anzeigt.
+ */
+object Empfaenger {
+    private val bereich = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var server: ServerSocket? = null
+
+    /** 4-stelliger Code zum Einrichten vom iPhone aus; wechselt bei jedem Start. */
+    val code = (1000..9999).random().toString()
+    /** Neue Zugänge vom iPhone (die Anmeldeseite übernimmt sie). */
+    var neuerZugang by mutableStateOf<Zugang?>(null)
+    /** Wird gesetzt, wenn das iPhone eine Wiedergabe startet (dann den Player zeigen). */
+    var vomIphone by mutableStateOf(0)
+
+    fun starten(c: Context) {
+        if (server != null) return
+        val s = ServerSocket(0)
+        server = s
+        val info = NsdServiceInfo().apply {
+            serviceName = "Ohrregal – " + (Build.MODEL ?: "Fernseher")
+            serviceType = "_ohrregal._tcp"
+            port = s.localPort
+        }
+        val nsd = c.getSystemService(Context.NSD_SERVICE) as NsdManager
+        nsd.registerService(info, NsdManager.PROTOCOL_DNS_SD, object : NsdManager.RegistrationListener {
+            override fun onServiceRegistered(i: NsdServiceInfo) {}
+            override fun onRegistrationFailed(i: NsdServiceInfo, e: Int) {}
+            override fun onServiceUnregistered(i: NsdServiceInfo) {}
+            override fun onUnregistrationFailed(i: NsdServiceInfo, e: Int) {}
+        })
+        bereich.launch {
+            while (true) {
+                val verbindung = runCatching { s.accept() }.getOrNull() ?: continue
+                launch { runCatching { bearbeite(verbindung) }; runCatching { verbindung.close() } }
+            }
+        }
+    }
+
+    private suspend fun bearbeite(v: Socket) {
+        v.soTimeout = 10000
+        val ein = v.getInputStream().bufferedReader()
+        val zeile = ein.readLine() ?: return
+        val (methode, pfad) = zeile.split(" ").let { (it.getOrNull(0) ?: "") to (it.getOrNull(1) ?: "") }
+        var laenge = 0
+        while (true) {
+            val kopf = ein.readLine() ?: break
+            if (kopf.isEmpty()) break
+            if (kopf.lowercase().startsWith("content-length:")) laenge = kopf.substringAfter(":").trim().toIntOrNull() ?: 0
+        }
+        val puffer = CharArray(laenge)
+        var gelesen = 0
+        while (gelesen < laenge) { val n = ein.read(puffer, gelesen, laenge - gelesen); if (n < 0) break; gelesen += n }
+        val json = runCatching { JSONObject(String(puffer, 0, gelesen)) }.getOrDefault(JSONObject())
+        val (code, antwort) = withContext(Dispatchers.Main) { antworte(methode, pfad, json) }
+        val text = antwort.toString().toByteArray()
+        v.getOutputStream().apply {
+            write("HTTP/1.1 $code OK\r\nContent-Type: application/json\r\nContent-Length: ${text.size}\r\nConnection: close\r\n\r\n".toByteArray())
+            write(text); flush()
+        }
+    }
+
+    private fun antworte(methode: String, pfad: String, j: JSONObject): Pair<Int, JSONObject> {
+        val eingerichtet = Wiedergabe.navidrome != null
+        return when ("$methode $pfad") {
+            "GET /status" -> 200 to JSONObject().put("eingerichtet", eingerichtet).put("hoerbuecher", Wiedergabe.abs != null)
+                .put("spielt", Wiedergabe.spielt).put("titel", Wiedergabe.anzeige?.titel ?: "")
+            "POST /einrichten" -> {
+                if (j.optString("code") != code) return 403 to JSONObject().put("text", "Der Code stimmt nicht. Er steht auf dem Fernseher.")
+                neuerZugang = Zugang(j.optString("server"), j.optString("benutzer"), j.optString("passwort"),
+                    j.optString("absServer"), j.optString("absBenutzer"), j.optString("absPasswort"))
+                200 to JSONObject().put("status", "ok")
+            }
+            "POST /spielen" -> {
+                if (!eingerichtet) return 409 to JSONObject().put("text", "Ohrregal auf dem Fernseher ist noch nicht eingerichtet.")
+                val zeit = j.optDouble("zeit", 0.0)
+                when (j.optString("art")) {
+                    "musik" -> {
+                        val liste = j.liste("titel").map { Titel(it.getString("id"), it.optString("titel"), it.optString("kuenstler"),
+                            it.optString("album"), it.text("cover"), it.optLong("dauer")) }
+                        Wiedergabe.spiele(liste, j.optInt("ab"), (zeit * 1000).toLong())
+                    }
+                    "hoerbuch" -> Wiedergabe.spiele(j.getString("id"), j.text("folge"))
+                    "radio" -> Wiedergabe.spiele(Sender(j.optString("id"), j.optString("name"), j.optString("url")))
+                    else -> return 400 to JSONObject().put("text", "Unbekannte Art.")
+                }
+                vomIphone++
+                200 to JSONObject().put("status", "ok")
+            }
+            "POST /steuern" -> {
+                when (j.optString("aktion")) {
+                    "umschalten" -> Wiedergabe.umschalten()
+                    "weiter" -> Wiedergabe.weiter()
+                    "zurueck" -> Wiedergabe.zurueck()
+                }
+                200 to JSONObject().put("status", "ok")
+            }
+            else -> 404 to JSONObject().put("text", "Unbekannt.")
+        }
+    }
+}

@@ -31,6 +31,8 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: Ohrregal hört kurz zu, um den gerade laufenden Titel zu erkennen.
+        NSLocalNetworkUsageDescription: Ohrregal sucht im Heimnetz nach Fernsehern mit Ohrregal, um dort weiterzuspielen.
+        NSBonjourServices: [_ohrregal._tcp]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           # Viele Radiosender streamen nur über http://.

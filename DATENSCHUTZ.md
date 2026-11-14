@@ -12,6 +12,7 @@ Ohrregal ist eine App für deine **eigenen** Server (Navidrome und Audiobookshel
 - **Musikerkennung:** Tippst du auf „Erkennen“, nutzt die App kurz das Mikrofon und Apples ShazamKit. Es wird keine Aufnahme gespeichert.
 - **Radio-Sendersuche:** Suchst du unter „Radio“ nach einem Sender, geht nur der Suchbegriff an das freie Senderverzeichnis radio-browser.info. Gemerkte Sender bleiben auf deinem Gerät.
 - **Hörbuch-Suche und Hörproben:** Suchbegriffe gehen an den öffentlichen Audible-Katalog (ohne Konto).
+- **Fernseher:** Für „Auf dem Fernseher abspielen“ sucht die App im Heimnetz nach Ohrregal auf dem Fernseher und schickt ihm, was gerade läuft. Beim „Fernseher einrichten“ werden deine Zugänge nur im Heimnetz an deinen Fernseher übertragen.
 - **Mitteilungen:** Erlaubst du Mitteilungen, gibt die App die Gerätekennung für Push-Mitteilungen an deinen eigenen Server weiter, damit er dir „Hörbuch ist da“ melden kann.
 
 ## Was nicht passiert

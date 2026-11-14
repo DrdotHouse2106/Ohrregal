@@ -259,6 +259,7 @@ fun EinstellungenTab(zugangGeaendert: (Zugang) -> Unit) {
         Text("Navidrome: ${z.server} (${z.benutzer})", color = Color.White)
         Text("Audiobookshelf: " + (if (z.mitHoerbuechern) "${z.absServer} (${z.absBenutzer})" else "nicht eingerichtet"), color = Color.White)
         Text("Version ${ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName}", color = Farben.gedaempft)
+        Text("Code zum Einrichten vom iPhone: ${Empfaenger.code}", color = Farben.gedaempft)
         Button(onClick = { zugangGeaendert(z.copy(passwort = "")) }) { Text("Zugänge ändern") }
     }
 }

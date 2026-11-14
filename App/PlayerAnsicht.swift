@@ -136,6 +136,7 @@ struct VollPlayer: View {
                 }
                 Spacer()
                 AirPlayKnopf().frame(width: 44, height: 44)
+                FernseherKnopf()
                 Spacer()
                 // Schlaf-Timer für alles: Hörbuch, Podcast, Musik und Radio; mit Restzeit.
                 Menu {

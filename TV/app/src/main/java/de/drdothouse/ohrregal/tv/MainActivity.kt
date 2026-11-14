@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Wiedergabe.verbinden(applicationContext)
+        Empfaenger.starten(applicationContext)
         setContent {
             MaterialTheme(colorScheme = Thema) {
                 Surface(Modifier.fillMaxSize(), colors = SurfaceDefaults.colors(containerColor = Farben.hintergrund)) { App() }
@@ -37,6 +38,10 @@ class MainActivity : ComponentActivity() {
 fun App() {
     val ctx = LocalContext.current
     var zugang by remember { mutableStateOf(Zugang.laden(ctx)) }
+    // Zugänge vom iPhone („Fernseher einrichten“) direkt übernehmen.
+    LaunchedEffect(Empfaenger.neuerZugang) {
+        Empfaenger.neuerZugang?.let { neu -> neu.speichern(ctx); zugang = neu; Empfaenger.neuerZugang = null }
+    }
     if (!zugang.vollstaendig) {
         AnmeldungSeite(zugang) { neu -> neu.speichern(ctx); zugang = neu }
         return
@@ -48,6 +53,8 @@ fun App() {
     val stapel = remember { mutableStateListOf<Seite>() }
     val oeffne: (Seite) -> Unit = { stapel.add(it) }
     BackHandler(stapel.isNotEmpty()) { stapel.removeAt(stapel.lastIndex) }
+    // Startet das iPhone etwas auf dem Fernseher, gleich den Player zeigen.
+    LaunchedEffect(Empfaenger.vomIphone) { if (Empfaenger.vomIphone > 0 && stapel.lastOrNull() != Seite.Player) stapel.add(Seite.Player) }
 
     when (val s = stapel.lastOrNull()) {
         null -> Haupt(navidrome, abs, oeffne) { zugang = it; it.speichern(ctx) }

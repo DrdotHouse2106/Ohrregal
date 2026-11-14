@@ -79,12 +79,12 @@ object Wiedergabe {
 
     // MARK: Starten
 
-    fun spiele(liste: List<Titel>, ab: Int = 0) {
+    fun spiele(liste: List<Titel>, ab: Int = 0, startMs: Long = 0) {
         val n = navidrome ?: return
         beendeSitzung()
         titel = liste; spuren = emptyList(); kapitel = emptyList(); istHoerbuch = false; istRadio = false
         mitController { c ->
-            c.setMediaItems(liste.map { eintrag(n.stream(it.id), it.titel, it.kuenstler, n.cover(it.cover, 600)) }, ab, 0)
+            c.setMediaItems(liste.map { eintrag(n.stream(it.id), it.titel, it.kuenstler, n.cover(it.cover, 600)) }, ab, startMs)
             c.setPlaybackSpeed(1f); c.prepare(); c.play()
         }
         eintragGewechselt(ab)
