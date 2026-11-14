@@ -1,0 +1,55 @@
+name: TV-App
+
+# Baut die App für Fire TV und Android TV und legt sie als Release „tv“ ab.
+# Feste Download-Adresse: https://github.com/DrdotHouse2106/Ohrregal/releases/download/tv/ohrregal-tv.apk
+on:
+  push:
+    branches: [main]
+    paths: ['TV/**', '.github/workflows/tv.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Signierschlüssel
+        env:
+          B64: ${{ secrets.TV_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$B64" ]; then echo "::error::Secret TV_KEYSTORE_B64 fehlt (siehe TV/LIESMICH.md)"; exit 1; fi
+          echo "$B64" | base64 -d > "$RUNNER_TEMP/ohrregal-tv.jks"
+          echo "TV_KEYSTORE_DATEI=$RUNNER_TEMP/ohrregal-tv.jks" >> "$GITHUB_ENV"
+
+      - name: APK bauen
+        working-directory: TV
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          TV_KEYSTORE_PASSWORT: ${{ secrets.TV_KEYSTORE_PASSWORT }}
+        run: |
+          gradle assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk ohrregal-tv.apk
+
+      - name: Als Release „tv“ veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tv
+          name: Ohrregal TV
+          make_latest: false
+          files: TV/ohrregal-tv.apk
+          body: |
+            App für Fire TV und Android TV (z. B. waipu.tv-Stick), Version 0.1.${{ github.run_number }}.
+            Installieren mit der App „Downloader“: https://github.com/DrdotHouse2106/Ohrregal/releases/download/tv/ohrregal-tv.apk
