@@ -96,13 +96,18 @@ fun HoerbuecherTab(abs: Audiobookshelf, oeffne: (Seite) -> Unit) {
 
 @Composable
 fun PodcastsTab(abs: Audiobookshelf, oeffne: (Seite) -> Unit) {
-    val (folgen, fehler) = laden(abs) { abs.neueFolgen(20) }
-    val (podcasts, _) = laden(abs) { abs.bibliotheken("podcast").flatMap { abs.eintraege(it, anzahl = 100) } }
+    val (fav, _) = laden(abs) { abs.favoriten() }
+    val rang = { id: String -> (fav ?: emptyList()).indexOf(id).let { if (it < 0) Int.MAX_VALUE else it } }
+    // Lieblings-Podcasts (vom iPhone gemerkt) und ihre Folgen zuerst.
+    val (folgenRoh, fehler) = laden(abs) { abs.neueFolgen(20) }
+    val (podcastsRoh, _) = laden(abs) { abs.bibliotheken("podcast").flatMap { abs.eintraege(it, anzahl = 100) } }
+    val folgen = folgenRoh?.sortedBy { rang(it.itemId) }
+    val podcasts = podcastsRoh?.sortedBy { rang(it.id) }
     if (fehler != null && folgen == null) { Hinweis(fehler); return }
     if (folgen?.isEmpty() == true && podcasts?.isEmpty() == true) { Hinweis("Keine Podcasts in Audiobookshelf."); return }
     LazyColumn(contentPadding = PaddingValues(bottom = 48.dp)) {
         item { Reihe("Neue Folgen", folgen ?: emptyList()) { f -> FolgenKarte(f, abs, oeffne) } }
-        item { Reihe("Podcasts", podcasts ?: emptyList()) { p -> Karte(abs.cover(p.id, p.stand), p.titel, p.autor) { oeffne(Seite.PodcastS(p)) } } }
+        item { Reihe("Podcasts", podcasts ?: emptyList()) { p -> Karte(abs.cover(p.id, p.stand), (if (rang(p.id) != Int.MAX_VALUE) "★ " else "") + p.titel, p.autor) { oeffne(Seite.PodcastS(p)) } } }
     }
 }
 
@@ -178,6 +183,7 @@ fun PodcastSeite(p: Eintrag, abs: Audiobookshelf?, oeffne: (Seite) -> Unit) {
             Spacer(Modifier.height(16.dp))
             Text(p.titel, style = MaterialTheme.typography.headlineSmall, color = Color.White)
             Text("${folgen?.size ?: 0} Folgen", color = Farben.gedaempft)
+            FavoritKnopf(p.id, abs)
         }
         Spacer(Modifier.width(32.dp))
         when {
@@ -273,4 +279,18 @@ fun EinstellungenTab(zugangGeaendert: (Zugang) -> Unit) {
         Text("Einrichten vom iPhone: Ohrregal → Start → Profilsymbol → „Fernseher einrichten“, hier „Übernehmen“ drücken.", color = Farben.gedaempft)
         Button(onClick = { zugangGeaendert(z.copy(passwort = "")) }) { Text("Zugänge ändern") }
     }
+}
+
+/** Stern: Podcast als Favorit merken (gleiche Liste wie auf dem iPhone). */
+@Composable
+fun FavoritKnopf(id: String, abs: Audiobookshelf?) {
+    val bereich = rememberCoroutineScope()
+    var liste by remember { mutableStateOf<List<String>?>(null) }
+    LaunchedEffect(id) { liste = abs?.favoriten() }
+    val ist = liste?.contains(id) == true
+    Button(onClick = {
+        val neu = (liste ?: emptyList()).let { if (ist) it - id else it + id }
+        liste = neu
+        bereich.launch { abs?.favoritenSpeichern(neu) }
+    }, modifier = Modifier.padding(top = 12.dp)) { Text(if (ist) "★ Favorit" else "☆ Zu Favoriten") }
 }

@@ -16,6 +16,11 @@ public final class PodcastFavoriten {
     /// Vom Dienst holen (falls vorhanden); lokale Liste bleibt sonst.
     public func laden(_ abs: AudiobookshelfClient) async {
         guard let liste = try? await abs.podcastFavoriten() else { return }
+        // Erstes Mal mit Dienst: bisher nur auf dem iPhone gemerkte Favoriten hochladen statt sie zu verlieren.
+        if liste.isEmpty, !ids.isEmpty {
+            try? await abs.podcastFavoritenSpeichern(ids)
+            return
+        }
         ids = liste
         UserDefaults.standard.set(ids, forKey: "podcastFavoriten")
     }

@@ -74,6 +74,16 @@ class Audiobookshelf(val server: String, private val benutzer: String, private v
             s.liste("chapters").map { Kapitel(it.optDouble("start"), it.optDouble("end"), it.optString("title")) })
     }
 
+    /** Lieblings-Podcasts aus dem eigenen Dienst (leer, wenn es keinen gibt). */
+    suspend fun favoriten(): List<String> = runCatching {
+        val l = JSONObject(hole("/wunsch-api/podcast/favoriten")).optJSONArray("favoriten") ?: JSONArray()
+        (0 until l.length()).map { l.getString(it) }
+    }.getOrDefault(emptyList())
+
+    suspend fun favoritenSpeichern(ids: List<String>) {
+        runCatching { hole("/wunsch-api/podcast/favoriten", "PUT", JSONObject().put("favoriten", JSONArray(ids))) }
+    }
+
     suspend fun markiereGehoert(id: String, folge: String?) {
         runCatching { hole("/api/me/progress/$id" + (folge?.let { "/$it" } ?: ""), "PATCH", JSONObject().put("isFinished", true)) }
     }
