@@ -2,7 +2,7 @@
 
 Stand: November 2026 · English version: [DATENSCHUTZ.en.md](DATENSCHUTZ.en.md)
 
-Ohrregal ist eine App für deine **eigenen** Server (Navidrome und Audiobookshelf). Der Anbieter der App betreibt keine Server für die App und erhält keine Daten von dir.
+Ohrregal (iPhone und Fernseher) ist eine App für deine **eigenen** Server (Navidrome und Audiobookshelf). Der Anbieter der App betreibt keine Server für die App und erhält keine Daten von dir.
 
 ## Welche Daten die App verarbeitet
 

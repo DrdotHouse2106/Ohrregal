@@ -40,8 +40,9 @@ jobs:
           VERSION_CODE: ${{ github.run_number }}
           TV_KEYSTORE_PASSWORT: ${{ secrets.TV_KEYSTORE_PASSWORT }}
         run: |
-          gradle assembleRelease --no-daemon
+          gradle assembleRelease bundleRelease --no-daemon
           cp app/build/outputs/apk/release/app-release.apk ohrregal-tv.apk
+          cp app/build/outputs/bundle/release/app-release.aab ohrregal-tv.aab
 
       - name: Als Release „tv“ veröffentlichen
         uses: softprops/action-gh-release@v2
@@ -49,7 +50,10 @@ jobs:
           tag_name: tv
           name: Ohrregal TV
           make_latest: false
-          files: TV/ohrregal-tv.apk
+          files: |
+            TV/ohrregal-tv.apk
+            TV/ohrregal-tv.aab
           body: |
             App für Fire TV und Android TV (z. B. waipu.tv-Stick), Version 0.1.${{ github.run_number }}.
             Installieren mit der App „Downloader“: https://github.com/DrdotHouse2106/Ohrregal/releases/download/tv/ohrregal-tv.apk
+            Für Google Play (internes Testen): ohrregal-tv.aab. Für den Amazon Appstore (Live App Testing): ohrregal-tv.apk.
