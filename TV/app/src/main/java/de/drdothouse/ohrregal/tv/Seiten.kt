@@ -13,6 +13,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.*
 import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -109,7 +111,8 @@ fun RadioTab(n: Navidrome, oeffne: (Seite) -> Unit) {
     // Mit eigenem Dienst gibt es Logos; sonst die Sender direkt aus Navidrome.
     val (sender, fehler) = laden(n) {
         val (code, text) = runCatching { Netz.hole(n.server + "/wunsch-api/musik/sender", kopf = n.dienstKopf) }.getOrDefault(0 to "")
-        val dienst = if (code == 200) JSONObject(text) else null
+        // Ohne eigenen Dienst kommt oft eine HTML-Seite zurück: dann einfach die Navidrome-Sender.
+        val dienst = if (code == 200) runCatching { JSONObject(text) }.getOrNull() else null
         if (dienst?.optBoolean("eingerichtet") == true)
             dienst.liste("sender").map { Triple(Sender(it.getString("id"), it.optString("name"), it.optString("streamUrl")), it.text("bild"), Unit) }
         else n.sender().map { Triple(it, null as String?, Unit) }
@@ -124,6 +127,9 @@ fun RadioTab(n: Navidrome, oeffne: (Seite) -> Unit) {
 @Composable
 fun TitelSeite(titel: String, untertitel: String, cover: String?, oeffne: (Seite) -> Unit, holen: suspend () -> List<Titel>) {
     val (liste, fehler) = laden(titel + untertitel) { holen() }
+    val fokus = remember { FocusRequester() }
+    // Mit der Fernbedienung gleich auf „Abspielen“.
+    LaunchedEffect(Unit) { runCatching { fokus.requestFocus() } }
     Row(Modifier.fillMaxSize().padding(48.dp)) {
         Column(Modifier.width(320.dp)) {
             Bild(cover, 300.dp)
@@ -132,7 +138,7 @@ fun TitelSeite(titel: String, untertitel: String, cover: String?, oeffne: (Seite
             Text(untertitel, color = Farben.gedaempft)
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { liste?.let { Wiedergabe.spiele(it); oeffne(Seite.Player) } }) { Text("▶ Abspielen") }
+                Button(onClick = { liste?.let { Wiedergabe.spiele(it); oeffne(Seite.Player) } }, modifier = Modifier.focusRequester(fokus)) { Text("▶ Abspielen") }
                 Button(onClick = { liste?.let { Wiedergabe.spiele(it.shuffled()); oeffne(Seite.Player) } }) { Text("Zufällig") }
             }
         }
@@ -164,6 +170,8 @@ fun KuenstlerSeite(k: Kuenstler, n: Navidrome, oeffne: (Seite) -> Unit) {
 @Composable
 fun PodcastSeite(p: Eintrag, abs: Audiobookshelf?, oeffne: (Seite) -> Unit) {
     val (folgen, fehler) = laden(p.id) { abs?.folgen(p) ?: emptyList() }
+    val fokus = remember { FocusRequester() }
+    LaunchedEffect(folgen) { if (!folgen.isNullOrEmpty()) runCatching { fokus.requestFocus() } }
     Row(Modifier.fillMaxSize().padding(48.dp)) {
         Column(Modifier.width(320.dp)) {
             Bild(abs?.cover(p.id, p.stand), 300.dp)
@@ -176,8 +184,9 @@ fun PodcastSeite(p: Eintrag, abs: Audiobookshelf?, oeffne: (Seite) -> Unit) {
             fehler != null -> Hinweis(fehler)
             folgen == null -> Hinweis("Lädt …")
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(folgen) { f ->
+                itemsIndexed(folgen) { i, f ->
                     ListItem(selected = false, onClick = { Wiedergabe.spiele(f.itemId, f.id); oeffne(Seite.Player) },
+                        modifier = if (i == 0) Modifier.focusRequester(fokus) else Modifier,
                         headlineContent = { Text(f.titel, maxLines = 2) },
                         supportingContent = { Text(listOf(datumText(f.datum), if (f.dauer > 0) "${(f.dauer / 60).toInt()} Min." else "").filter { it.isNotEmpty() }.joinToString(" · ")) })
                 }
@@ -189,6 +198,8 @@ fun PodcastSeite(p: Eintrag, abs: Audiobookshelf?, oeffne: (Seite) -> Unit) {
 @Composable
 fun PlayerSeite() {
     val a = Wiedergabe.anzeige
+    val fokus = remember { FocusRequester() }
+    LaunchedEffect(a != null) { if (a != null) runCatching { fokus.requestFocus() } }
     if (a == null) { Hinweis(Wiedergabe.fehler ?: "Lädt …"); return }
     Row(Modifier.fillMaxSize().padding(56.dp), verticalAlignment = Alignment.CenterVertically) {
         Bild(a.cover, 380.dp)
@@ -208,7 +219,7 @@ fun PlayerSeite() {
             Spacer(Modifier.height(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = { Wiedergabe.zurueck() }) { Text(if (Wiedergabe.istHoerbuch) "‹ 15 s" else "⏮") }
-                Button(onClick = { Wiedergabe.umschalten() }) { Text(if (Wiedergabe.spielt) "❚❚ Pause" else "▶ Abspielen") }
+                Button(onClick = { Wiedergabe.umschalten() }, modifier = Modifier.focusRequester(fokus)) { Text(if (Wiedergabe.spielt) "❚❚ Pause" else "▶ Abspielen") }
                 Button(onClick = { Wiedergabe.weiter() }) { Text(if (Wiedergabe.istHoerbuch) "30 s ›" else "⏭") }
                 SchlafKnopf()
             }
