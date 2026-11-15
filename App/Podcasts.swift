@@ -3,16 +3,32 @@ import SwiftUI
 
 /// Podcasts aus Audiobookshelf (Bibliotheken vom Typ „podcast“), z. B. YouTube-Kanäle als Ton.
 struct PodcastReihe: View {
+    @Environment(Sitzung.self) private var sitzung
     let podcasts: [Hoerbuch]
+    private var fav: PodcastFavoriten { .geteilt }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Podcasts").font(.title2.bold()).padding(.horizontal)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
-                    ForEach(podcasts) { p in
-                        NavigationLink(value: Ziel.podcast(p)) { HoerbuchKarte(hoerbuch: p, groesse: 130) }
-                            .buttonStyle(.plain)
+                    // Favoriten vorn, mit Stern; langes Drücken merkt bzw. entfernt.
+                    ForEach(fav.sortiert(podcasts) { $0.id }) { p in
+                        NavigationLink(value: Ziel.podcast(p)) {
+                            HoerbuchKarte(hoerbuch: p, groesse: 130)
+                                .overlay(alignment: .topLeading) {
+                                    if fav.ist(p.id) {
+                                        Image(systemName: "star.fill").font(.caption).foregroundStyle(.yellow)
+                                            .padding(6).background(.black.opacity(0.5), in: Circle()).padding(6)
+                                    }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(fav.ist(p.id) ? "Aus Favoriten entfernen" : "Zu Favoriten", systemImage: fav.ist(p.id) ? "star.slash" : "star") {
+                                fav.umschalten(p.id, sitzung.hoerbuchClient)
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal)
@@ -30,6 +46,7 @@ struct NeueFolgenReihe: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Neue Folgen").font(.title2.bold()).padding(.horizontal)
+            let folgen = PodcastFavoriten.geteilt.sortiert(folgen) { $0.libraryItemId }
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
                     ForEach(folgen) { f in
@@ -110,6 +127,11 @@ struct PodcastView: View {
         .navigationTitle(podcast.titel)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            Button {
+                PodcastFavoriten.geteilt.umschalten(podcast.id, sitzung.hoerbuchClient)
+            } label: {
+                Image(systemName: PodcastFavoriten.geteilt.ist(podcast.id) ? "star.fill" : "star")
+            }
             Menu {
                 Picker("Nach einer Folge", selection: Binding(get: { richtung }, set: { richtung = $0; FolgenRichtung.setze($0, fuer: podcast.id) })) {
                     ForEach(FolgenRichtung.allCases, id: \.self) { Text($0.text).tag($0) }

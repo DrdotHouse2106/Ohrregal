@@ -137,6 +137,7 @@ struct HoerbuecherView: View {
             }
             podcasts = podcastsAlle
             neueFolgen = (try? await abs.neueFolgen()) ?? []
+            if sitzung.dienstDa { await PodcastFavoriten.geteilt.laden(abs) }
             if sitzung.dienstDa { podcastAbos = (try? await abs.podcastAbos())?.eingerichtet ?? false }
             if !podcasts.isEmpty { Task { await Offline.geteilt.podcastsAbgleichen(abs) } }
             do {

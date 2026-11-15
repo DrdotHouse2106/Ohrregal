@@ -119,6 +119,17 @@ public final class AudiobookshelfClient {
         return liste.treffer
     }
 
+    public func podcastFavoriten() async throws -> [String] {
+        struct Liste: Decodable { let favoriten: [String] }
+        let liste: Liste = try await hole("/wunsch-api/podcast/favoriten")
+        return liste.favoriten
+    }
+
+    public func podcastFavoritenSpeichern(_ ids: [String]) async throws {
+        let (daten, code) = try await sende("/wunsch-api/podcast/favoriten", methode: "PUT", json: ["favoriten": ids])
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
     public func podcastAbos() async throws -> PodcastAbos {
         try await hole("/wunsch-api/podcast")
     }
