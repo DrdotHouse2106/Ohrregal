@@ -46,10 +46,10 @@ struct NeueFolgenReihe: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Neue Folgen").font(.title2.bold()).padding(.horizontal)
-            let folgen = PodcastFavoriten.geteilt.sortiert(folgen) { $0.libraryItemId }
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
-                    ForEach(folgen) { f in
+                    // Folgen der Lieblings-Podcasts zuerst.
+                    ForEach(PodcastFavoriten.geteilt.sortiert(folgen) { $0.libraryItemId }) { f in
                         Button {
                             guard let id = f.libraryItemId else { return }
                             Task { await player.spiele(folge: f, podcast: id, podcastTitel: f.podcastTitel ?? "") }
