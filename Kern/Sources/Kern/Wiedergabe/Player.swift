@@ -90,11 +90,15 @@ public final class Player {
             let laeuft = p.timeControlStatus != .paused
             Task { @MainActor in self?.laeuftGeaendert(laeuft) }
         })
-        beobachter.append(NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] meldung in
-            guard let eintrag = meldung.object as? AVPlayerItem else { return }
-            let schluessel = ObjectIdentifier(eintrag)
-            Task { @MainActor in self?.gehoert(schluessel) }
-        })
+        // Auch „konnte nicht zu Ende spielen“ zählt als Ende: Bei manchen Dateien (z. B. Pinchflat-m4a) ist die
+        // angegebene Länge minimal größer als der Ton, dann bricht iOS Sekundenbruchteile vor Schluss ab.
+        for name in [AVPlayerItem.didPlayToEndTimeNotification, AVPlayerItem.failedToPlayToEndTimeNotification] {
+            beobachter.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] meldung in
+                guard let eintrag = meldung.object as? AVPlayerItem else { return }
+                let schluessel = ObjectIdentifier(eintrag)
+                Task { @MainActor in self?.gehoert(schluessel) }
+            })
+        }
         #if os(iOS)
         // Anruf, Siri oder Navigationsansage: danach weiterspielen wie Apple Music.
         beobachter.append(NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] meldung in
@@ -195,6 +199,7 @@ public final class Player {
             hoerbuchId = id
             folgeId = folge
             naechsteFolge = nil
+            endeGemeldet = false
             if let folge { Task { await naechsteBestimmen(podcast: id, folge: folge) } }
             istHoerbuch = true
             istRadio = false
@@ -450,12 +455,12 @@ public final class Player {
         if let um = schlafenUm {
             let rest = um.timeIntervalSinceNow
             player.volume = Float(min(max(rest / 10, 0), 1))
-            if rest <= 0 { player.pause(); schlafenUm = nil; player.volume = 1 }
+            if rest <= 0 { schlafPause = true; player.pause(); schlafenUm = nil; player.volume = 1 }
         }
         // „Ende“: Kapitel, sonst Folge bzw. Titel (bei Musik ist `zeit` die Stelle im Titel).
         if schlafenAmKapitelende {
             let ende = aktuellesKapitel?.end ?? dauer
-            if ende > 0, zeit >= ende - 1 { player.pause(); schlafenAmKapitelende = false }
+            if ende > 0, zeit >= ende - 1 { schlafPause = true; player.pause(); schlafenAmKapitelende = false }
         }
         if istHoerbuch {
             gehoertSeitSync += 0.5 * Double(tempo)
@@ -469,6 +474,12 @@ public final class Player {
                                     id: hoerbuchId, name: istHoerbuch ? anzeige?.titel : nil)
         }
         spielt = laeuft
+        // Hält der Player in der letzten Datei knapp vor Schluss an, ist das das Ende (falls keine Meldung kam).
+        if !laeuft, istHoerbuch, !schlafPause, spur == spuren.count - 1, dauer > 0, zeit >= dauer - 2 {
+            hoerbuchZuEnde()
+            return
+        }
+        schlafPause = false
         if !laeuft { synchronisiere() }
         zeitInfo()
     }
@@ -486,10 +497,14 @@ public final class Player {
 
     /// Nach einer Podcast-Folge: welche als Nächstes kommt (für „Als Nächstes“ im Player).
     public private(set) var naechsteFolge: Folge?
+    @ObservationIgnored private var endeGemeldet = false
+    /// Der Schlaf-Timer hat angehalten: kein „Ende“, keine nächste Folge.
+    @ObservationIgnored private var schlafPause = false
 
     /// Ende eines Hörbuchs oder einer Folge: „ende“ ins Protokoll, als gehört markieren, bei Podcasts die nächste Folge.
     private func hoerbuchZuEnde() {
-        guard let abs = hoerbuchClient, let id = hoerbuchId else { return }
+        guard !endeGemeldet, let abs = hoerbuchClient, let id = hoerbuchId else { return }
+        endeGemeldet = true
         let folge = folgeId, naechste = naechsteFolge, podcastTitel = podcastName ?? anzeige?.untertitel ?? ""
         Protokoll.geteilt.merke("ende", art: folge != nil ? "podcast" : "hoerbuch", position: dauer, dauer: dauer,
                                 id: folge ?? id, name: anzeige?.titel, urheber: podcastTitel)
