@@ -44,6 +44,8 @@ object Wiedergabe {
     private var titel: List<Titel> = emptyList()
     private var spuren: List<Spur> = emptyList()
     private var sitzung: String? = null
+    private var itemId: String? = null
+    private var folgeId: String? = null
     var abs: Audiobookshelf? = null
     var navidrome: Navidrome? = null
     private var gehoertSeitSync = 0.0
@@ -63,6 +65,7 @@ object Wiedergabe {
                     if (!isPlaying) synchronisiere()
                 }
                 override fun onMediaItemTransition(item: MediaItem?, reason: Int) { eintragGewechselt() }
+                override fun onPlaybackStateChanged(state: Int) { if (state == Player.STATE_ENDED && istHoerbuch) zuEnde() }
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) { fehler = "Wiedergabe gestört: ${error.errorCodeName}" }
             })
             wartend?.invoke(); wartend = null
@@ -105,6 +108,7 @@ object Wiedergabe {
                 beendeSitzung()
                 val s = a.starte(id, folge)
                 sitzung = s.id; spuren = s.spuren; kapitel = s.kapitel; titel = emptyList()
+                itemId = id; folgeId = folge
                 istHoerbuch = true; istRadio = false; dauer = s.dauer
                 anzeige = Anzeige(s.titel, s.autor, cover ?: a.cover(id))
                 val start = s.position
@@ -183,6 +187,20 @@ object Wiedergabe {
         if (istHoerbuch) {
             gehoertSeitSync += 0.5 * c.playbackParameters.speed
             if (gehoertSeitSync >= 15) synchronisiere()
+        }
+    }
+
+    /** Ende von Hörbuch oder Folge: als gehört markieren, bei Podcasts die nächste ungehörte Folge starten. */
+    private fun zuEnde() {
+        val a = abs ?: return
+        val id = itemId ?: return
+        val folge = folgeId
+        zeit = dauer
+        synchronisiere(schliessen = true)
+        sitzung = null
+        bereich.launch {
+            a.markiereGehoert(id, folge)
+            if (folge != null) runCatching { a.naechsteFolge(id, folge) }.getOrNull()?.let { spiele(id, it.id) }
         }
     }
 

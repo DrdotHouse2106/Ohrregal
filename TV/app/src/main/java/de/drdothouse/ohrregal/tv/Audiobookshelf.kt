@@ -74,6 +74,28 @@ class Audiobookshelf(val server: String, private val benutzer: String, private v
             s.liste("chapters").map { Kapitel(it.optDouble("start"), it.optDouble("end"), it.optString("title")) })
     }
 
+    suspend fun markiereGehoert(id: String, folge: String?) {
+        runCatching { hole("/api/me/progress/$id" + (folge?.let { "/$it" } ?: ""), "PATCH", JSONObject().put("isFinished", true)) }
+    }
+
+    /** Fortschritt je Folge (0…1, fertig = 1). */
+    suspend fun folgenStand(): Map<String, Double> = JSONObject(hole("/api/me")).liste("mediaProgress")
+        .filter { it.text("episodeId") != null }
+        .associate { it.getString("episodeId") to (if (it.optBoolean("isFinished")) 1.0 else it.optDouble("progress", 0.0)) }
+
+    /** Nächste ungehörte Folge nach dieser: zuerst die nächstältere, sonst die neueste ungehörte (wie auf dem iPhone). */
+    suspend fun naechsteFolge(podcast: String, folge: String): Folge? {
+        val alle = JSONObject(hole("/api/items/$podcast?expanded=1")).let { j ->
+            val titel = j.getJSONObject("media").getJSONObject("metadata").optString("title")
+            j.getJSONObject("media").liste("episodes").map { folge(it, podcast, titel) }.sortedByDescending { it.datum }
+        }
+        val stand = folgenStand()
+        val i = alle.indexOfFirst { it.id == folge }
+        if (i < 0) return null
+        val ungehoert = { f: Folge -> (stand[f.id] ?: 0.0) < 1 && f.id != folge }
+        return alle.drop(i + 1).firstOrNull(ungehoert) ?: alle.firstOrNull(ungehoert)
+    }
+
     suspend fun synchronisiere(sitzung: String, zeit: Double, gehoert: Double, dauer: Double, schliessen: Boolean = false) {
         runCatching {
             hole("/api/session/$sitzung/${if (schliessen) "close" else "sync"}", "POST",
