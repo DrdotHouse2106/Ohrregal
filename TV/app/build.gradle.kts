@@ -9,7 +9,7 @@ android {
     compileSdk = 35
     defaultConfig {
         applicationId = "de.drdothouse.ohrregal.tv"
-        minSdk = 24
+        minSdk = 22
         targetSdk = 35
         // Versionsnummer kommt im GitHub-Ablauf aus der Laufnummer.
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
@@ -52,5 +52,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
     implementation("androidx.media3:media3-session:1.5.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }

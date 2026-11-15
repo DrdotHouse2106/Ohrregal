@@ -29,4 +29,4 @@ Der Schlüssel muss immer derselbe bleiben, sonst lässt sich ein Update nicht �
 
 Lokal: `cd TV && gradle assembleDebug` (Android-SDK nötig, Pfad in `local.properties`).
 
-Technik: Kotlin, Jetpack Compose for TV, Media3 (ExoPlayer) mit MediaSessionService, ab Android 7.
+Technik: Kotlin, Jetpack Compose for TV, Media3 (ExoPlayer) mit MediaSessionService, ab Android 5.1 (auch Fire TV Stick 2. Generation).
