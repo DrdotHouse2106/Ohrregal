@@ -63,6 +63,7 @@ struct PodcastView: View {
     @State private var folgen: [Folge] = []
     @State private var fortschritt: [String: Double] = [:]
     @State private var fehler: String?
+    @State private var richtung = FolgenRichtung.aelter
 
     var body: some View {
         List {
@@ -108,13 +109,22 @@ struct PodcastView: View {
         .background(Farben.hintergrund)
         .navigationTitle(podcast.titel)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            Menu {
+                Picker("Nach einer Folge", selection: Binding(get: { richtung }, set: { richtung = $0; FolgenRichtung.setze($0, fuer: podcast.id) })) {
+                    ForEach(FolgenRichtung.allCases, id: \.self) { Text($0.text).tag($0) }
+                }
+            } label: {
+                Image(systemName: "text.line.first.and.arrowtriangle.forward")
+            }
+        }
         .overlay {
             if let fehler, folgen.isEmpty {
                 ContentUnavailableView("Folgen nicht geladen", systemImage: "wifi.exclamationmark", description: Text(fehler))
             }
         }
         .refreshable { await laden() }
-        .task { await laden() }
+        .task { richtung = FolgenRichtung.fuer(podcast.id); await laden() }
     }
 
     private func gehoertKnopf(_ f: Folge) -> some View {

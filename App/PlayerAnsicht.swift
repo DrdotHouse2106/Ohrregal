@@ -73,6 +73,9 @@ struct VollPlayer: View {
                 // Lange Folgentitel (YouTube) ganz zeigen, notfalls etwas kleiner.
                 Text(player.anzeige?.titel ?? "").font(.title2.bold()).lineLimit(4).minimumScaleFactor(0.75).multilineTextAlignment(.center)
                 Text(player.anzeige?.untertitel ?? "").font(.title3).foregroundStyle(Farben.textGedaempft).lineLimit(1)
+                if let n = player.naechsteFolge {
+                    Text("Als Nächstes: \(n.titel)").font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
+                }
                 if let k = player.aktuellesKapitel {
                     Button { kapitelOffen = true } label: {
                         Label(k.title, systemImage: "list.bullet").font(.subheadline).lineLimit(1)

@@ -231,6 +231,35 @@ public struct Folge: Decodable, Hashable, Identifiable, Sendable {
     public var datum: Date? { (publishedAt ?? addedAt).map { Date(timeIntervalSince1970: $0 / 1000) } }
 }
 
+/// Was nach einer Podcast-Folge kommt; einstellbar je Podcast. Standard: die nächstältere ungehörte (Nachrichten).
+public enum FolgenRichtung: String, CaseIterable, Sendable {
+    case aelter, neuer, aus
+
+    public var text: String {
+        switch self {
+        case .aelter: "Nächstältere ungehörte Folge"
+        case .neuer: "Nächstneuere ungehörte Folge (Serie)"
+        case .aus: "Nicht automatisch weiter"
+        }
+    }
+
+    public static func fuer(_ podcast: String) -> FolgenRichtung {
+        UserDefaults.standard.string(forKey: "folgenRichtung.\(podcast)").flatMap(FolgenRichtung.init) ?? .aelter
+    }
+
+    public static func setze(_ r: FolgenRichtung, fuer podcast: String) {
+        UserDefaults.standard.set(r.rawValue, forKey: "folgenRichtung.\(podcast)")
+    }
+
+    /// Nächste ungehörte Folge; `alle` neueste zuerst. Bei „älter“ und nichts Älterem: die neueste ungehörte.
+    public static func naechste(nach folge: String, in alle: [Folge], stand: [String: Double], richtung: FolgenRichtung) -> Folge? {
+        guard richtung != .aus, let i = alle.firstIndex(where: { $0.id == folge }) else { return nil }
+        let ungehoert = { (f: Folge) in (stand[f.id] ?? 0) < 1 && f.id != folge }
+        if richtung == .neuer { return alle[..<i].reversed().first(where: ungehoert) }
+        return alle[(i + 1)...].first(where: ungehoert) ?? alle.first(where: ungehoert)
+    }
+}
+
 /// Treffer aus dem Apple-Podcast-Verzeichnis (über den eigenen Dienst).
 public struct PodcastTreffer: Decodable, Hashable, Identifiable, Sendable {
     public let feedUrl: String

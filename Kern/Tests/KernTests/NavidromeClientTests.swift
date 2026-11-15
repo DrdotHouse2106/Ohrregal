@@ -147,3 +147,18 @@ final class TitelTests: XCTestCase {
         XCTAssertEqual("Das sagt die USA!".ohneGrossbuchstaben, "Das sagt die USA!")
     }
 }
+
+final class FolgenRichtungTests: XCTestCase {
+    private func folge(_ id: String) throws -> Folge {
+        try JSONDecoder().decode(Folge.self, from: Data(#"{"id":"\#(id)","title":"\#(id)"}"#.utf8))
+    }
+
+    func testNaechste() throws {
+        let alle = try ["f5", "f4", "f3", "f2", "f1"].map(folge)   // neueste zuerst
+        let stand = ["f3": 1.0]
+        XCTAssertEqual(FolgenRichtung.naechste(nach: "f4", in: alle, stand: stand, richtung: .aelter)?.id, "f2")
+        XCTAssertEqual(FolgenRichtung.naechste(nach: "f2", in: alle, stand: stand, richtung: .neuer)?.id, "f4")
+        XCTAssertEqual(FolgenRichtung.naechste(nach: "f1", in: alle, stand: stand, richtung: .aelter)?.id, "f5")
+        XCTAssertNil(FolgenRichtung.naechste(nach: "f4", in: alle, stand: stand, richtung: .aus))
+    }
+}

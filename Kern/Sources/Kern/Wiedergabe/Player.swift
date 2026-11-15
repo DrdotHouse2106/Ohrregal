@@ -186,6 +186,8 @@ public final class Player {
             sitzung = neu?.id
             hoerbuchId = id
             folgeId = folge
+            naechsteFolge = nil
+            if let folge { Task { await naechsteBestimmen(podcast: id, folge: folge) } }
             istHoerbuch = true
             istRadio = false
             warteschlange = []
@@ -461,11 +463,37 @@ public final class Player {
     }
 
     private func gehoert(_ schluessel: ObjectIdentifier) {
-        guard let i = stellen.removeValue(forKey: schluessel), !istHoerbuch, let client, warteschlange.indices.contains(i) else { return }
+        guard let i = stellen.removeValue(forKey: schluessel) else { return }
+        // Hörbuch bzw. Folge: Ende ist die letzte Datei.
+        if istHoerbuch { if i == spuren.count - 1 { hoerbuchZuEnde() }; return }
+        guard let client, warteschlange.indices.contains(i) else { return }
         let titel = warteschlange[i]
         Hoerverlauf.geteilt.merke(titel, uebersprungen: false)
         Protokoll.geteilt.merke("ende", titel: titel, position: Double(titel.duration ?? 0))
         Task { try? await client.scrobble(titel.id, fertig: true) }
+    }
+
+    /// Nach einer Podcast-Folge: welche als Nächstes kommt (für „Als Nächstes“ im Player).
+    public private(set) var naechsteFolge: Folge?
+
+    /// Ende eines Hörbuchs oder einer Folge: „ende“ ins Protokoll, als gehört markieren, bei Podcasts die nächste Folge.
+    private func hoerbuchZuEnde() {
+        guard let abs = hoerbuchClient, let id = hoerbuchId else { return }
+        let folge = folgeId, naechste = naechsteFolge, podcastTitel = anzeige?.untertitel ?? ""
+        Protokoll.geteilt.merke("ende", art: folge != nil ? "podcast" : "hoerbuch", position: dauer, dauer: dauer,
+                                id: folge ?? id, name: anzeige?.titel, urheber: podcastTitel)
+        synchronisiere(schliessen: true)
+        sitzung = nil
+        Task {
+            try? await abs.markiere(id, folge: folge, gehoert: true)
+            if folge != nil, let naechste { await spiele(folge: naechste, podcast: id, podcastTitel: podcastTitel) }
+        }
+    }
+
+    private func naechsteBestimmen(podcast: String, folge: String) async {
+        guard let abs = hoerbuchClient, let alle = try? await abs.folgen(podcast), let stand = try? await abs.folgenFortschritt() else { return }
+        let kandidat = FolgenRichtung.naechste(nach: folge, in: alle, stand: stand, richtung: FolgenRichtung.fuer(podcast))
+        if folgeId == folge { naechsteFolge = kandidat }
     }
 
     /// Meldet die Hörposition an Audiobookshelf (alle 15 s, beim Pausieren und am Ende).
