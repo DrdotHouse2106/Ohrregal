@@ -44,6 +44,7 @@ public final class Player {
             Protokoll.geteilt.merke("tempo", art: "hoerbuch", position: zeit, wert: String(tempo), id: hoerbuchId, name: anzeige?.titel)
             player.defaultRate = tempo
             if spielt { player.rate = tempo }
+            zeitInfo()
         }
     }
 
@@ -65,6 +66,13 @@ public final class Player {
     @ObservationIgnored private var hoerbuchId: String?
     @ObservationIgnored private var folgeId: String?
     @ObservationIgnored private var sender: Sender?
+    @ObservationIgnored private var podcastName: String?
+
+    /// „7. Nov.“, mit Jahr, wenn es nicht dieses ist.
+    nonisolated static func datumText(_ d: Date) -> String {
+        let diesesJahr = Calendar.current.isDate(d, equalTo: .now, toGranularity: .year)
+        return d.formatted(diesesJahr ? .dateTime.day().month(.abbreviated) : .dateTime.day().month(.abbreviated).year())
+    }
     @ObservationIgnored private var gehoertSeitSync: Double = 0
     @ObservationIgnored private var beobachter: [Any] = []
 
@@ -154,7 +162,7 @@ public final class Player {
 
     /// Podcast-Folge an der zuletzt gehörten Stelle (nur vom Server, Fortschritt je Folge).
     public func spiele(folge: Folge, podcast: String, podcastTitel: String) async {
-        await starte(id: podcast, titel: folge.titel, autor: podcastTitel, folge: folge.id)
+        await starte(id: podcast, titel: folge.titel, autor: podcastTitel, folge: folge.id, datum: folge.datum)
     }
 
     /// Geladene Podcast-Folge (aus „Geladen“).
@@ -163,7 +171,7 @@ public final class Player {
         await starte(id: podcast, titel: h.titel, autor: h.autor, folge: h.id)
     }
 
-    private func starte(id: String, titel: String, autor: String, hoerbuch: Hoerbuch? = nil, folge: String? = nil) async {
+    private func starte(id: String, titel: String, autor: String, hoerbuch: Hoerbuch? = nil, folge: String? = nil, datum: Date? = nil) async {
         guard let abs = hoerbuchClient else { return }
         beendeHoerbuch()
         player.pause()
@@ -193,7 +201,10 @@ public final class Player {
             warteschlange = []
             kapitel = neu?.chapters ?? offline?.kapitel ?? []
             spuren = dateien
-            anzeige = Anzeige(titel: folge != nil ? titel : neu?.displayTitle ?? titel, untertitel: folge != nil ? autor : neu?.displayAuthor ?? autor,
+            podcastName = folge != nil ? autor : nil
+            // Bei Folgen das Datum dazu („Lee · 7. Nov.“), auch auf Sperrbildschirm und CarPlay.
+            let mitDatum = ([autor] + [datum.map(Self.datumText)].compactMap { $0 }).filter { !$0.isEmpty }.joined(separator: " · ")
+            anzeige = Anzeige(titel: folge != nil ? titel : neu?.displayTitle ?? titel, untertitel: folge != nil ? mitDatum : neu?.displayAuthor ?? autor,
                               cover: folge.flatMap { FolgenBild.vorhanden($0) } ?? abs.coverURL(id), dauer: neu?.duration ?? offline?.dauer ?? 0)
             // Eigenes Bild der Folge nachladen (steckt in der Datei).
             if let folge, FolgenBild.vorhanden(folge) == nil, let quelle = dateien.first?.url {
@@ -479,7 +490,7 @@ public final class Player {
     /// Ende eines Hörbuchs oder einer Folge: „ende“ ins Protokoll, als gehört markieren, bei Podcasts die nächste Folge.
     private func hoerbuchZuEnde() {
         guard let abs = hoerbuchClient, let id = hoerbuchId else { return }
-        let folge = folgeId, naechste = naechsteFolge, podcastTitel = anzeige?.untertitel ?? ""
+        let folge = folgeId, naechste = naechsteFolge, podcastTitel = podcastName ?? anzeige?.untertitel ?? ""
         Protokoll.geteilt.merke("ende", art: folge != nil ? "podcast" : "hoerbuch", position: dauer, dauer: dauer,
                                 id: folge ?? id, name: anzeige?.titel, urheber: podcastTitel)
         synchronisiere(schliessen: true)
@@ -562,6 +573,8 @@ public final class Player {
             MPMediaItemPropertyPlaybackDuration: a.dauer,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: zeit,
             MPNowPlayingInfoPropertyPlaybackRate: spielt ? Double(player.rate) : 0.0,
+            // Zeigt der Tempo-Knopf in CarPlay an („1,5×“); ohne ihn stand dort „0×“.
+            MPNowPlayingInfoPropertyDefaultPlaybackRate: Double(istHoerbuch ? tempo : 1),
             MPNowPlayingInfoPropertyIsLiveStream: istRadio,
         ]
         #if canImport(UIKit)
@@ -580,6 +593,7 @@ public final class Player {
         guard var info = MPNowPlayingInfoCenter.default().nowPlayingInfo else { return }
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = zeit
         info[MPNowPlayingInfoPropertyPlaybackRate] = spielt ? Double(player.rate) : 0.0
+        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = Double(istHoerbuch ? tempo : 1)
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 }
