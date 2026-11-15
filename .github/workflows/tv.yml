@@ -57,3 +57,10 @@ jobs:
             App für Fire TV und Android TV (z. B. waipu.tv-Stick), Version 0.1.${{ github.run_number }}.
             Installieren mit der App „Downloader“: https://github.com/DrdotHouse2106/Ohrregal/releases/download/tv/ohrregal-tv.apk
             Für Google Play (internes Testen): ohrregal-tv.aab. Für den Amazon Appstore (Live App Testing): ohrregal-tv.apk.
+
+      - name: Amazon-Entwurf aktualisieren
+        env:
+          AMAZON_CLIENT_ID: ${{ secrets.AMAZON_CLIENT_ID }}
+          AMAZON_CLIENT_SECRET: ${{ secrets.AMAZON_CLIENT_SECRET }}
+          AMAZON_APP_ID: amzn1.devportal.mobileapp.741cc5dcfc454e67ac346b0a4d55022d
+        run: bash .github/scripts/amazon-entwurf.sh TV/ohrregal-tv.apk
