@@ -15,6 +15,7 @@ struct StartView: View {
     @State private var fehler: String?
     @State private var geladen = false
     @State private var zugaengeOffen = false
+    @State private var fernseherOffen = false
     @State private var ueberMichOffen = false
     @State private var mitteilungen: String?
 
@@ -62,6 +63,7 @@ struct StartView: View {
         .toolbar {
             Menu {
                 Button("Zugänge", systemImage: "key") { zugaengeOffen = true }
+                Button("Fernseher einrichten", systemImage: "tv") { fernseherOffen = true }
                 if sitzung.dienstDa {
                     Button("Mitteilungen", systemImage: "bell") {
                         Task { mitteilungen = await Benachrichtigungen.einschaltenUndPruefen() }
@@ -82,6 +84,7 @@ struct StartView: View {
             Text(mitteilungen ?? "")
         }
         .sheet(isPresented: $zugaengeOffen) { Anmeldung() }
+        .sheet(isPresented: $fernseherOffen) { FernseherEinrichten() }
         .refreshable { await laden(neu: true) }
         .task { await laden() }
         .overlay {

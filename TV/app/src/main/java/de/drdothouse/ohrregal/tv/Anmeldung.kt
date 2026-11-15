@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.focusRequester
 import androidx.tv.material3.*
 import kotlinx.coroutines.launch
 
@@ -30,9 +31,10 @@ fun AnmeldungSeite(alt: Zugang, fertig: (Zugang) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 160.dp, vertical = 40.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Ohrregal", style = MaterialTheme.typography.displaySmall, color = Color.White)
         Text("Musik von Navidrome, Hörbücher und Podcasts von Audiobookshelf.", color = Farben.gedaempft)
-        Text("Am einfachsten vom iPhone aus: In Ohrregal den großen Player öffnen → Fernseher-Symbol → „Fernseher einrichten“ und diesen Code eingeben: ${Empfaenger.code}",
-            color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp))
-        Text("Oder hier eintragen:", color = Farben.gedaempft)
+        Text("Am einfachsten vom iPhone aus, ohne Tippen:", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp))
+        Text("1. iPhone und Fernseher im selben WLAN\n2. Ohrregal auf dem iPhone: Start → Profilsymbol → „Fernseher einrichten“\n3. Hier auf dem Fernseher mit „Übernehmen“ bestätigen",
+            color = Color.White, style = MaterialTheme.typography.titleMedium)
+        Text("Oder mit der Fernbedienung eintragen:", color = Farben.gedaempft, modifier = Modifier.padding(top = 16.dp))
         Feld("Navidrome-Adresse", z.server) { z = z.copy(server = it) }
         Feld("Benutzer", z.benutzer) { z = z.copy(benutzer = it) }
         Feld("Passwort", z.passwort, geheim = true) { z = z.copy(passwort = it) }
@@ -67,5 +69,22 @@ private fun Feld(name: String, wert: String, geheim: Boolean = false, aenderung:
             keyboardOptions = KeyboardOptions(keyboardType = if (geheim) KeyboardType.Password else KeyboardType.Uri),
             modifier = Modifier.fillMaxWidth().background(Farben.flaeche, RoundedCornerShape(8.dp))
                 .border(1.dp, Farben.gedaempft.copy(alpha = 0.4f), RoundedCornerShape(8.dp)).padding(12.dp))
+    }
+}
+
+/** Abfrage auf dem Fernseher, wenn das iPhone die Zugänge schickt; „Übernehmen“ hat den Fokus. */
+@Composable
+fun EinrichtenFrage(a: Empfaenger.Anfrage) {
+    val fokus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(a) { runCatching { fokus.requestFocus() } }
+    Column(Modifier.fillMaxSize().padding(horizontal = 160.dp, vertical = 80.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Ohrregal einrichten?", style = MaterialTheme.typography.displaySmall, color = Color.White)
+        Text("„${a.geraet}“ möchte Ohrregal auf diesem Fernseher einrichten:", color = Color.White, style = MaterialTheme.typography.titleMedium)
+        Text("Navidrome: ${a.zugang.server} (${a.zugang.benutzer})", color = Farben.gedaempft)
+        if (a.zugang.mitHoerbuechern) Text("Audiobookshelf: ${a.zugang.absServer} (${a.zugang.absBenutzer})", color = Farben.gedaempft)
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 16.dp)) {
+            Button(onClick = { a.antwort.complete(true) }, modifier = Modifier.focusRequester(fokus)) { Text("Übernehmen") }
+            Button(onClick = { a.antwort.complete(false) }) { Text("Ablehnen") }
+        }
     }
 }

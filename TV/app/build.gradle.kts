@@ -34,6 +34,13 @@ android {
             signingConfig = if (System.getenv("TV_KEYSTORE_DATEI") != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
+    // „direkt“: APK von GitHub mit eingebautem Updater. „store“: für Amazon und Google Play, ohne Updater
+    // (die Stores aktualisieren selbst; Selbst-Updates sind dort nicht erlaubt).
+    flavorDimensions += "vertrieb"
+    productFlavors {
+        create("direkt") { dimension = "vertrieb" }
+        create("store") { dimension = "vertrieb" }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

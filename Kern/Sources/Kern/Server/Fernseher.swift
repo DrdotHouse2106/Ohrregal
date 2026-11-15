@@ -32,11 +32,12 @@ public final class Fernseher {
     }
 
     /// Kleine HTTP-Anfrage direkt über TCP (ohne URLSession: kein ATS, keine Namensauflösung nötig).
-    public func sende(_ g: Geraet, _ pfad: String, json: [String: Any]) async throws {
+    /// `warten`: Sekunden bis zur Antwort (beim Einrichten wartet der Fernseher auf „Übernehmen“).
+    public func sende(_ g: Geraet, _ pfad: String, json: [String: Any], warten: Double = 10) async throws {
         let rumpf = try JSONSerialization.data(withJSONObject: json)
         var anfrage = Data("POST \(pfad) HTTP/1.1\r\nHost: ohrregal\r\nContent-Type: application/json\r\nContent-Length: \(rumpf.count)\r\nConnection: close\r\n\r\n".utf8)
         anfrage.append(rumpf)
-        let text = String(decoding: try await Self.austausch(g.endpunkt, anfrage), as: UTF8.self)
+        let text = String(decoding: try await Self.austausch(g.endpunkt, anfrage, warten: warten), as: UTF8.self)
         let code = Int(text.split(separator: " ").dropFirst().first ?? "") ?? 0
         guard (200..<300).contains(code) else {
             let inhalt = text.components(separatedBy: "\r\n\r\n").dropFirst().joined()
@@ -50,7 +51,7 @@ public final class Fernseher {
         var daten = Data()
     }
 
-    nonisolated static func austausch(_ ziel: NWEndpoint, _ daten: Data) async throws -> Data {
+    nonisolated static func austausch(_ ziel: NWEndpoint, _ daten: Data, warten: Double) async throws -> Data {
         let verbindung = NWConnection(to: ziel, using: .tcp)
         let schlange = DispatchQueue(label: "fernseher")
         let lauf = Lauf()
@@ -79,7 +80,7 @@ public final class Fernseher {
                 }
             }
             verbindung.start(queue: schlange)
-            schlange.asyncAfter(deadline: .now() + 10) { ende(.failure(ServerFehler("Der Fernseher antwortet nicht. Ist Ohrregal dort geöffnet?"))) }
+            schlange.asyncAfter(deadline: .now() + warten) { ende(.failure(ServerFehler("Der Fernseher antwortet nicht. Ist Ohrregal dort geöffnet?"))) }
         }
     }
 }

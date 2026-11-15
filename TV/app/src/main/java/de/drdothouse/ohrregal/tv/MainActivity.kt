@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Wiedergabe.verbinden(applicationContext)
         Empfaenger.starten(applicationContext)
+        Aktualisierung.pruefen(applicationContext)
         setContent {
             MaterialTheme(colorScheme = Thema) {
                 Surface(Modifier.fillMaxSize(), colors = SurfaceDefaults.colors(containerColor = Farben.hintergrund)) { App() }
@@ -42,6 +43,7 @@ fun App() {
     LaunchedEffect(Empfaenger.neuerZugang) {
         Empfaenger.neuerZugang?.let { neu -> neu.speichern(ctx); zugang = neu; Empfaenger.neuerZugang = null }
     }
+    Empfaenger.anfrage?.let { a -> EinrichtenFrage(a); return }
     if (!zugang.vollstaendig) {
         AnmeldungSeite(zugang) { neu -> neu.speichern(ctx); zugang = neu }
         return
@@ -79,6 +81,7 @@ fun Haupt(navidrome: Navidrome, abs: Audiobookshelf?, oeffne: (Seite) -> Unit, z
                     }
                 }
             }
+            Aktualisierung.Hinweis()
             Wiedergabe.anzeige?.let { a ->
                 Button(onClick = { oeffne(Seite.Player) }) { Text((if (Wiedergabe.spielt) "▶ " else "❚❚ ") + a.titel, maxLines = 1) }
             }

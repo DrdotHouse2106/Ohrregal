@@ -40,9 +40,13 @@ jobs:
           VERSION_CODE: ${{ github.run_number }}
           TV_KEYSTORE_PASSWORT: ${{ secrets.TV_KEYSTORE_PASSWORT }}
         run: |
-          gradle assembleRelease bundleRelease --no-daemon
-          cp app/build/outputs/apk/release/app-release.apk ohrregal-tv.apk
-          cp app/build/outputs/bundle/release/app-release.aab ohrregal-tv.aab
+          gradle assembleDirektRelease assembleStoreRelease bundleStoreRelease --no-daemon
+          # Direkt-APK (mit Updater) für Downloader/adb, Store-Fassungen ohne Updater für Amazon und Google Play.
+          cp app/build/outputs/apk/direkt/release/app-direkt-release.apk ohrregal-tv.apk
+          cp app/build/outputs/apk/store/release/app-store-release.apk ohrregal-tv-amazon.apk
+          cp app/build/outputs/bundle/storeRelease/app-store-release.aab ohrregal-tv.aab
+          # Die Direkt-APK prüft beim Start diese Datei und bietet neuere Versionen an.
+          echo '{"versionCode": ${{ github.run_number }}, "versionName": "0.1.${{ github.run_number }}", "apk": "https://github.com/DrdotHouse2106/Ohrregal/releases/download/tv/ohrregal-tv.apk"}' > version.json
 
       - name: Als Release „tv“ veröffentlichen
         uses: softprops/action-gh-release@v2
@@ -52,11 +56,14 @@ jobs:
           make_latest: false
           files: |
             TV/ohrregal-tv.apk
+            TV/ohrregal-tv-amazon.apk
             TV/ohrregal-tv.aab
+            TV/version.json
           body: |
             App für Fire TV und Android TV (z. B. waipu.tv-Stick), Version 0.1.${{ github.run_number }}.
             Installieren mit der App „Downloader“: https://github.com/DrdotHouse2106/Ohrregal/releases/download/tv/ohrregal-tv.apk
-            Für Google Play (internes Testen): ohrregal-tv.aab. Für den Amazon Appstore (Live App Testing): ohrregal-tv.apk.
+            ohrregal-tv.apk: direkt installieren (mit Update-Hinweis in der App).
+            Für die Stores ohne Updater: ohrregal-tv.aab (Google Play), ohrregal-tv-amazon.apk (Amazon Appstore).
 
       - name: Amazon-Entwurf aktualisieren
         env:

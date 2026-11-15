@@ -29,6 +29,12 @@ object Empfaenger {
     val code = (1000..9999).random().toString()
     /** Neue Zugänge vom iPhone (die Anmeldeseite übernimmt sie). */
     var neuerZugang by mutableStateOf<Zugang?>(null)
+    /** Anfrage vom iPhone, die auf dem Fernseher mit OK bestätigt werden muss. */
+    var anfrage by mutableStateOf<Anfrage?>(null)
+
+    class Anfrage(val geraet: String, val zugang: Zugang) {
+        val antwort = kotlinx.coroutines.CompletableDeferred<Boolean>()
+    }
     /** Wird gesetzt, wenn das iPhone eine Wiedergabe startet (dann den Player zeigen). */
     var vomIphone by mutableStateOf(0)
 
@@ -57,7 +63,7 @@ object Empfaenger {
     }
 
     private suspend fun bearbeite(v: Socket) {
-        v.soTimeout = 10000
+        v.soTimeout = 15000
         val ein = v.getInputStream().bufferedReader()
         val zeile = ein.readLine() ?: return
         val (methode, pfad) = zeile.split(" ").let { (it.getOrNull(0) ?: "") to (it.getOrNull(1) ?: "") }
@@ -71,12 +77,27 @@ object Empfaenger {
         var gelesen = 0
         while (gelesen < laenge) { val n = ein.read(puffer, gelesen, laenge - gelesen); if (n < 0) break; gelesen += n }
         val json = runCatching { JSONObject(String(puffer, 0, gelesen)) }.getOrDefault(JSONObject())
-        val (code, antwort) = withContext(Dispatchers.Main) { antworte(methode, pfad, json) }
+        val (code, antwort) = if ("$methode $pfad" == "POST /einrichten" && json.optString("code").isEmpty()) bestaetigen(json)
+            else withContext(Dispatchers.Main) { antworte(methode, pfad, json) }
         val text = antwort.toString().toByteArray()
         v.getOutputStream().apply {
             write("HTTP/1.1 $code OK\r\nContent-Type: application/json\r\nContent-Length: ${text.size}\r\nConnection: close\r\n\r\n".toByteArray())
             write(text); flush()
         }
+    }
+
+    /** Zugänge ohne Code: Der Fernseher fragt nach, das iPhone wartet bis zu 90 Sekunden auf „Übernehmen“. */
+    private suspend fun bestaetigen(j: JSONObject): Pair<Int, JSONObject> {
+        val a = Anfrage(j.optString("geraet", "iPhone"), Zugang(j.optString("server"), j.optString("benutzer"), j.optString("passwort"),
+            j.optString("absServer"), j.optString("absBenutzer"), j.optString("absPasswort")))
+        withContext(Dispatchers.Main) { anfrage?.antwort?.complete(false); anfrage = a }
+        val ja = kotlinx.coroutines.withTimeoutOrNull(90_000) { a.antwort.await() } ?: false
+        withContext(Dispatchers.Main) {
+            if (anfrage === a) anfrage = null
+            if (ja) neuerZugang = a.zugang
+        }
+        return if (ja) 200 to JSONObject().put("status", "ok")
+        else 403 to JSONObject().put("text", "Auf dem Fernseher nicht bestätigt.")
     }
 
     private fun antworte(methode: String, pfad: String, j: JSONObject): Pair<Int, JSONObject> {

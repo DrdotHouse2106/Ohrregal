@@ -11,12 +11,13 @@ Ohrregal für **Fire TV** und **Android TV** (z. B. waipu.tv-Stick): Musik aus N
    `https://github.com/DrdotHouse2106/Ohrregal/releases/download/tv/ohrregal-tv.apk`
 4. Installieren, öffnen, Navidrome und (optional) Audiobookshelf eintragen.
 
-**Update:** Dieselbe Adresse noch einmal in Downloader laden und installieren. Die Zugänge bleiben erhalten.
+**Updates:** Die direkt installierte App schaut beim Start nach einer neuen Version, lädt sie im Hintergrund und zeigt oben „Neue Version installieren“. Beim ersten Mal fragt Android, ob Ohrregal Apps installieren darf. Die Zugänge bleiben erhalten.
+Die Fassungen aus dem Amazon Appstore und von Google Play haben keinen eigenen Updater, dort aktualisiert der Store.
 
 ## Vom iPhone auf den Fernseher
 
 Ohrregal auf dem Fernseher öffnen. Auf dem iPhone im großen Player auf das **Fernseher-Symbol** tippen:
-- **Fernseher einrichten:** Code vom Fernseher eingeben (Anmeldeseite bzw. Einstellungen). Das iPhone überträgt die Zugänge im Heimnetz, Tippen mit der Fernbedienung entfällt.
+- **Fernseher einrichten** (auch unter Start → Profilsymbol): Das iPhone schickt die Zugänge im Heimnetz, auf dem Fernseher nur noch „Übernehmen“ drücken. Tippen mit der Fernbedienung entfällt.
 - **Auf dem Fernseher abspielen:** Der Fernseher spielt weiter, was auf dem iPhone lief (Musik ab derselben Stelle, Hörbuch und Podcast an der gespeicherten Stelle, Radio). Das iPhone hält an.
 
 Technik: Die TV-App meldet sich im Heimnetz als `_ohrregal._tcp` und nimmt kleine HTTP-Anfragen an (`/status`, `/spielen`, `/steuern`, `/einrichten` mit Code). Gestreamt wird direkt vom eigenen Server.
