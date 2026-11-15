@@ -25,7 +25,9 @@ etag() { api GET "$1" -o /dev/null; tr -d '\r' < "$H" | awk 'tolower($1)=="etag:
 
 # Offenes Edit nehmen oder neu anlegen
 EDIT="$(api GET /edits | jq -r '.id // empty' || true)"
-[ -n "$EDIT" ] || EDIT="$(api POST /edits | jq -r .id)"
+[ -n "$EDIT" ] || EDIT="$(api POST /edits | jq -r .id || true)"
+# Ohne Edit geht nichts: Die erste Version muss einmal von Hand in der Konsole eingereicht werden
+[ -n "$EDIT" ] || { echo "::warning::Kein Amazon-Entwurf möglich – erste Version zuerst von Hand in der Developer-Konsole einreichen"; exit 0; }
 echo "Edit $EDIT"
 
 # Die einzige APK ersetzen (Gerätezuordnung bleibt erhalten)
