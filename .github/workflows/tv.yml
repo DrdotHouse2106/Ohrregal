@@ -70,4 +70,5 @@ jobs:
           AMAZON_CLIENT_ID: ${{ secrets.AMAZON_CLIENT_ID }}
           AMAZON_CLIENT_SECRET: ${{ secrets.AMAZON_CLIENT_SECRET }}
           AMAZON_APP_ID: amzn1.devportal.mobileapp.741cc5dcfc454e67ac346b0a4d55022d
-        run: bash .github/scripts/amazon-entwurf.sh TV/ohrregal-tv.apk
+        # Store-Fassung ohne eigenen Updater (Amazon aktualisiert selbst).
+        run: bash .github/scripts/amazon-entwurf.sh TV/ohrregal-tv-amazon.apk
