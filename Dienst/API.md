@@ -246,6 +246,9 @@ Antworten: `201 {"status": "abonniert", "absItemId", "titel"}`, `200 {"status": 
 ### `GET /podcast`
 Liefert `{"abos": [{"absItemId", "titel", "feedUrl", "vonMir", "erstellt"}], "eingerichtet": true|false}`, alle Abos, die über den Dienst angelegt wurden, neueste zuerst. `eingerichtet` sagt der App, ob sie „Abonnieren“ anbieten kann.
 
+### `GET /podcast/favoriten` · `PUT /podcast/favoriten` (ab 2.9.0)
+`GET` liefert `{"favoriten": ["<absItemId>", …]}` in der Reihenfolge des Benutzers, ohne Favoriten `[]`. `PUT` mit `{"favoriten": [...]}` ersetzt die ganze Liste und liefert `204`. Höchstens 200 Einträge, doppelte werden entfernt, unbekannte IDs bleiben stehen. Gespeichert wird je Person: Ist eine Navidrome-Anmeldung über `/geraet` mit einem ABS-Konto verknüpft, gilt dieselbe Liste. Ungültiger Body ergibt `400 ungueltig`.
+
 ### `DELETE /podcast/{absItemId}`
 `204`. Erlaubt ist das nur für den Benutzer, der abonniert hat, oder für ABS-Admins, sonst kommt `403 nicht_erlaubt`. Für Podcasts, die nicht über den Dienst angelegt wurden, kommt `404`. **Abbestellen beendet nur das automatische Laden. Vorhandene Folgen und der Podcast bleiben in ABS**, gelöscht wird nichts. Ganz entfernen kann man einen Podcast nur in der ABS-Oberfläche.
 

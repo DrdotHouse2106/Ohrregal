@@ -37,7 +37,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.8.0"
+VERSION = "2.9.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -163,6 +163,8 @@ def db_anlegen():
           titel TEXT, kuenstler TEXT, cover TEXT, status TEXT NOT NULL, hinweis TEXT,
           lidarrId INTEGER, gesucht TEXT, erstellt TEXT NOT NULL, aktualisiert TEXT NOT NULL,
           zurueckgezogen INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS podcast_favorit (
+          benutzer TEXT PRIMARY KEY, liste TEXT NOT NULL, aktualisiert TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS podcast_abo (
           absItemId TEXT PRIMARY KEY, benutzer TEXT NOT NULL, feedUrl TEXT, titel TEXT, erstellt TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS radio_sender (
@@ -1951,6 +1953,33 @@ def podcast_abonnieren(benutzer, feed_url, erste_folgen=3):
     return 201, {"status": "abonniert", "absItemId": item_id, "titel": meta["title"]}
 
 
+def person(benutzer):
+    """Ein Schlüssel je Person: ABS-Konto, falls verknüpft, sonst die Anmeldung selbst."""
+    abs_ids = sorted(b for b in verknuepft(benutzer) if b.startswith("abs:"))
+    return abs_ids[0] if abs_ids else benutzer
+
+
+def favoriten_lesen(benutzer):
+    with db() as v:
+        z = v.execute("SELECT liste FROM podcast_favorit WHERE benutzer=?", (person(benutzer),)).fetchone()
+    return json.loads(z[0]) if z else []
+
+
+def favoriten_schreiben(benutzer, liste):
+    if not isinstance(liste, list) or len(liste) > 200:
+        return "favoriten muss eine Liste mit höchstens 200 Einträgen sein"
+    sauber = []
+    for x in liste:
+        x = str(x).strip()[:80]
+        if x and x not in sauber:
+            sauber.append(x)
+    with DB_SPERRE, db() as v:
+        v.execute("INSERT INTO podcast_favorit VALUES (?,?,?) ON CONFLICT(benutzer) DO UPDATE SET "
+                  "liste=excluded.liste, aktualisiert=excluded.aktualisiert",
+                  (person(benutzer), json.dumps(sauber), jetzt().isoformat()))
+    return None
+
+
 def podcast_abbestellen(benutzer, item_id):
     with db() as v:
         z = v.execute("SELECT * FROM podcast_abo WHERE absItemId=?", (item_id,)).fetchone()
@@ -2277,6 +2306,8 @@ class Schnittstelle(BaseHTTPRequestHandler):
                 except Exception as f:
                     log("Podcast-Suche fehlgeschlagen:", f)
                     return self.fehler(502, "suche_nicht_erreichbar", "Die Podcast-Suche ist gerade nicht erreichbar")
+            if teile == ["podcast", "favoriten"]:
+                return self.antworte(200, {"favoriten": favoriten_lesen(name)})
             if teile == ["podcast"]:
                 eigene = verknuepft(name)
                 with db() as v:
@@ -2584,6 +2615,22 @@ class Schnittstelle(BaseHTTPRequestHandler):
         with db() as v:
             r_ = v.execute("SELECT * FROM reihe WHERE id=?", (rid,)).fetchone()
             return self.antworte(201, reihe_json(v, r_))
+
+    def do_PUT(self):
+        teile, _ = self.pfad()
+        name = self.benutzer()
+        if not name:
+            return
+        if teile != ["podcast", "favoriten"]:
+            return self.fehler(404, "unbekannt", "Diesen Pfad gibt es nicht")
+        try:
+            d = self.koerper()
+        except (ValueError, json.JSONDecodeError):
+            return self.fehler(400, "ungueltig", "Kein gültiges JSON-Objekt")
+        fehler = favoriten_schreiben(name, d.get("favoriten"))
+        if fehler:
+            return self.fehler(400, "ungueltig", fehler)
+        return self.antworte(204)
 
     def do_PATCH(self):
         teile, _ = self.pfad()
