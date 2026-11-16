@@ -80,3 +80,7 @@ brew install xcodegen
 xcodegen          # erzeugt Ohrregal.xcodeproj
 open Ohrregal.xcodeproj
 ```
+
+## Lizenz
+
+[MIT](LICENSE) – frei nutzbar, auch kommerziell, ohne Gewähr.
