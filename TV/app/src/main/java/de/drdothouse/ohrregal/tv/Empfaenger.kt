@@ -30,14 +30,16 @@ object Empfaenger {
     /** IPv4-Adresse im Heimnetz (mit Port, falls nicht der feste), zum Eintippen auf dem iPhone. */
     val adresse: String
         get() {
-            val ip = runCatching {
-                java.net.NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }
-                    .flatMap { it.inetAddresses.toList() }.filterIsInstance<java.net.Inet4Address>()
-                    .firstOrNull { it.isSiteLocalAddress }?.hostAddress
-            }.getOrNull() ?: "?"
+            val ip = adresseIp() ?: "?"
             val port = server?.localPort ?: PORT
             return if (port == PORT) ip else "$ip:$port"
         }
+
+    private fun adresseIp(): String? = runCatching {
+        java.net.NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }
+            .flatMap { it.inetAddresses.toList() }.filterIsInstance<java.net.Inet4Address>()
+            .firstOrNull { it.isSiteLocalAddress }?.hostAddress
+    }.getOrNull()
 
     /** 4-stelliger Code zum Einrichten vom iPhone aus; wechselt bei jedem Start. */
     val code = (1000..9999).random().toString()
@@ -61,6 +63,9 @@ object Empfaenger {
             serviceName = "Ohrregal – " + (Build.MODEL ?: "Fernseher")
             serviceType = "_ohrregal._tcp"
             port = s.localPort
+            // Alle Sticks heißen im Netz „Android.local“; deshalb die eigene IPv4 mitschicken, das iPhone verbindet direkt.
+            adresseIp()?.let { setAttribute("ip", it) }
+            setAttribute("port", s.localPort.toString())
         }
         val nsd = c.getSystemService(Context.NSD_SERVICE) as NsdManager
         nsd.registerService(info, NsdManager.PROTOCOL_DNS_SD, object : NsdManager.RegistrationListener {

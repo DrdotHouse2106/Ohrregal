@@ -29,11 +29,16 @@ public final class Fernseher {
 
     public func suchen() {
         guard browser == nil else { return }
-        let b = NWBrowser(for: .bonjour(type: "_ohrregal._tcp", domain: nil), using: .tcp)
+        let b = NWBrowser(for: .bonjourWithTXTRecord(type: "_ohrregal._tcp", domain: nil), using: .tcp)
         b.browseResultsChangedHandler = { [weak self] ergebnisse, _ in
             let liste = ergebnisse.compactMap { r -> Geraet? in
-                if case let .service(name, _, _, _) = r.endpoint { return Geraet(name: name, endpunkt: r.endpoint) }
-                return nil
+                guard case let .service(name, _, _, _) = r.endpoint else { return nil }
+                // Alle Fernseh-Sticks heißen „Android.local“: direkt an die mitgeschickte IPv4 und den Port des Dienstes.
+                if case let .bonjour(txt) = r.metadata, let ip = txt["ip"], !ip.isEmpty,
+                   let port = txt["port"].flatMap(UInt16.init).flatMap(NWEndpoint.Port.init(rawValue:)) {
+                    return Geraet(name: name, endpunkt: .hostPort(host: NWEndpoint.Host(ip), port: port))
+                }
+                return Geraet(name: name, endpunkt: r.endpoint)
             }.sorted { $0.name < $1.name }
             Task { @MainActor in self?.geraete = liste }
         }
