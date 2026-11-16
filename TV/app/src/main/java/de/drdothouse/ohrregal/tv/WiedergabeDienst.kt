@@ -15,6 +15,8 @@ class WiedergabeDienst : MediaSessionService() {
         val player = ExoPlayer.Builder(this)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             .setHandleAudioBecomingNoisy(true)
+            // Hält Gerät und WLAN wach, solange etwas spielt (sonst schläft der Stick ein bzw. das WLAN geht aus).
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         sitzung = MediaSession.Builder(this, player).build()
     }

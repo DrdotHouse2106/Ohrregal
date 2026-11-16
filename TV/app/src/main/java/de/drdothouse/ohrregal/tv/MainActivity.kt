@@ -28,6 +28,13 @@ class MainActivity : ComponentActivity() {
         Empfaenger.starten(applicationContext)
         Aktualisierung.pruefen(applicationContext)
         setContent {
+            // Fire TV legt sich nach 20 Minuten ohne Tastendruck schlafen und beendet dabei die Wiedergabe.
+            // Solange etwas spielt, bleibt der Bildschirm deshalb an.
+            val spielt = Wiedergabe.spielt
+            androidx.compose.runtime.LaunchedEffect(spielt) {
+                if (spielt) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
             MaterialTheme(colorScheme = Thema) {
                 Surface(Modifier.fillMaxSize(), colors = SurfaceDefaults.colors(containerColor = Farben.hintergrund)) { App() }
             }
