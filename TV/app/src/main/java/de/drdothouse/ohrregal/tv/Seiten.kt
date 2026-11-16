@@ -137,14 +137,15 @@ fun TitelSeite(titel: String, untertitel: String, cover: String?, oeffne: (Seite
     val fokus = remember { FocusRequester() }
     // Mit der Fernbedienung gleich auf „Abspielen“.
     LaunchedEffect(Unit) { runCatching { fokus.requestFocus() } }
-    Row(Modifier.fillMaxSize().padding(48.dp)) {
-        Column(Modifier.width(320.dp)) {
-            Bild(cover, 300.dp)
+    // Fernseher sind oft nur 540 dp hoch: kleineres Cover, Spalte scrollt notfalls, damit die Knöpfe sichtbar bleiben.
+    Row(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 28.dp)) {
+        Column(Modifier.width(280.dp).verticalScroll(rememberScrollState())) {
+            Bild(cover, 220.dp)
             Spacer(Modifier.height(16.dp))
-            Text(titel, style = MaterialTheme.typography.headlineSmall, color = Color.White)
-            Text(untertitel, color = Farben.gedaempft)
+            Text(titel, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 3)
+            Text(untertitel, color = Farben.gedaempft, maxLines = 1)
             Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(onClick = { liste?.let { Wiedergabe.spiele(it); oeffne(Seite.Player) } }, modifier = Modifier.focusRequester(fokus)) { Text("▶ Abspielen") }
                 Button(onClick = { liste?.let { Wiedergabe.spiele(it.shuffled()); oeffne(Seite.Player) } }) { Text("Zufällig") }
             }
@@ -179,9 +180,9 @@ fun PodcastSeite(p: Eintrag, abs: Audiobookshelf?, oeffne: (Seite) -> Unit) {
     val (folgen, fehler) = laden(p.id) { abs?.folgen(p) ?: emptyList() }
     val fokus = remember { FocusRequester() }
     LaunchedEffect(folgen) { if (!folgen.isNullOrEmpty()) runCatching { fokus.requestFocus() } }
-    Row(Modifier.fillMaxSize().padding(48.dp)) {
-        Column(Modifier.width(320.dp)) {
-            Bild(abs?.cover(p.id, p.stand), 300.dp)
+    Row(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 28.dp)) {
+        Column(Modifier.width(280.dp).verticalScroll(rememberScrollState())) {
+            Bild(abs?.cover(p.id, p.stand), 220.dp)
             Spacer(Modifier.height(16.dp))
             Text(p.titel, style = MaterialTheme.typography.headlineSmall, color = Color.White)
             Text("${folgen?.size ?: 0} Folgen", color = Farben.gedaempft)
@@ -210,7 +211,7 @@ fun PlayerSeite() {
     LaunchedEffect(a != null) { if (a != null) runCatching { fokus.requestFocus() } }
     if (a == null) { Hinweis(Wiedergabe.fehler ?: "Lädt …"); return }
     Row(Modifier.fillMaxSize().padding(56.dp), verticalAlignment = Alignment.CenterVertically) {
-        Bild(a.cover, 380.dp)
+        Bild(a.cover, 320.dp)
         Spacer(Modifier.width(48.dp))
         Column(Modifier.weight(1f)) {
             Text(a.titel, style = MaterialTheme.typography.headlineMedium, color = Color.White, maxLines = 3)
@@ -234,7 +235,7 @@ fun PlayerSeite() {
             Wiedergabe.fehler?.let { Text(it, color = Farben.violett, modifier = Modifier.padding(top = 16.dp)) }
             if (Wiedergabe.kapitel.size > 1) {
                 Spacer(Modifier.height(24.dp))
-                LazyColumn(Modifier.height(220.dp)) {
+                LazyColumn(Modifier.height(150.dp)) {
                     items(Wiedergabe.kapitel) { k ->
                         ListItem(selected = Wiedergabe.aktuellesKapitel == k, onClick = { Wiedergabe.springe(k.start) },
                             headlineContent = { Text(k.titel, maxLines = 1) }, trailingContent = { Text(zeitText(k.start)) })
