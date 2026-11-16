@@ -35,3 +35,40 @@ data class Zugang(
         }
     }
 }
+
+/** Mehrere Personen pro Fernseher (wie bei Quallenkino): jede mit eigenen Zugängen, beim Start „Wer hört?“. */
+object Profile {
+    private fun json(z: Zugang) = org.json.JSONObject().put("server", z.server).put("benutzer", z.benutzer).put("passwort", z.passwort)
+        .put("absServer", z.absServer).put("absBenutzer", z.absBenutzer).put("absPasswort", z.absPasswort)
+
+    fun alle(c: Context): List<Zugang> {
+        val p = c.getSharedPreferences("zugang", Context.MODE_PRIVATE)
+        val text = p.getString("profile", null)
+        if (text == null) {
+            // Bisher gab es nur einen Zugang: als erste Person übernehmen.
+            val alt = Zugang.laden(c)
+            return (if (alt.vollstaendig) listOf(alt) else emptyList()).also { speichern(c, it) }
+        }
+        val a = org.json.JSONArray(text)
+        return (0 until a.length()).map { a.getJSONObject(it) }.map {
+            Zugang(it.optString("server"), it.optString("benutzer"), it.optString("passwort"),
+                it.optString("absServer"), it.optString("absBenutzer"), it.optString("absPasswort"))
+        }
+    }
+
+    private fun speichern(c: Context, liste: List<Zugang>) =
+        c.getSharedPreferences("zugang", Context.MODE_PRIVATE).edit().putString("profile", org.json.JSONArray(liste.map(::json)).toString()).apply()
+
+    /** Gleiche Person (Server + Benutzer) wird ersetzt, sonst angehängt. */
+    fun hinzufuegen(c: Context, z: Zugang): List<Zugang> {
+        val neu = alle(c).filterNot { it.server == z.server && it.benutzer == z.benutzer } + z
+        speichern(c, neu)
+        return neu
+    }
+
+    fun entfernen(c: Context, z: Zugang): List<Zugang> {
+        val neu = alle(c).filterNot { it.server == z.server && it.benutzer == z.benutzer }
+        speichern(c, neu)
+        return neu
+    }
+}

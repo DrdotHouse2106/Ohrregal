@@ -269,16 +269,21 @@ fun SchlafKnopf() {
 }
 
 @Composable
-fun EinstellungenTab(zugangGeaendert: (Zugang) -> Unit) {
+fun EinstellungenTab(personen: Personen) {
     val ctx = LocalContext.current
-    val z = Zugang.laden(ctx)
+    val z = personen.zugang
     Column(Modifier.padding(48.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Navidrome: ${z.server} (${z.benutzer})", color = Color.White)
         Text("Audiobookshelf: " + (if (z.mitHoerbuechern) "${z.absServer} (${z.absBenutzer})" else "nicht eingerichtet"), color = Color.White)
         Text("Version ${ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName}", color = Farben.gedaempft)
         Text("Einrichten vom iPhone: Ohrregal → Start → Profilsymbol → „Fernseher einrichten“, hier „Übernehmen“ drücken.", color = Farben.gedaempft)
         Text("Adresse dieses Fernsehers: ${Empfaenger.adresse}", color = Color.White)
-        Button(onClick = { zugangGeaendert(z.copy(passwort = "")) }) { Text("Zugänge ändern") }
+        Text("Angemeldet als: ${z.benutzer}", color = Color.White, style = MaterialTheme.typography.titleLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = personen.wechseln) { Text("Person wechseln") }
+            Button(onClick = personen.hinzufuegen) { Text("Person hinzufügen") }
+            Button(onClick = personen.entfernen) { Text("Diese Person entfernen") }
+        }
     }
 }
 

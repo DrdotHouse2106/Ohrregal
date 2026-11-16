@@ -132,3 +132,32 @@ fun QrCode(inhalt: String, groesse: androidx.compose.ui.unit.Dp) {
     }
     androidx.compose.foundation.Image(bild, contentDescription = "QR-Code zum Einrichten", modifier = Modifier.size(groesse))
 }
+
+/** „Wer hört?“ beim Start, wie bei Quallenkino: eine Kachel pro Person, dazu „Person hinzufügen“. */
+@Composable
+fun WerHoert(profile: List<Zugang>, waehlen: (Zugang) -> Unit, neu: () -> Unit) {
+    val fokus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { fokus.requestFocus() } }
+    Column(Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 48.dp), verticalArrangement = Arrangement.Center,
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+        Text("Wer hört?", style = MaterialTheme.typography.displaySmall, color = Color.White)
+        Spacer(Modifier.height(32.dp))
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+            items(profile.size + 1) { i ->
+                val p = profile.getOrNull(i)
+                Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                    Card(onClick = { if (p != null) waehlen(p) else neu() },
+                        modifier = Modifier.size(130.dp).then(if (i == 0) Modifier.focusRequester(fokus) else Modifier),
+                        shape = CardDefaults.shape(androidx.compose.foundation.shape.CircleShape),
+                        colors = CardDefaults.colors(containerColor = if (p != null) Farben.blau else Farben.flaeche)) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                            Text(p?.benutzer?.take(1)?.uppercase() ?: "+", style = MaterialTheme.typography.displayMedium, color = Color.White)
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(p?.benutzer ?: "Person hinzufügen", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                }
+            }
+        }
+    }
+}

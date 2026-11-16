@@ -125,6 +125,13 @@ object Wiedergabe {
 
     // MARK: Steuerung
 
+    /** Beim Personenwechsel: alles anhalten und Fortschritt melden. */
+    fun stopp() {
+        beendeSitzung()
+        controller?.run { stop(); clearMediaItems() }
+        anzeige = null; titel = emptyList(); spuren = emptyList(); kapitel = emptyList(); istHoerbuch = false; istRadio = false
+    }
+
     fun umschalten() = mitController { if (it.isPlaying) it.pause() else it.play() }
 
     /** Musik: nächster Titel. Hörbuch: 30 s vor. */

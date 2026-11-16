@@ -35,19 +35,36 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** Was man unter Einstellungen mit den Personen machen kann. */
+class Personen(val wechseln: () -> Unit, val hinzufuegen: () -> Unit, val entfernen: () -> Unit, val zugang: Zugang)
+
 @Composable
 fun App() {
     val ctx = LocalContext.current
-    var zugang by remember { mutableStateOf(Zugang.laden(ctx)) }
-    // Zugänge vom iPhone („Fernseher einrichten“) direkt übernehmen.
+    var profile by remember { mutableStateOf(Profile.alle(ctx)) }
+    // Nur eine Person: gleich los. Mehrere: „Wer hört?“.
+    var gewaehlt by remember { mutableStateOf(profile.singleOrNull()) }
+    var neuePerson by remember { mutableStateOf(false) }
+    // Zugänge vom iPhone (QR-Code bzw. „Fernseher einrichten“) als Person übernehmen und gleich wählen.
     LaunchedEffect(Empfaenger.neuerZugang) {
-        Empfaenger.neuerZugang?.let { neu -> neu.speichern(ctx); zugang = neu; Empfaenger.neuerZugang = null }
+        Empfaenger.neuerZugang?.let { neu -> profile = Profile.hinzufuegen(ctx, neu); gewaehlt = neu; neuePerson = false; Empfaenger.neuerZugang = null }
     }
     Empfaenger.anfrage?.let { a -> EinrichtenFrage(a); return }
-    if (!zugang.vollstaendig) {
-        AnmeldungSeite(zugang) { neu -> neu.speichern(ctx); zugang = neu }
+    if (profile.isEmpty() || neuePerson) {
+        BackHandler(profile.isNotEmpty()) { neuePerson = false }
+        AnmeldungSeite(Zugang()) { neu -> profile = Profile.hinzufuegen(ctx, neu); gewaehlt = neu; neuePerson = false }
         return
     }
+    val zugang = gewaehlt ?: run {
+        WerHoert(profile, waehlen = { gewaehlt = it }, neu = { neuePerson = true })
+        return
+    }
+    val personen = Personen(
+        wechseln = { Wiedergabe.stopp(); gewaehlt = null },
+        hinzufuegen = { neuePerson = true },
+        entfernen = { Wiedergabe.stopp(); profile = Profile.entfernen(ctx, zugang); gewaehlt = profile.singleOrNull() },
+        zugang = zugang,
+    )
     val navidrome = remember(zugang) { Navidrome(zugang.server, zugang.benutzer, zugang.passwort).also { Wiedergabe.navidrome = it } }
     val abs = remember(zugang) {
         (if (zugang.mitHoerbuechern) Audiobookshelf(zugang.absServer, zugang.absBenutzer, zugang.absPasswort) else null).also { Wiedergabe.abs = it }
@@ -59,7 +76,7 @@ fun App() {
     LaunchedEffect(Empfaenger.vomIphone) { if (Empfaenger.vomIphone > 0 && stapel.lastOrNull() != Seite.Player) stapel.add(Seite.Player) }
 
     when (val s = stapel.lastOrNull()) {
-        null -> Haupt(navidrome, abs, oeffne) { zugang = it; it.speichern(ctx) }
+        null -> Haupt(navidrome, abs, oeffne, personen)
         is Seite.AlbumS -> TitelSeite(s.album.name, s.album.kuenstler, navidrome.cover(s.album.cover, 600), oeffne) { navidrome.albumTitel(s.album.id) }
         is Seite.PlaylistS -> TitelSeite(s.playlist.name, "${s.playlist.anzahl} Titel", navidrome.cover(s.playlist.cover, 600), oeffne) { navidrome.playlist(s.playlist.id) }
         is Seite.KuenstlerS -> KuenstlerSeite(s.kuenstler, navidrome, oeffne)
@@ -69,7 +86,7 @@ fun App() {
 }
 
 @Composable
-fun Haupt(navidrome: Navidrome, abs: Audiobookshelf?, oeffne: (Seite) -> Unit, zugangGeaendert: (Zugang) -> Unit) {
+fun Haupt(navidrome: Navidrome, abs: Audiobookshelf?, oeffne: (Seite) -> Unit, personen: Personen) {
     val tabs = listOfNotNull("Start", "Musik", if (abs != null) "Hörbücher" else null, if (abs != null) "Podcasts" else null, "Radio", "Einstellungen")
     var tab by rememberSaveable { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
@@ -92,7 +109,7 @@ fun Haupt(navidrome: Navidrome, abs: Audiobookshelf?, oeffne: (Seite) -> Unit, z
             "Hörbücher" -> HoerbuecherTab(abs!!, oeffne)
             "Podcasts" -> PodcastsTab(abs!!, oeffne)
             "Radio" -> RadioTab(navidrome, oeffne)
-            else -> EinstellungenTab(zugangGeaendert)
+            else -> EinstellungenTab(personen)
         }
     }
 }
