@@ -12,11 +12,11 @@
     <application
         android:name=".OhrregalApp"
         android:label="Ohrregal"
-        android:icon="@drawable/symbol"
+        android:icon="@mipmap/symbol"
         android:banner="@drawable/banner"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Black.NoTitleBar">
-        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape">
+        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape" android:banner="@drawable/banner" android:icon="@mipmap/symbol">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
