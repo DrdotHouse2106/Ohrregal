@@ -17,6 +17,7 @@ Die Fassungen aus dem Amazon Appstore und von Google Play haben keinen eigenen U
 ## Vom iPhone auf den Fernseher
 
 Ohrregal auf dem Fernseher öffnen. Auf dem iPhone im großen Player auf das **Fernseher-Symbol** tippen:
+- **QR-Code:** Die Anmeldeseite auf dem Fernseher zeigt einen QR-Code. Mit der iPhone-Kamera scannen, „In Ohrregal öffnen“ – fertig, ohne Bestätigung am Fernseher.
 - **Fernseher einrichten** (auch unter Start → Profilsymbol): Das iPhone schickt die Zugänge im Heimnetz, auf dem Fernseher nur noch „Übernehmen“ drücken. Tippen mit der Fernbedienung entfällt.
 - **Auf dem Fernseher abspielen:** Der Fernseher spielt weiter, was auf dem iPhone lief (Musik ab derselben Stelle, Hörbuch und Podcast an der gespeicherten Stelle, Radio). Das iPhone hält an.
 

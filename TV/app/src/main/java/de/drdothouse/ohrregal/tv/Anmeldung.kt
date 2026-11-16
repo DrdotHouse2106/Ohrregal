@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.tv.material3.*
 import kotlinx.coroutines.launch
 
@@ -32,18 +33,19 @@ fun AnmeldungSeite(alt: Zugang, fertig: (Zugang) -> Unit) {
     var tippen by remember { mutableStateOf(false) }
     val bereich = rememberCoroutineScope()
     Row(Modifier.fillMaxSize().padding(horizontal = 64.dp, vertical = 40.dp), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Ohrregal einrichten", style = MaterialTheme.typography.displaySmall, color = Color.White)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Ohrregal einrichten", style = MaterialTheme.typography.headlineLarge, color = Color.White)
             Text("Am einfachsten vom iPhone aus:", color = Color.White, style = MaterialTheme.typography.headlineSmall)
             Text("1. iPhone im selben WLAN wie der Fernseher", color = Color.White, style = MaterialTheme.typography.titleLarge)
             Text("2. Ohrregal auf dem iPhone: Start → Profilsymbol → „Fernseher einrichten“", color = Color.White, style = MaterialTheme.typography.titleLarge)
             Text("3. Hier „Übernehmen“ drücken", color = Color.White, style = MaterialTheme.typography.titleLarge)
-            Text("Findet das iPhone den Fernseher nicht, dort diese Adresse eingeben:", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
-            Text(Empfaenger.adresse, color = Farben.blau, style = MaterialTheme.typography.displayMedium)
+            Text("Adresse für die Eingabe von Hand: ${Empfaenger.adresse}", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (!tippen) {
-                Text("Ohne iPhone:", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                Text("Noch einfacher: mit der iPhone-Kamera scannen", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                QrCode(Empfaenger.qrInhalt, 200.dp)
+                Text("Ohne iPhone:", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
                 Button(onClick = { tippen = true }) { Text("Mit der Fernbedienung eintragen") }
             } else {
                 Feld("Navidrome-Adresse", z.server) { z = z.copy(server = it) }
@@ -115,4 +117,18 @@ fun EinrichtenFrage(a: Empfaenger.Anfrage) {
             Button(onClick = { a.antwort.complete(false) }) { Text("Ablehnen") }
         }
     }
+}
+
+
+/** QR-Code (ZXing), weiß mit Rand, damit die Kamera ihn auch auf dunklem Bildschirm sicher erkennt. */
+@Composable
+fun QrCode(inhalt: String, groesse: androidx.compose.ui.unit.Dp) {
+    val bild = remember(inhalt) {
+        val m = com.google.zxing.qrcode.QRCodeWriter().encode(inhalt, com.google.zxing.BarcodeFormat.QR_CODE, 400, 400,
+            mapOf(com.google.zxing.EncodeHintType.MARGIN to 2))
+        val b = android.graphics.Bitmap.createBitmap(m.width, m.height, android.graphics.Bitmap.Config.RGB_565)
+        for (x in 0 until m.width) for (y in 0 until m.height) b.setPixel(x, y, if (m[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+        b.asImageBitmap()
+    }
+    androidx.compose.foundation.Image(bild, contentDescription = "QR-Code zum Einrichten", modifier = Modifier.size(groesse))
 }

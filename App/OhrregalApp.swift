@@ -10,6 +10,7 @@ struct OhrregalApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var sitzung = geteilteSitzung
     @State private var player = geteilterPlayer
+    @State private var linkMeldung: String?
 
     init() {
         URLCache.shared = URLCache(memoryCapacity: 64 << 20, diskCapacity: 512 << 20)
@@ -26,6 +27,13 @@ struct OhrregalApp: App {
             }
             .environment(sitzung)
             .environment(player)
+            // QR-Code vom Fernseher mit der Kamera gescannt.
+            .onOpenURL { url in Task { linkMeldung = await FernseherLink.einrichten(url) } }
+            .alert("Fernseher", isPresented: Binding(get: { linkMeldung != nil }, set: { if !$0 { linkMeldung = nil } })) {
+                Button("OK") {}
+            } message: {
+                Text(linkMeldung ?? "")
+            }
             .tint(Farben.blau)
             .preferredColorScheme(.dark)
         }

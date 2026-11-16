@@ -42,7 +42,11 @@ object Empfaenger {
     }.getOrNull()
 
     /** 4-stelliger Code zum Einrichten vom iPhone aus; wechselt bei jedem Start. */
-    val code = (1000..9999).random().toString()
+    val code = (1..10).map { "abcdefghjkmnpqrstuvwxyz23456789".random() }.joinToString("")
+
+    /** Inhalt des QR-Codes: Die iPhone-Kamera öffnet damit Ohrregal, das richtet genau diesen Fernseher ein (ohne „Übernehmen“). */
+    val qrInhalt: String
+        get() = "ohrregal://fernseher?ip=${adresseIp() ?: ""}&port=${server?.localPort ?: PORT}&code=$code"
     /** Neue Zugänge vom iPhone (die Anmeldeseite übernimmt sie). */
     var neuerZugang by mutableStateOf<Zugang?>(null)
     /** Anfrage vom iPhone, die auf dem Fernseher mit OK bestätigt werden muss. */

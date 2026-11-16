@@ -110,3 +110,26 @@ struct FernseherEinrichten: View {
         }
     }
 }
+
+/// QR-Code vom Fernseher („ohrregal://fernseher?ip=…&port=…&code=…“): richtet genau diesen Fernseher ein.
+/// Der Code steht nur auf dem Bildschirm, deshalb muss dort nichts mehr bestätigt werden.
+enum FernseherLink {
+    @MainActor static func einrichten(_ url: URL) async -> String? {
+        guard url.scheme == "ohrregal", url.host == "fernseher" else { return nil }
+        let werte = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        func wert(_ n: String) -> String? { werte.first { $0.name == n }?.value }
+        guard let ip = wert("ip"), !ip.isEmpty, let code = wert("code"),
+              let g = Fernseher.Geraet.manuell("\(ip):\(wert("port") ?? "47811")") else { return "Der QR-Code ist ungültig." }
+        let z = Zugaenge.geladen()
+        guard !z.server.isEmpty else { return "Bitte zuerst Ohrregal auf dem iPhone anmelden." }
+        do {
+            try await Fernseher.geteilt.sende(g, "/einrichten", json: ["code": code, "geraet": "iPhone (QR-Code)",
+                                                                  "server": z.server, "benutzer": z.benutzer, "passwort": z.passwort,
+                                                                  "absServer": z.absServer, "absBenutzer": z.absBenutzer, "absPasswort": z.absPasswort],
+                                              warten: 15)
+            return "Der Fernseher ist eingerichtet."
+        } catch {
+            return error.deutsch
+        }
+    }
+}
