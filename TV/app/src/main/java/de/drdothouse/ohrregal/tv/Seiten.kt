@@ -178,6 +178,8 @@ fun KuenstlerSeite(k: Kuenstler, n: Navidrome, oeffne: (Seite) -> Unit) {
 @Composable
 fun PodcastSeite(p: Eintrag, abs: Audiobookshelf?, oeffne: (Seite) -> Unit) {
     val (folgen, fehler) = laden(p.id) { abs?.folgen(p) ?: emptyList() }
+    // Stand je Folge (gehört / angefangen), wie auf dem iPhone.
+    val (stand, _) = laden(p.id + "stand") { runCatching { abs?.folgenStand() }.getOrNull() ?: emptyMap() }
     val fokus = remember { FocusRequester() }
     LaunchedEffect(folgen) { if (!folgen.isNullOrEmpty()) runCatching { fokus.requestFocus() } }
     Row(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 28.dp)) {
@@ -196,8 +198,16 @@ fun PodcastSeite(p: Eintrag, abs: Audiobookshelf?, oeffne: (Seite) -> Unit) {
                 itemsIndexed(folgen) { i, f ->
                     ListItem(selected = false, onClick = { Wiedergabe.spiele(f.itemId, f.id); oeffne(Seite.Player) },
                         modifier = if (i == 0) Modifier.focusRequester(fokus) else Modifier,
-                        headlineContent = { Text(f.titel, maxLines = 2) },
-                        supportingContent = { Text(listOf(datumText(f.datum), if (f.dauer > 0) "${(f.dauer / 60).toInt()} Min." else "").filter { it.isNotEmpty() }.joinToString(" · ")) })
+                        headlineContent = { Text(f.titel, maxLines = 2, color = if ((stand?.get(f.id) ?: 0.0) >= 1) Farben.gedaempft else Color.Unspecified) },
+                        supportingContent = { Text(listOf(datumText(f.datum), if (f.dauer > 0) "${(f.dauer / 60).toInt()} Min." else "").filter { it.isNotEmpty() }.joinToString(" · ")) },
+                        trailingContent = {
+                            val anteil = stand?.get(f.id) ?: 0.0
+                            Text(when {
+                                anteil >= 1 -> "✓ gehört"
+                                anteil > 0 -> "${(anteil * 100).toInt()} %"
+                                else -> "● neu"
+                            }, color = if (anteil >= 1) Farben.gedaempft else Farben.blau)
+                        })
                 }
             }
         }
