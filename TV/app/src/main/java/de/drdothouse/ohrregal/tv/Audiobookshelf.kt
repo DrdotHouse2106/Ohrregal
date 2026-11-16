@@ -48,7 +48,16 @@ class Audiobookshelf(val server: String, private val benutzer: String, private v
         return JSONObject(hole("/api/libraries/$bibliothek/items?limit=$anzahl&page=0&minified=1$sortierung")).liste("results").map(::eintrag)
     }
 
-    suspend fun angefangen() = JSONObject(hole("/api/me/items-in-progress")).liste("libraryItems").map(::eintrag).filter { !it.podcast }
+    /** Wie auf dem iPhone: ohne Bücher, die in Audiobookshelf aus „Weiterhören“ entfernt oder fertig gehört sind. */
+    suspend fun angefangen(): List<Eintrag> {
+        val verborgen = runCatching {
+            JSONObject(hole("/api/me")).liste("mediaProgress")
+                .filter { it.text("episodeId") == null && (it.optBoolean("hideFromContinueListening") || it.optBoolean("isFinished")) }
+                .map { it.getString("libraryItemId") }.toSet()
+        }.getOrDefault(emptySet())
+        return JSONObject(hole("/api/me/items-in-progress")).liste("libraryItems").map(::eintrag)
+            .filter { !it.podcast && it.id !in verborgen }
+    }
 
     private fun folge(j: JSONObject, itemId: String, podcast: String) = Folge(j.getString("id"), itemId, j.optString("title"), podcast,
         if (j.isNull("publishedAt")) j.optLong("addedAt") else j.optLong("publishedAt"),
