@@ -25,6 +25,20 @@ object Empfaenger {
     private val bereich = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var server: ServerSocket? = null
 
+    const val PORT = 47811
+
+    /** IPv4-Adresse im Heimnetz (mit Port, falls nicht der feste), zum Eintippen auf dem iPhone. */
+    val adresse: String
+        get() {
+            val ip = runCatching {
+                java.net.NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }
+                    .flatMap { it.inetAddresses.toList() }.filterIsInstance<java.net.Inet4Address>()
+                    .firstOrNull { it.isSiteLocalAddress }?.hostAddress
+            }.getOrNull() ?: "?"
+            val port = server?.localPort ?: PORT
+            return if (port == PORT) ip else "$ip:$port"
+        }
+
     /** 4-stelliger Code zum Einrichten vom iPhone aus; wechselt bei jedem Start. */
     val code = (1000..9999).random().toString()
     /** Neue Zugänge vom iPhone (die Anmeldeseite übernimmt sie). */
@@ -40,7 +54,8 @@ object Empfaenger {
 
     fun starten(c: Context) {
         if (server != null) return
-        val s = ServerSocket(0)
+        // Fester Port, damit man die Adresse auf dem iPhone notfalls von Hand eingeben kann.
+        val s = runCatching { ServerSocket(PORT) }.getOrElse { ServerSocket(0) }
         server = s
         val info = NsdServiceInfo().apply {
             serviceName = "Ohrregal – " + (Build.MODEL ?: "Fernseher")

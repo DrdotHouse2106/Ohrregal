@@ -12,6 +12,16 @@ public final class Fernseher {
         public let name: String
         let endpunkt: NWEndpoint
         public var id: String { name }
+
+        /// Von Hand eingegebene Adresse („192.168.1.20“ oder „192.168.1.20:47811“), falls die Suche nichts findet.
+        public static func manuell(_ text: String) -> Geraet? {
+            let t = text.trimmingCharacters(in: .whitespaces)
+            let teile = t.split(separator: ":")
+            guard let host = teile.first, !host.isEmpty else { return nil }
+            let port = teile.count > 1 ? UInt16(teile[1]) : 47811
+            guard let port, let p = NWEndpoint.Port(rawValue: port) else { return nil }
+            return Geraet(name: t, endpunkt: .hostPort(host: NWEndpoint.Host(String(host)), port: p))
+        }
     }
 
     public private(set) var geraete: [Geraet] = []

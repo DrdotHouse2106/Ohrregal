@@ -45,12 +45,20 @@ struct FernseherEinrichten: View {
     @Environment(\.dismiss) private var schliessen
     @State private var laeuft: String?
     @State private var meldung: String?
+    @State private var adresse = ""
     private var tv: Fernseher { .geteilt }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
+                    Text("Ohrregal auf dem Fernseher öffnen. iPhone und Fernseher müssen im selben WLAN sein. Dann den Fernseher hier antippen und auf dem Fernseher „Übernehmen“ drücken.")
+                        .font(.callout)
+                }
+                Section("Gefundene Fernseher") {
+                    if tv.geraete.isEmpty {
+                        HStack { ProgressView(); Text("Suche …").foregroundStyle(.secondary) }
+                    }
                     ForEach(tv.geraete) { g in
                         Button { Task { await einrichten(g) } } label: {
                             HStack {
@@ -61,14 +69,24 @@ struct FernseherEinrichten: View {
                         }
                         .disabled(laeuft != nil)
                     }
+                }
+                Section {
+                    TextField("z. B. 192.168.1.20", text: $adresse)
+                        .keyboardType(.numbersAndPunctuation).autocorrectionDisabled().textInputAutocapitalization(.never)
+                    Button("Mit dieser Adresse verbinden") {
+                        if let g = Fernseher.Geraet.manuell(adresse) { Task { await einrichten(g) } } else { meldung = "Die Adresse ist ungültig." }
+                    }
+                    .disabled(adresse.isEmpty || laeuft != nil)
+                } header: {
+                    Text("Fernseher nicht dabei?")
                 } footer: {
-                    Text(laeuft != nil
-                         ? "Jetzt auf dem Fernseher „Übernehmen“ drücken."
-                         : "Ohrregal auf dem Fernseher öffnen. iPhone und Fernseher müssen im selben WLAN sein. Deine Zugänge zu Navidrome und Audiobookshelf gehen nur im Heimnetz an den Fernseher.")
+                    Text("Die Adresse steht auf dem Fernseher auf der Anmeldeseite bzw. unter Einstellungen.")
+                }
+                if laeuft != nil {
+                    Text("Jetzt auf dem Fernseher „Übernehmen“ drücken.").font(.headline)
                 }
                 if let meldung { Text(meldung) }
             }
-            .overlay { if tv.geraete.isEmpty { ContentUnavailableView("Suche Fernseher …", systemImage: "tv", description: Text("Ohrregal auf dem Fernseher öffnen.")) } }
             .navigationTitle("Fernseher einrichten")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Fertig") { schliessen() } }
@@ -79,6 +97,7 @@ struct FernseherEinrichten: View {
     private func einrichten(_ g: Fernseher.Geraet) async {
         let z = Zugaenge.geladen()
         laeuft = g.id
+        meldung = nil
         defer { laeuft = nil }
         do {
             try await tv.sende(g, "/einrichten", json: ["geraet": "Ohrregal auf dem iPhone (\(z.benutzer))",

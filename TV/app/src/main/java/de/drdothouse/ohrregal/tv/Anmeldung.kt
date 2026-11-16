@@ -31,9 +31,11 @@ fun AnmeldungSeite(alt: Zugang, fertig: (Zugang) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 160.dp, vertical = 40.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Ohrregal", style = MaterialTheme.typography.displaySmall, color = Color.White)
         Text("Musik von Navidrome, Hörbücher und Podcasts von Audiobookshelf.", color = Farben.gedaempft)
-        Text("Am einfachsten vom iPhone aus, ohne Tippen:", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp))
+        Text("Am einfachsten vom iPhone aus, ohne Tippen:", color = Color.White, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 8.dp))
         Text("1. iPhone und Fernseher im selben WLAN\n2. Ohrregal auf dem iPhone: Start → Profilsymbol → „Fernseher einrichten“\n3. Hier auf dem Fernseher mit „Übernehmen“ bestätigen",
-            color = Color.White, style = MaterialTheme.typography.titleMedium)
+            color = Color.White, style = MaterialTheme.typography.titleLarge)
+        Text("Findet das iPhone den Fernseher nicht, dort diese Adresse eingeben:", color = Farben.gedaempft, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+        Text(Empfaenger.adresse, color = Farben.blau, style = MaterialTheme.typography.displaySmall)
         Text("Oder mit der Fernbedienung eintragen:", color = Farben.gedaempft, modifier = Modifier.padding(top = 16.dp))
         Feld("Navidrome-Adresse", z.server) { z = z.copy(server = it) }
         Feld("Benutzer", z.benutzer) { z = z.copy(benutzer = it) }

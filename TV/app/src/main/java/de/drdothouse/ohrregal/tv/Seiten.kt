@@ -277,6 +277,7 @@ fun EinstellungenTab(zugangGeaendert: (Zugang) -> Unit) {
         Text("Audiobookshelf: " + (if (z.mitHoerbuechern) "${z.absServer} (${z.absBenutzer})" else "nicht eingerichtet"), color = Color.White)
         Text("Version ${ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName}", color = Farben.gedaempft)
         Text("Einrichten vom iPhone: Ohrregal → Start → Profilsymbol → „Fernseher einrichten“, hier „Übernehmen“ drücken.", color = Farben.gedaempft)
+        Text("Adresse dieses Fernsehers: ${Empfaenger.adresse}", color = Color.White)
         Button(onClick = { zugangGeaendert(z.copy(passwort = "")) }) { Text("Zugänge ändern") }
     }
 }
