@@ -22,6 +22,16 @@ sealed interface Seite {
 }
 
 class MainActivity : ComponentActivity() {
+    /** Jede Taste merkt sich der Bildschirmschoner; läuft er, beendet die Taste nur ihn. */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        val warAktiv = Schoner.aktiv
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) Schoner.taste()
+        val medientaste = event.keyCode in listOf(android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, android.view.KeyEvent.KEYCODE_MEDIA_PLAY,
+            android.view.KeyEvent.KEYCODE_MEDIA_PAUSE, android.view.KeyEvent.KEYCODE_MEDIA_NEXT, android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+        if (warAktiv && !medientaste) return true
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Wiedergabe.verbinden(applicationContext)
@@ -36,7 +46,11 @@ class MainActivity : ComponentActivity() {
                 else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
             MaterialTheme(colorScheme = Thema) {
-                Surface(Modifier.fillMaxSize(), colors = SurfaceDefaults.colors(containerColor = Farben.hintergrund)) { App() }
+                Surface(Modifier.fillMaxSize(), colors = SurfaceDefaults.colors(containerColor = Farben.hintergrund)) {
+                    App()
+                    SchonerUeberwachung()
+                    if (Schoner.aktiv) BildschirmSchoner()
+                }
             }
         }
     }
