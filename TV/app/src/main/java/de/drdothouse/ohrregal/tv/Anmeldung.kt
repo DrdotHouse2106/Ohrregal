@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.tv.material3.*
 import kotlinx.coroutines.launch
 
@@ -53,6 +54,10 @@ fun AnmeldungSeite(alt: Zugang, fertig: (Zugang) -> Unit) {
                 Feld("Benutzer", z.absBenutzer) { z = z.copy(absBenutzer = it) }
                 Feld("Passwort", z.absPasswort, geheim = true) { z = z.copy(absPasswort = it) }
                 Button(enabled = !laeuft, onClick = {
+                    if (z.server.isBlank() || z.benutzer.isBlank() || z.passwort.isBlank()) {
+                        meldung = "Bitte Navidrome-Adresse, Benutzer und Passwort eingeben."
+                        return@Button
+                    }
                     laeuft = true; meldung = null
                     bereich.launch {
                         try {
@@ -61,26 +66,37 @@ fun AnmeldungSeite(alt: Zugang, fertig: (Zugang) -> Unit) {
                             if (neu.mitHoerbuechern) Audiobookshelf(neu.absServer, neu.absBenutzer, neu.absPasswort).anmelden()
                             fertig(neu)
                         } catch (e: Exception) {
-                            meldung = e.message ?: "Verbindung fehlgeschlagen."
+                            meldung = fehlerText(e)
                         } finally { laeuft = false }
                     }
                 }) { Text(if (laeuft) "Verbinde …" else "Verbinden und speichern") }
             }
-            meldung?.let { Text(it, color = Farben.violett, style = MaterialTheme.typography.titleMedium) }
+            meldung?.let { Text(it, color = Color(0xFFFFB4A8), style = MaterialTheme.typography.titleLarge) }
         }
     }
 }
 
+/** Verständliche Meldung statt technischer Fehler (nie mit Adresse/Token). */
+fun fehlerText(e: Exception): String = when (e) {
+    is java.net.MalformedURLException -> "Die Adresse ist ungültig."
+    is java.net.UnknownHostException -> "Server nicht gefunden. Adresse prüfen."
+    is java.net.ConnectException, is java.net.SocketTimeoutException -> "Server nicht erreichbar."
+    is javax.net.ssl.SSLException -> "Sichere Verbindung fehlgeschlagen (Zertifikat)."
+    else -> e.message?.takeIf { "?" !in it && "://" !in it } ?: "Verbindung fehlgeschlagen."
+}
+
 @Composable
 private fun Feld(name: String, wert: String, geheim: Boolean = false, aenderung: (String) -> Unit) {
+    var fokus by remember { mutableStateOf(false) }
     Column {
         Text(name, color = Color.White, style = MaterialTheme.typography.bodyMedium)
         BasicTextField(value = wert, onValueChange = aenderung, singleLine = true,
             textStyle = TextStyle(color = Color.White, fontSize = 22.sp), cursorBrush = SolidColor(Farben.blau),
             visualTransformation = if (geheim) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = if (geheim) KeyboardType.Password else KeyboardType.Uri),
-            modifier = Modifier.fillMaxWidth().background(Farben.flaeche, RoundedCornerShape(8.dp))
-                .border(1.dp, Farben.gedaempft.copy(alpha = 0.4f), RoundedCornerShape(8.dp)).padding(12.dp))
+            modifier = Modifier.fillMaxWidth().onFocusChanged { fokus = it.isFocused }
+                .background(Color(0xFF262D3A), RoundedCornerShape(8.dp))
+                .border(if (fokus) 3.dp else 1.dp, if (fokus) Farben.blau else Color(0xFF5A6478), RoundedCornerShape(8.dp)).padding(14.dp))
     }
 }
 
