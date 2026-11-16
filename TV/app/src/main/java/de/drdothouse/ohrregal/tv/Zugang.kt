@@ -7,6 +7,9 @@ data class Zugang(
     val server: String = "", val benutzer: String = "", val passwort: String = "",
     val absServer: String = "", val absBenutzer: String = "", val absPasswort: String = "",
 ) {
+    /** Adressen mit https:// (das iPhone schickt sie so, wie sie eingetippt wurden), Namen ohne Leerzeichen. */
+    fun bereinigt() = copy(server = adresse(server), benutzer = benutzer.trim(), absServer = adresse(absServer), absBenutzer = absBenutzer.trim())
+
     val vollstaendig get() = server.isNotBlank() && benutzer.isNotBlank() && passwort.isNotBlank()
     val mitHoerbuechern get() = absServer.isNotBlank() && absBenutzer.isNotBlank() && absPasswort.isNotBlank()
 
@@ -52,7 +55,7 @@ object Profile {
         val a = org.json.JSONArray(text)
         return (0 until a.length()).map { a.getJSONObject(it) }.map {
             Zugang(it.optString("server"), it.optString("benutzer"), it.optString("passwort"),
-                it.optString("absServer"), it.optString("absBenutzer"), it.optString("absPasswort"))
+                it.optString("absServer"), it.optString("absBenutzer"), it.optString("absPasswort")).bereinigt()
         }
     }
 
@@ -60,7 +63,8 @@ object Profile {
         c.getSharedPreferences("zugang", Context.MODE_PRIVATE).edit().putString("profile", org.json.JSONArray(liste.map(::json)).toString()).apply()
 
     /** Gleiche Person (Server + Benutzer) wird ersetzt, sonst angehängt. */
-    fun hinzufuegen(c: Context, z: Zugang): List<Zugang> {
+    fun hinzufuegen(c: Context, zugang: Zugang): List<Zugang> {
+        val z = zugang.bereinigt()
         val neu = alle(c).filterNot { it.server == z.server && it.benutzer == z.benutzer } + z
         speichern(c, neu)
         return neu

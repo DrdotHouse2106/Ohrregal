@@ -102,7 +102,7 @@ struct FernseherEinrichten: View {
         do {
             try await tv.sende(g, "/einrichten", json: ["geraet": "Ohrregal auf dem iPhone (\(z.benutzer))",
                                                        "server": z.server, "benutzer": z.benutzer, "passwort": z.passwort,
-                                                       "absServer": z.absServer, "absBenutzer": z.absBenutzer, "absPasswort": z.absPasswort],
+                                                       "absServer": Adresse.aufbereiten(z.absServer)?.absoluteString ?? z.absServer, "absBenutzer": z.absBenutzer, "absPasswort": z.absPasswort],
                                warten: 95)
             meldung = "„\(g.name)“ ist eingerichtet."
         } catch {
@@ -125,7 +125,7 @@ enum FernseherLink {
         do {
             try await Fernseher.geteilt.sende(g, "/einrichten", json: ["code": code, "geraet": "iPhone (QR-Code)",
                                                                   "server": z.server, "benutzer": z.benutzer, "passwort": z.passwort,
-                                                                  "absServer": z.absServer, "absBenutzer": z.absBenutzer, "absPasswort": z.absPasswort],
+                                                                  "absServer": Adresse.aufbereiten(z.absServer)?.absoluteString ?? z.absServer, "absBenutzer": z.absBenutzer, "absPasswort": z.absPasswort],
                                               warten: 15)
             return "Der Fernseher ist eingerichtet."
         } catch {

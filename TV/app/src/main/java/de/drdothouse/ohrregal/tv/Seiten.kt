@@ -28,7 +28,7 @@ fun <T> laden(schluessel: Any?, block: suspend () -> T): Pair<T?, String?> {
     var wert by remember(schluessel) { mutableStateOf<T?>(null) }
     var fehler by remember(schluessel) { mutableStateOf<String?>(null) }
     LaunchedEffect(schluessel) {
-        try { wert = block() } catch (e: Exception) { fehler = e.message ?: "Fehler beim Laden" }
+        try { wert = block() } catch (e: Exception) { fehler = fehlerText(e) }
     }
     return wert to fehler
 }
