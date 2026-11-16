@@ -45,6 +45,9 @@ object Wiedergabe {
     private var spuren: List<Spur> = emptyList()
     private var sitzung: String? = null
     private var itemId: String? = null
+    private var sender: Sender? = null
+    /** In einer Gruppe als Mitspieler: kein Fortschritt an Audiobookshelf, kein Weiterschalten (das macht der Leiter). */
+    var nurMitspielen = false
     private var folgeId: String? = null
     var abs: Audiobookshelf? = null
     var navidrome: Navidrome? = null
@@ -95,6 +98,7 @@ object Wiedergabe {
 
     fun spiele(sender: Sender) {
         beendeSitzung()
+        this.sender = sender
         titel = emptyList(); spuren = emptyList(); kapitel = emptyList(); istHoerbuch = false; istRadio = true
         anzeige = Anzeige(sender.name, "Internetradio", null); dauer = 0.0
         mitController { c -> c.setMediaItem(eintrag(sender.url, sender.name, "Internetradio", null)); c.prepare(); c.play() }
@@ -132,6 +136,8 @@ object Wiedergabe {
         anzeige = null; titel = emptyList(); spuren = emptyList(); kapitel = emptyList(); istHoerbuch = false; istRadio = false
     }
 
+    fun pause() = mitController { it.pause() }
+
     fun umschalten() = mitController { if (it.isPlaying) it.pause() else it.play() }
 
     /** Musik: nächster Titel. Hörbuch: 30 s vor. */
@@ -164,6 +170,63 @@ object Wiedergabe {
         else -> "Ende des Titels"
     }
 
+    // MARK: Gruppe (mehrere Fernseher gleichzeitig)
+
+    private fun schluessel(): String = when {
+        istRadio -> "radio:" + (sender?.url ?: "")
+        istHoerbuch -> "hoerbuch:$itemId/${folgeId ?: ""}"
+        else -> "musik:" + titel.joinToString(",") { it.id }.hashCode()
+    }
+
+    /** Was gerade läuft, mit genauer Stelle jetzt (für Mitspieler). */
+    fun stand(): org.json.JSONObject? {
+        val c = controller ?: return null
+        if (anzeige == null || c.mediaItemCount == 0) return null
+        val i = c.currentMediaItemIndex
+        val pos = (if (istHoerbuch) spuren.getOrNull(i)?.start ?: 0.0 else 0.0) + c.currentPosition / 1000.0
+        val j = org.json.JSONObject().put("schluessel", schluessel()).put("zeit", System.currentTimeMillis())
+            .put("position", pos).put("spielt", c.isPlaying).put("tempo", c.playbackParameters.speed.toDouble()).put("index", i)
+        when {
+            istRadio -> j.put("art", "radio").put("name", sender?.name).put("url", sender?.url)
+            istHoerbuch -> j.put("art", "hoerbuch").put("id", itemId).put("folge", folgeId)
+            else -> j.put("art", "musik").put("titel", org.json.JSONArray(titel.map {
+                org.json.JSONObject().put("id", it.id).put("titel", it.titel).put("kuenstler", it.kuenstler).put("album", it.album).put("cover", it.cover).put("dauer", it.dauer)
+            }))
+        }
+        return j
+    }
+
+    /**
+     * Mitspieler: dasselbe laden und auf die Stelle des Leiters ziehen. `versatz` = Uhr des Leiters minus eigene Uhr.
+     * Kleine Abweichungen gleicht leicht geändertes Tempo aus (unhörbar), große ein Sprung.
+     */
+    fun angleichen(s: org.json.JSONObject, versatz: Long, verzoegerungMs: Long) {
+        val c = controller ?: return
+        val leiterTempo = s.optDouble("tempo", 1.0)
+        val soll = s.getDouble("position") + (if (s.optBoolean("spielt")) (System.currentTimeMillis() + versatz - s.getLong("zeit")) / 1000.0 * leiterTempo else 0.0) - verzoegerungMs / 1000.0
+        if (s.optString("schluessel") != schluessel() || anzeige == null) {
+            when (s.optString("art")) {
+                "musik" -> spiele(s.liste("titel").map { Titel(it.getString("id"), it.optString("titel"), it.optString("kuenstler"), it.optString("album"), it.text("cover"), it.optLong("dauer")) },
+                    s.optInt("index"), (soll * 1000).toLong().coerceAtLeast(0))
+                "hoerbuch" -> spiele(s.getString("id"), s.text("folge"))
+                "radio" -> spiele(Sender("", s.optString("name"), s.optString("url")))
+            }
+            return
+        }
+        if (!s.optBoolean("spielt")) { if (c.isPlaying) c.pause(); return }
+        if (!c.isPlaying) c.play()
+        if (istRadio) return
+        val i = c.currentMediaItemIndex
+        if (!istHoerbuch && i != s.optInt("index")) { c.seekTo(s.optInt("index"), (soll * 1000).toLong().coerceAtLeast(0)); return }
+        val ist = (if (istHoerbuch) spuren.getOrNull(i)?.start ?: 0.0 else 0.0) + c.currentPosition / 1000.0
+        val diff = ist - soll
+        when {
+            kotlin.math.abs(diff) > 1.0 -> { springe(soll + 0.15); c.setPlaybackSpeed(leiterTempo.toFloat()) }
+            kotlin.math.abs(diff) > 0.025 -> c.setPlaybackSpeed((leiterTempo * (1 - diff.coerceIn(-0.05, 0.05))).toFloat())
+            else -> c.setPlaybackSpeed(leiterTempo.toFloat())
+        }
+    }
+
     // MARK: Intern
 
     private fun eintragGewechselt(index: Int? = null) {
@@ -172,7 +235,7 @@ object Wiedergabe {
         val t = titel.getOrNull(i) ?: return
         anzeige = Anzeige(t.titel, t.kuenstler, navidrome?.cover(t.cover, 600))
         dauer = t.dauer.toDouble()
-        bereich.launch { navidrome?.scrobble(t.id, false) }
+        if (!nurMitspielen) bereich.launch { navidrome?.scrobble(t.id, false) }
     }
 
     private fun tick() {
@@ -199,6 +262,7 @@ object Wiedergabe {
 
     /** Ende von Hörbuch oder Folge: als gehört markieren, bei Podcasts die nächste ungehörte Folge starten. */
     private fun zuEnde() {
+        if (nurMitspielen) return
         val a = abs ?: return
         val id = itemId ?: return
         val folge = folgeId
@@ -212,6 +276,7 @@ object Wiedergabe {
     }
 
     private fun synchronisiere(schliessen: Boolean = false) {
+        if (nurMitspielen) return
         val s = sitzung ?: return
         val a = abs ?: return
         val z = zeit; val g = gehoertSeitSync; val d = dauer

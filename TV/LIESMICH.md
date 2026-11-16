@@ -23,6 +23,14 @@ Ohrregal auf dem Fernseher öffnen. Auf dem iPhone im großen Player auf das **F
 
 Technik: Die TV-App meldet sich im Heimnetz als `_ohrregal._tcp` und nimmt kleine HTTP-Anfragen an (`/status`, `/spielen`, `/steuern`, `/einrichten` mit Code). Gestreamt wird direkt vom eigenen Server.
 
+## Mehrere Personen
+
+Beim Start fragt Ohrregal „Wer hört?“, sobald mehr als eine Person eingerichtet ist. Weitere Personen kommen über den QR-Code bzw. „Fernseher einrichten“ vom jeweiligen iPhone dazu oder unter Einstellungen → „Person hinzufügen“.
+
+## Mehrere Fernseher gleichzeitig
+
+Für Räume mit mehreren Fernsehern (z. B. Werkstatt): Auf dem Fernseher, der den Ton vorgibt, unter **Einstellungen → Mehrere Fernseher gleichzeitig** die anderen dazuholen. Auf ihnen muss Ohrregal geöffnet und eine Person gewählt sein. Sie spielen dann dasselbe an derselben Stelle. Kleine Abweichungen gleichen sie über ein minimal geändertes Tempo aus, also ohne Sprünge. Hat ein Fernseher eine eigene Tonverzögerung, lässt sich das dort in 20-ms-Schritten ausgleichen. Radio läuft auf allen, aber nicht genau gleich (Live-Stream).
+
 ## Bauen
 
 GitHub baut bei jedem Push in `TV/` (Reiter **Actions → TV-App**) und legt die APK im Release „tv“ ab.

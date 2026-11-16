@@ -35,6 +35,10 @@ object Empfaenger {
             return if (port == PORT) ip else "$ip:$port"
         }
 
+    fun eigeneIp(): String? = adresseIp()
+    fun eigeneAdresse(): String = "${adresseIp()}:${server?.localPort ?: PORT}"
+    val name = "Ohrregal – " + (Build.MODEL ?: "Fernseher")
+
     private fun adresseIp(): String? = runCatching {
         java.net.NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }
             .flatMap { it.inetAddresses.toList() }.filterIsInstance<java.net.Inet4Address>()
@@ -64,7 +68,7 @@ object Empfaenger {
         val s = runCatching { ServerSocket(PORT) }.getOrElse { ServerSocket(0) }
         server = s
         val info = NsdServiceInfo().apply {
-            serviceName = "Ohrregal – " + (Build.MODEL ?: "Fernseher")
+            serviceName = name
             serviceType = "_ohrregal._tcp"
             port = s.localPort
             // Alle Sticks heißen im Netz „Android.local“; deshalb die eigene IPv4 mitschicken, das iPhone verbindet direkt.
@@ -151,6 +155,13 @@ object Empfaenger {
                 vomIphone++
                 200 to JSONObject().put("status", "ok")
             }
+            "GET /gruppe/stand" -> 200 to JSONObject().put("jetzt", System.currentTimeMillis()).put("stand", Wiedergabe.stand() ?: JSONObject.NULL)
+            "POST /gruppe/folgen" -> {
+                if (!eingerichtet) return 409 to JSONObject().put("text", "Auf diesem Fernseher ist noch keine Person gewählt.")
+                Gruppe.folgen(j.getString("leiter"), j.optString("name").removePrefix("Ohrregal – "))
+                200 to JSONObject().put("status", "ok")
+            }
+            "POST /gruppe/verlassen" -> { Gruppe.verlassen(); 200 to JSONObject().put("status", "ok") }
             "POST /steuern" -> {
                 when (j.optString("aktion")) {
                     "umschalten" -> Wiedergabe.umschalten()

@@ -1,6 +1,8 @@
 package de.drdothouse.ohrregal.tv
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -272,7 +274,8 @@ fun SchlafKnopf() {
 fun EinstellungenTab(personen: Personen) {
     val ctx = LocalContext.current
     val z = personen.zugang
-    Column(Modifier.padding(48.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LaunchedEffect(Unit) { Gruppe.suchen(ctx) }
+    Column(Modifier.padding(horizontal = 48.dp, vertical = 24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Navidrome: ${z.server} (${z.benutzer})", color = Color.White)
         Text("Audiobookshelf: " + (if (z.mitHoerbuechern) "${z.absServer} (${z.absBenutzer})" else "nicht eingerichtet"), color = Color.White)
         Text("Version ${ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName}", color = Farben.gedaempft)
@@ -284,6 +287,7 @@ fun EinstellungenTab(personen: Personen) {
             Button(onClick = personen.hinzufuegen) { Text("Person hinzufügen") }
             Button(onClick = personen.entfernen) { Text("Diese Person entfernen") }
         }
+        GruppeBereich()
     }
 }
 
@@ -299,4 +303,31 @@ fun FavoritKnopf(id: String, abs: Audiobookshelf?) {
         liste = neu
         bereich.launch { abs?.favoritenSpeichern(neu) }
     }, modifier = Modifier.padding(top = 12.dp)) { Text(if (ist) "★ Favorit" else "☆ Zu Favoriten") }
+}
+
+
+/** Mehrere Fernseher gleichzeitig: andere dazuholen bzw. als Mitspieler die Verzögerung einstellen. */
+@Composable
+fun GruppeBereich() {
+    Text("Mehrere Fernseher gleichzeitig", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp))
+    val leiter = Gruppe.leiter
+    if (leiter != null) {
+        Text("Dieser Fernseher spielt mit „${Gruppe.leiterName}“.", color = Color.White)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = { Gruppe.verzoegerungMs -= 20 }) { Text("− 20 ms") }
+            Text("Verzögerung: ${Gruppe.verzoegerungMs} ms", color = Color.White)
+            Button(onClick = { Gruppe.verzoegerungMs += 20 }) { Text("+ 20 ms") }
+            Button(onClick = { Gruppe.verlassen() }) { Text("Gruppe verlassen") }
+        }
+        Text("Klingt dieser Fernseher früher als die anderen: Verzögerung erhöhen.", color = Farben.gedaempft)
+        return
+    }
+    Text("Andere Fernseher holen dazu und spielen dann genau dasselbe wie dieser.", color = Farben.gedaempft)
+    if (Gruppe.gefunden.isEmpty()) Text("Suche andere Fernseher mit geöffnetem Ohrregal …", color = Farben.gedaempft)
+    Gruppe.gefunden.forEach { f ->
+        val dabei = Gruppe.mitspieler.any { it.adresse == f.adresse }
+        Button(onClick = { if (dabei) Gruppe.entlassen(f) else Gruppe.dazuholen(f) }) {
+            Text(if (dabei) "✓ ${f.name} – entfernen" else "+ ${f.name} dazuholen")
+        }
+    }
 }
