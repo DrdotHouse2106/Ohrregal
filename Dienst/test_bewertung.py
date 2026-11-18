@@ -78,5 +78,21 @@ class Hoerspiel(unittest.TestCase):
         self.assertEqual(h.norm("Die vier ???"), "die vier fragezeichen")
 
 
+
+class Adressen(unittest.TestCase):
+    """Schutz vor Abrufen ins Heimnetz (nur IP-Literale, kein DNS nötig)."""
+    def test_private_ziele_abgelehnt(self):
+        for u in ("https://127.0.0.1/x", "https://10.0.0.5/feed", "https://192.168.1.2/", "https://[::1]/",
+                  "https://169.254.169.254/latest", "http://100.64.0.1/"):
+            self.assertFalse(h.oeffentliche_url(u, http_erlaubt=True), u)
+
+    def test_schema_und_hosts(self):
+        self.assertFalse(h.oeffentliche_url("ftp://1.1.1.1/x"))
+        self.assertFalse(h.oeffentliche_url("http://1.1.1.1/x"))
+        self.assertTrue(h.oeffentliche_url("http://1.1.1.1/x", http_erlaubt=True))
+        self.assertFalse(h.oeffentliche_url("https://1.1.1.1/x", hosts=h.COVER_HOSTS))
+        self.assertFalse(h.oeffentliche_url("https://user:pw@1.1.1.1/x"))
+
+
 if __name__ == "__main__":
     unittest.main()

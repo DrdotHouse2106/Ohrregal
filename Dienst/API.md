@@ -60,7 +60,7 @@ Stand: 08.11.2026, Dienst-Version 2.5.2. Die Beschreibung kommt aus der Server-S
 
 ### `POST /wunsch`
 
-Body: `asin`, `titel`, `autor`, `sprecher`, `reihe`, `teil`, `laufzeitMin`, `sprache`, `coverUrl`. Pflicht sind `titel` und `autor`, `asin` ist dringend empfohlen.
+Body: `asin`, `titel`, `autor`, `sprecher`, `reihe`, `teil`, `laufzeitMin`, `sprache`, `coverUrl`. Pflicht sind `titel` und `autor`, `asin` ist dringend empfohlen. `coverUrl` wird nur von den Audible-Bildservern übernommen (`m.media-amazon.com`, `images-na/-eu.ssl-images-amazon.com`, nur https), andere Adressen werden still verworfen. Das Cover wird höchstens 20 MB groß geladen, Weiterleitungen auf andere Hosts werden nicht verfolgt.
 
 | Antwort | Bedeutung |
 |---|---|
@@ -240,7 +240,7 @@ In Audiobookshelf dürfen nur Admins Podcasts anlegen. Der Dienst erledigt das d
 Liefert `{"treffer": [{"feedUrl", "titel", "autor", "cover", "genre", "folgen", "itunesId", "absItemId"}]}` aus dem Apple-Podcast-Verzeichnis (Land `PODCAST_LAND`, Standard de), höchstens 25 Treffer. `absItemId` ist gesetzt, wenn der Podcast schon in ABS liegt, sonst `null`. Eine Beschreibung liefert das Verzeichnis nicht. Fehler: `400 ungueltig`, `502 suche_nicht_erreichbar`.
 
 ### `POST /podcast`
-Body: `{"feedUrl": "…", "ersteFolgen": 3}` (`ersteFolgen` 0–10, Standard 3). Der Dienst liest den Feed über ABS, legt den Podcast in der Podcast-Bibliothek an (Ordner = Podcast-Titel) und schaltet „neue Folgen automatisch laden“ ein (Zeitplan `PODCAST_ZEITPLAN`, Standard stündlich, je Prüfung höchstens 3 neue). Die neuesten `ersteFolgen` Folgen lädt er sofort.
+Body: `{"feedUrl": "…", "ersteFolgen": 3}` (`ersteFolgen` 0–10, Standard 3). `feedUrl` muss http(s) sein und auf eine öffentliche Adresse zeigen; Adressen im Heimnetz, localhost oder Link-Local werden mit `400 ungueltig` abgelehnt. Der Dienst liest den Feed über ABS, legt den Podcast in der Podcast-Bibliothek an (Ordner = Podcast-Titel) und schaltet „neue Folgen automatisch laden“ ein (Zeitplan `PODCAST_ZEITPLAN`, Standard stündlich, je Prüfung höchstens 3 neue). Die neuesten `ersteFolgen` Folgen lädt er sofort.
 Antworten: `201 {"status": "abonniert", "absItemId", "titel"}`, `200 {"status": "schon_da", "absItemId"}`, `400 ungueltig`, `422 feed_ungueltig`, `502 abs_fehler`, `503 nicht_eingerichtet` (kein Admin-Schlüssel oder keine Podcast-Bibliothek).
 
 ### `GET /podcast`

@@ -17,11 +17,13 @@ Aufruf:
 """
 import base64
 import hashlib
+import ipaddress
 import json
 import os
 import re
 import secrets
 import shutil
+import socket
 import subprocess
 import tempfile
 import sqlite3
@@ -37,7 +39,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.9.0"
+VERSION = "2.9.1"
 
 
 def env(name, standard=None, pflicht=False):
@@ -250,11 +252,11 @@ def hash_token(t):
 
 ABS_CACHE = {}
 ABS_CACHE_SPERRE = threading.Lock()
-ABS_CACHE_SEKUNDEN = 300
+ABS_CACHE_SEKUNDEN = 60  # kurz, damit gesperrte Nutzer schnell draußen sind
 
 
 def abs_benutzer(token):
-    """Prüft ein Audiobookshelf-Token über /api/me; Ergebnis 5 Minuten zwischengespeichert."""
+    """Prüft ein Audiobookshelf-Token über /api/me; Ergebnis 1 Minute zwischengespeichert."""
     if not E.abs_url:
         return None
     h = hash_token(token)
@@ -300,6 +302,64 @@ def hole(url, daten=None, kopf=None, zeit=60, methode=None):
     anf = urllib.request.Request(url, data=daten, headers=kopf or {}, method=methode)
     with urllib.request.urlopen(anf, timeout=zeit) as a:
         return a.read()
+
+
+# Bildadressen, die als Cover übernommen werden (Audible/Amazon)
+COVER_HOSTS = ("m.media-amazon.com", "images-na.ssl-images-amazon.com", "images-eu.ssl-images-amazon.com")
+
+
+def oeffentliche_url(url, hosts=None, http_erlaubt=False):
+    """True, wenn die Adresse http(s) ist, (falls angegeben) zu einem erlaubten Host gehört und
+    nur auf öffentliche IP-Adressen zeigt. Schützt vor Abrufen ins Heimnetz (SSRF)."""
+    try:
+        u = urllib.parse.urlsplit(str(url))
+    except ValueError:
+        return False
+    if u.scheme != "https" and not (http_erlaubt and u.scheme == "http"):
+        return False
+    host = (u.hostname or "").lower().rstrip(".")
+    if not host or u.username or u.password:
+        return False
+    if hosts and host not in hosts:
+        return False
+    try:
+        adressen = {a[4][0] for a in socket.getaddrinfo(host, u.port or (443 if u.scheme == "https" else 80),
+                                                       proto=socket.IPPROTO_TCP)}
+    except (socket.gaierror, UnicodeError, ValueError):
+        return False
+    for a in adressen:
+        ip = ipaddress.ip_address(a.split("%")[0])
+        if getattr(ip, "ipv4_mapped", None):
+            ip = ip.ipv4_mapped
+        if not ip.is_global or ip.is_multicast:
+            return False
+    return bool(adressen)
+
+
+class _GepruefteWeiterleitung(urllib.request.HTTPRedirectHandler):
+    def __init__(self, hosts, http_erlaubt):
+        self.hosts, self.http_erlaubt = hosts, http_erlaubt
+
+    def redirect_request(self, req, fp, code, msg, headers, neu):
+        if not oeffentliche_url(neu, self.hosts, self.http_erlaubt):
+            raise urllib.error.HTTPError(neu, code, "Weiterleitung auf nicht erlaubte Adresse", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, neu)
+
+
+def hole_extern(url, hosts=None, max_bytes=20_000_000, zeit=30, http_erlaubt=False):
+    """Abruf einer fremden Adresse: nur öffentliche Ziele, Weiterleitungen nur auf erlaubte Ziele,
+    Antwort höchstens max_bytes (wird beim Lesen begrenzt)."""
+    if not oeffentliche_url(url, hosts, http_erlaubt):
+        raise ValueError("Adresse nicht erlaubt")
+    oeffner = urllib.request.build_opener(_GepruefteWeiterleitung(hosts, http_erlaubt))
+    with oeffner.open(urllib.request.Request(url, headers={"User-Agent": "Ohrregal-Wunsch"}), timeout=zeit) as a:
+        laenge = a.headers.get("Content-Length")
+        if laenge and laenge.isdigit() and int(laenge) > max_bytes:
+            raise ValueError("Antwort zu groß")
+        daten = a.read(max_bytes + 1)
+    if len(daten) > max_bytes:
+        raise ValueError("Antwort zu groß")
+    return daten
 
 
 def prowlarr(pfad, **param):
@@ -803,12 +863,11 @@ def metadaten_schreiben(w, ordner):
     with open(os.path.join(ordner, "metadata.json"), "w") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
     hat_cover = any(n.lower().startswith("cover.") for n in os.listdir(ordner))
-    if w["coverUrl"] and not hat_cover and w["coverUrl"].startswith("https://"):
+    if w["coverUrl"] and not hat_cover:
         try:
-            bild = hole(w["coverUrl"], zeit=30)
-            if len(bild) < 20_000_000:
-                with open(os.path.join(ordner, "cover.jpg"), "wb") as f:
-                    f.write(bild)
+            bild = hole_extern(w["coverUrl"], hosts=COVER_HOSTS, max_bytes=20_000_000, zeit=30)
+            with open(os.path.join(ordner, "cover.jpg"), "wb") as f:
+                f.write(bild)
         except Exception as f:
             log(f"{w['id']}: Cover nicht geladen:", f)
 
@@ -2412,6 +2471,8 @@ class Schnittstelle(BaseHTTPRequestHandler):
             feed = str(d.get("feedUrl") or "").strip()
             if not re.match(r"https?://", feed):
                 return self.fehler(400, "ungueltig", "feedUrl ist Pflicht")
+            if not oeffentliche_url(feed[:1000], http_erlaubt=True):
+                return self.fehler(400, "ungueltig", "feedUrl muss eine öffentliche Adresse sein")
             try:
                 n = max(0, min(10, int(d.get("ersteFolgen", 3))))
             except (TypeError, ValueError):
@@ -2487,6 +2548,11 @@ class Schnittstelle(BaseHTTPRequestHandler):
         for f in ("asin", "titel", "autor", "sprecher", "reihe", "teil", "sprache", "coverUrl"):
             if w[f] is not None:
                 w[f] = str(w[f]).strip()[:500] or None
+        if w["coverUrl"]:
+            # Cover nur von den Audible-Bildservern übernehmen, sonst still weglassen
+            h = (urllib.parse.urlsplit(w["coverUrl"]).hostname or "").lower()
+            if not w["coverUrl"].startswith("https://") or h not in COVER_HOSTS:
+                w["coverUrl"] = None
         try:
             w["laufzeitMin"] = int(w["laufzeitMin"]) if w["laufzeitMin"] not in (None, "") else None
         except (TypeError, ValueError):
