@@ -45,8 +45,12 @@ object Empfaenger {
             .firstOrNull { it.isSiteLocalAddress }?.hostAddress
     }.getOrNull()
 
-    /** 4-stelliger Code zum Einrichten vom iPhone aus; wechselt bei jedem Start. */
-    val code = (1..10).map { "abcdefghjkmnpqrstuvwxyz23456789".random() }.joinToString("")
+    /** Geheimer Code (10 Zeichen, Kryptozufall) für den QR-Code; wechselt bei jedem Start, geht nie übers Netz. */
+    val code = java.security.SecureRandom().let { z -> (1..10).map { "abcdefghjkmnpqrstuvwxyz23456789"[z.nextInt(31)] }.joinToString("") }
+
+    /** Fehlversuche beim Einrichten; nach 5 ist 10 Minuten Pause. */
+    private var fehlversuche = 0
+    private var gesperrtBis = 0L
 
     /** Inhalt des QR-Codes: Die iPhone-Kamera öffnet damit Ohrregal, das richtet genau diesen Fernseher ein (ohne „Übernehmen“). */
     val qrInhalt: String
@@ -105,7 +109,7 @@ object Empfaenger {
         var gelesen = 0
         while (gelesen < laenge) { val n = ein.read(puffer, gelesen, laenge - gelesen); if (n < 0) break; gelesen += n }
         val json = runCatching { JSONObject(String(puffer, 0, gelesen)) }.getOrDefault(JSONObject())
-        val (code, antwort) = if ("$methode $pfad" == "POST /einrichten" && json.optString("code").isEmpty()) bestaetigen(json)
+        val (code, antwort) = if ("$methode $pfad" == "POST /einrichten" && !json.has("verschluesselt")) bestaetigen(json)
             else withContext(Dispatchers.Main) { antworte(methode, pfad, json) }
         val text = antwort.toString().toByteArray()
         v.getOutputStream().apply {
@@ -114,8 +118,19 @@ object Empfaenger {
         }
     }
 
+    /** AES-GCM, Schlüssel = SHA-256 des Codes (wie auf dem iPhone): 12 Byte Nonce, dann Daten mit Prüfsumme. */
+    private fun entschluesseln(paket: String): JSONObject {
+        val daten = android.util.Base64.decode(paket, android.util.Base64.DEFAULT)
+        val schluessel = javax.crypto.spec.SecretKeySpec(java.security.MessageDigest.getInstance("SHA-256").digest(code.toByteArray()), "AES")
+        val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(javax.crypto.Cipher.DECRYPT_MODE, schluessel, javax.crypto.spec.GCMParameterSpec(128, daten, 0, 12))
+        return JSONObject(String(c.doFinal(daten, 12, daten.size - 12)))
+    }
+
     /** Zugänge ohne Code: Der Fernseher fragt nach, das iPhone wartet bis zu 90 Sekunden auf „Übernehmen“. */
     private suspend fun bestaetigen(j: JSONObject): Pair<Int, JSONObject> {
+        // Nur eine offene Frage gleichzeitig, sonst könnte jemand im Netz den Bildschirm mit Fragen füllen.
+        if (withContext(Dispatchers.Main) { anfrage != null }) return 409 to JSONObject().put("text", "Auf dem Fernseher wartet schon eine Anfrage.")
         val a = Anfrage(j.optString("geraet", "iPhone"), Zugang(j.optString("server"), j.optString("benutzer"), j.optString("passwort"),
             j.optString("absServer"), j.optString("absBenutzer"), j.optString("absPasswort")))
         withContext(Dispatchers.Main) { anfrage?.antwort?.complete(false); anfrage = a }
@@ -134,9 +149,16 @@ object Empfaenger {
             "GET /status" -> 200 to JSONObject().put("eingerichtet", eingerichtet).put("hoerbuecher", Wiedergabe.abs != null)
                 .put("spielt", Wiedergabe.spielt).put("titel", Wiedergabe.anzeige?.titel ?: "")
             "POST /einrichten" -> {
-                if (j.optString("code") != code) return 403 to JSONObject().put("text", "Der Code stimmt nicht. Er steht auf dem Fernseher.")
-                neuerZugang = Zugang(j.optString("server"), j.optString("benutzer"), j.optString("passwort"),
-                    j.optString("absServer"), j.optString("absBenutzer"), j.optString("absPasswort"))
+                // QR-Weg: Zugänge sind mit dem Code auf dem Bildschirm verschlüsselt; nur dann ohne Rückfrage.
+                if (System.currentTimeMillis() < gesperrtBis) return 429 to JSONObject().put("text", "Zu viele Fehlversuche. Bitte in 10 Minuten noch einmal.")
+                val z = runCatching { entschluesseln(j.getString("verschluesselt")) }.getOrNull()
+                if (z == null) {
+                    if (++fehlversuche >= 5) { gesperrtBis = System.currentTimeMillis() + 10 * 60_000; fehlversuche = 0 }
+                    return 403 to JSONObject().put("text", "Der QR-Code passt nicht zu diesem Fernseher. Bitte neu scannen.")
+                }
+                fehlversuche = 0
+                neuerZugang = Zugang(z.optString("server"), z.optString("benutzer"), z.optString("passwort"),
+                    z.optString("absServer"), z.optString("absBenutzer"), z.optString("absPasswort"))
                 200 to JSONObject().put("status", "ok")
             }
             "POST /spielen" -> {
@@ -149,7 +171,11 @@ object Empfaenger {
                         Wiedergabe.spiele(liste, j.optInt("ab"), (zeit * 1000).toLong())
                     }
                     "hoerbuch" -> Wiedergabe.spiele(j.getString("id"), j.text("folge"))
-                    "radio" -> Wiedergabe.spiele(Sender(j.optString("id"), j.optString("name"), j.optString("url")))
+                    "radio" -> {
+                        val url = j.optString("url")
+                        if (!url.startsWith("http://") && !url.startsWith("https://")) return 400 to JSONObject().put("text", "Ungültige Senderadresse.")
+                        Wiedergabe.spiele(Sender(j.optString("id"), j.optString("name"), url))
+                    }
                     else -> return 400 to JSONObject().put("text", "Unbekannte Art.")
                 }
                 vomIphone++

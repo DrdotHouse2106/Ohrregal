@@ -11,6 +11,7 @@
     <!-- Viele Radiosender und Server im Heimnetz streamen nur über http. -->
     <application
         android:name=".OhrregalApp"
+        android:allowBackup="false"
         android:label="Ohrregal"
         android:icon="@mipmap/symbol"
         android:banner="@drawable/banner"

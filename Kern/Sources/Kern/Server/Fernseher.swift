@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Network
 import Observation
@@ -11,17 +12,36 @@ public final class Fernseher {
     public struct Geraet: Identifiable, Hashable, @unchecked Sendable {
         public let name: String
         let endpunkt: NWEndpoint
+        /// Ziel für Rückfragen („192.168.1.20“).
+        public var adresse: String { if case let .hostPort(h, _) = endpunkt { return "\(h)" }; return name }
         public var id: String { name }
 
-        /// Von Hand eingegebene Adresse („192.168.1.20“ oder „192.168.1.20:47811“), falls die Suche nichts findet.
+        /// Von Hand eingegebene Adresse bzw. Adresse aus dem QR-Code („192.168.1.20“ oder „192.168.1.20:47811“).
+        /// Nur private IPv4-Adressen im Heimnetz, keine Hostnamen: Zugangsdaten dürfen nie ins Internet gehen.
         public static func manuell(_ text: String) -> Geraet? {
             let t = text.trimmingCharacters(in: .whitespaces)
             let teile = t.split(separator: ":")
-            guard let host = teile.first, !host.isEmpty else { return nil }
+            guard let host = teile.first, Fernseher.istHeimnetz(String(host)) else { return nil }
             let port = teile.count > 1 ? UInt16(teile[1]) : 47811
             guard let port, let p = NWEndpoint.Port(rawValue: port) else { return nil }
             return Geraet(name: t, endpunkt: .hostPort(host: NWEndpoint.Host(String(host)), port: p))
         }
+    }
+
+    /// 10/8, 172.16/12, 192.168/16, 169.254/16 – sonst nein.
+    public nonisolated static func istHeimnetz(_ ip: String) -> Bool {
+        let z = ip.split(separator: ".").compactMap { UInt8($0) }
+        guard z.count == 4, ip.split(separator: ".").count == 4 else { return false }
+        return z[0] == 10 || (z[0] == 172 && (16...31).contains(z[1])) || (z[0] == 192 && z[1] == 168) || (z[0] == 169 && z[1] == 254)
+    }
+
+    /// Zugänge für den QR-Weg verschlüsseln (AES-GCM, Schlüssel = SHA-256 des Codes auf dem Bildschirm).
+    /// Der Code selbst geht nicht übers Netz; nur der Fernseher, der ihn anzeigt, kann die Daten lesen.
+    public nonisolated static func verschluesseln(_ json: [String: Any], code: String) throws -> String {
+        let schluessel = SymmetricKey(data: SHA256.hash(data: Data(code.utf8)))
+        let daten = try JSONSerialization.data(withJSONObject: json)
+        guard let paket = try AES.GCM.seal(daten, using: schluessel).combined else { throw ServerFehler("Verschlüsseln fehlgeschlagen.") }
+        return paket.base64EncodedString()
     }
 
     public private(set) var geraete: [Geraet] = []
@@ -34,7 +54,7 @@ public final class Fernseher {
             let liste = ergebnisse.compactMap { r -> Geraet? in
                 guard case let .service(name, _, _, _) = r.endpoint else { return nil }
                 // Alle Fernseh-Sticks heißen „Android.local“: direkt an die mitgeschickte IPv4 und den Port des Dienstes.
-                if case let .bonjour(txt) = r.metadata, let ip = txt["ip"], !ip.isEmpty,
+                if case let .bonjour(txt) = r.metadata, let ip = txt["ip"], Self.istHeimnetz(ip),
                    let port = txt["port"].flatMap(UInt16.init).flatMap(NWEndpoint.Port.init(rawValue:)) {
                     return Geraet(name: name, endpunkt: .hostPort(host: NWEndpoint.Host(ip), port: port))
                 }

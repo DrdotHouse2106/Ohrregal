@@ -74,7 +74,7 @@ struct FernseherEinrichten: View {
                     TextField("z. B. 192.168.1.20", text: $adresse)
                         .keyboardType(.numbersAndPunctuation).autocorrectionDisabled().textInputAutocapitalization(.never)
                     Button("Mit dieser Adresse verbinden") {
-                        if let g = Fernseher.Geraet.manuell(adresse) { Task { await einrichten(g) } } else { meldung = "Die Adresse ist ungültig." }
+                        if let g = Fernseher.Geraet.manuell(adresse) { Task { await einrichten(g) } } else { meldung = "Bitte eine Adresse aus deinem Heimnetz eingeben, z. B. 192.168.1.20." }
                     }
                     .disabled(adresse.isEmpty || laeuft != nil)
                 } header: {
@@ -111,22 +111,36 @@ struct FernseherEinrichten: View {
     }
 }
 
-/// QR-Code vom Fernseher („ohrregal://fernseher?ip=…&port=…&code=…“): richtet genau diesen Fernseher ein.
-/// Der Code steht nur auf dem Bildschirm, deshalb muss dort nichts mehr bestätigt werden.
+/// QR-Code vom Fernseher („ohrregal://fernseher?ip=…&port=…&code=…“). Erst nachfragen, dann senden;
+/// nur an Adressen im Heimnetz und verschlüsselt mit dem Code, den nur der echte Fernseher kennt.
+struct FernseherAuftrag: Identifiable {
+    let geraet: Fernseher.Geraet
+    let code: String
+    var id: String { geraet.id }
+}
+
 enum FernseherLink {
-    @MainActor static func einrichten(_ url: URL) async -> String? {
+    /// Prüft den Link. Ungültig oder nicht im Heimnetz → Meldung, sonst ein Auftrag zur Rückfrage.
+    static func pruefen(_ url: URL) -> Result<FernseherAuftrag, ServerFehler>? {
         guard url.scheme == "ohrregal", url.host == "fernseher" else { return nil }
         let werte = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         func wert(_ n: String) -> String? { werte.first { $0.name == n }?.value }
-        guard let ip = wert("ip"), !ip.isEmpty, let code = wert("code"),
-              let g = Fernseher.Geraet.manuell("\(ip):\(wert("port") ?? "47811")") else { return "Der QR-Code ist ungültig." }
+        guard let ip = wert("ip"), let code = wert("code"), code.count >= 8 else { return .failure(ServerFehler("Der QR-Code ist ungültig.")) }
+        guard let g = Fernseher.Geraet.manuell("\(ip):\(wert("port") ?? "47811")") else {
+            return .failure(ServerFehler("Der QR-Code zeigt auf eine Adresse außerhalb deines Heimnetzes. Aus Sicherheitsgründen wird nichts gesendet."))
+        }
+        return .success(FernseherAuftrag(geraet: g, code: code))
+    }
+
+    @MainActor static func senden(_ a: FernseherAuftrag) async -> String {
         let z = Zugaenge.geladen()
         guard !z.server.isEmpty else { return "Bitte zuerst Ohrregal auf dem iPhone anmelden." }
         do {
-            try await Fernseher.geteilt.sende(g, "/einrichten", json: ["code": code, "geraet": "iPhone (QR-Code)",
-                                                                  "server": z.server, "benutzer": z.benutzer, "passwort": z.passwort,
-                                                                  "absServer": Adresse.aufbereiten(z.absServer)?.absoluteString ?? z.absServer, "absBenutzer": z.absBenutzer, "absPasswort": z.absPasswort],
-                                              warten: 15)
+            let paket = try Fernseher.verschluesseln(["geraet": "iPhone (QR-Code)",
+                                                     "server": z.server, "benutzer": z.benutzer, "passwort": z.passwort,
+                                                     "absServer": Adresse.aufbereiten(z.absServer)?.absoluteString ?? z.absServer,
+                                                     "absBenutzer": z.absBenutzer, "absPasswort": z.absPasswort], code: a.code)
+            try await Fernseher.geteilt.sende(a.geraet, "/einrichten", json: ["verschluesselt": paket], warten: 15)
             return "Der Fernseher ist eingerichtet."
         } catch {
             return error.deutsch

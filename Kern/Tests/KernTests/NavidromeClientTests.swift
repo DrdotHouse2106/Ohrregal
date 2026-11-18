@@ -162,3 +162,27 @@ final class FolgenRichtungTests: XCTestCase {
         XCTAssertNil(FolgenRichtung.naechste(nach: "f4", in: alle, stand: stand, richtung: .aus))
     }
 }
+
+final class FernseherSicherheitTests: XCTestCase {
+    func testNurHeimnetz() {
+        XCTAssertTrue(Fernseher.istHeimnetz("192.168.72.41"))
+        XCTAssertTrue(Fernseher.istHeimnetz("10.0.0.5"))
+        XCTAssertTrue(Fernseher.istHeimnetz("172.20.1.1"))
+        XCTAssertFalse(Fernseher.istHeimnetz("172.32.1.1"))
+        XCTAssertFalse(Fernseher.istHeimnetz("8.8.8.8"))
+        XCTAssertFalse(Fernseher.istHeimnetz("boese.example.com"))
+        XCTAssertFalse(Fernseher.istHeimnetz("192.168.1"))
+    }
+
+    @MainActor func testManuellLehntAussenAb() {
+        XCTAssertNil(Fernseher.Geraet.manuell("evil.example:443"))
+        XCTAssertNil(Fernseher.Geraet.manuell("1.2.3.4:47811"))
+        XCTAssertNotNil(Fernseher.Geraet.manuell("192.168.1.20"))
+    }
+
+    func testVerschluesseln() throws {
+        let paket = try Fernseher.verschluesseln(["passwort": "geheim"], code: "abcdefgh23")
+        XCTAssertFalse(paket.contains("geheim"))
+        XCTAssertGreaterThan(Data(base64Encoded: paket)?.count ?? 0, 12 + 16)
+    }
+}
