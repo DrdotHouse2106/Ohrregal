@@ -89,10 +89,13 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             start.updateSections([CPListSection(items: [CPListItem(text: "Bitte zuerst auf dem iPhone anmelden", detailText: nil)])])
             return
         }
-        await fuelleStart(start, client)
+        // Jeder Tab für sich und sofort mit „Lädt …“: Hängt eine Anfrage (Mobilnetz im Auto), bleiben die anderen nicht leer.
+        let laedt = [CPListSection(items: [CPListItem(text: "Lädt …", detailText: nil)])]
+        start.updateSections(laedt); radio.updateSections(laedt); buecher.updateSections(laedt)
         fuelleMusik(musik, client)
-        await fuelleRadio(radio, client)
-        if let abs = geteilteSitzung.hoerbuchClient { await fuelleHoerbuecher(buecher, abs) }
+        Task { @MainActor in await fuelleRadio(radio, client) }
+        if let abs = geteilteSitzung.hoerbuchClient { Task { @MainActor in await fuelleHoerbuecher(buecher, abs) } }
+        Task { @MainActor in await fuelleStart(start, client) }
     }
 
     /// Start wie bei Apple Music: Zeilen mit großen Covern zum Seitwärtswischen.
@@ -106,7 +109,11 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         }
         spiel.setImage(UIImage(systemName: "sparkles"))
 
-        var zeilen: [CPListImageRowItem] = []
+        // Zeilen erscheinen nach und nach, „Spiel etwas für mich“ sofort.
+        var zeilen: [CPListImageRowItem] = [] {
+            didSet { liste.updateSections([CPListSection(items: [spiel]), CPListSection(items: zeilen)]) }
+        }
+        liste.updateSections([CPListSection(items: [spiel])])
         if !mixe.isEmpty {
             zeilen.append(await bildzeile("Für dich", mixe.map { m -> Bildeintrag in
                 (client.coverURL(m.cover.first, groesse: 300), { geteilterPlayer.spiele(m.titel, quelle: "CarPlay: Mix: \(m.name)") })
@@ -144,7 +151,8 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         await withTaskGroup(of: (Int, UIImage?).self) { gruppe in
             for (i, e) in teil.enumerated() {
                 gruppe.addTask {
-                    guard let url = e.0, let (daten, _) = try? await URLSession.shared.data(from: url) else { return (i, nil) }
+                    // Höchstens 8 s je Cover; dann bleibt das Platzhalterbild.
+                    guard let url = e.0, let (daten, _) = try? await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 8)) else { return (i, nil) }
                     return (i, UIImage(data: daten))
                 }
             }
