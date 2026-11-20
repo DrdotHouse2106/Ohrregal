@@ -299,3 +299,8 @@ Stand: 09.11.2026, App 0.13.0, Hörbuchwunsch 2.3.0.
 - Optional: Lidarr-API-Schlüssel
 - Für Hörbuchwunsch: Prowlarr mit Usenet-Indexern, die Hörbücher führen; SABnzbd mit eigener Kategorie; Schreibzugriff auf den Audiobookshelf-Ordner
 - Navidrome mit Last.fm-Anbindung, optional Audiobookshelf
+
+
+## Schlafmarken (umgesetzt Nov. 2026, Idee von Tobias)
+
+Beim Stellen eines Schlaf-Timers mit Minuten und beim Abschalten setzt Ohrregal je ein Lesezeichen in Audiobookshelf („☾ Timer gestellt · …“, „☾ Abgeschaltet · …“), nur bei Hörbüchern. Je Hörbuch bleiben die Marken der letzten 3 Abende. Wird der Timer verlängert, rückt die erste Marke nach. Am nächsten Start des Hörbuchs (frühestens eine Stunde nach dem Abschalten) fragt die App: ab „Timer gestellt“, 5 Minuten vor dem Abschalten oder weiter wie zuletzt. Das gilt auf iPhone, in CarPlay und auf dem Fernseher. Im Player stehen die Marken unter Kapitel → „Schlafmarken“.

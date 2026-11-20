@@ -55,7 +55,59 @@ object Wiedergabe {
 
     val aktuellesKapitel get() = kapitel.lastOrNull { it.start <= zeit + 0.5 }
 
+    private var einstellungen: android.content.SharedPreferences? = null
+
+    // MARK: Schlafmarken (wie auf dem iPhone): Lesezeichen beim Stellen und Abschalten, am nächsten Tag fragen.
+
+    class SchlafNacht(val item: String, val gestellt: Double, val abgeschaltet: Double?, val abgeschaltetUm: Long)
+    var schlafFrage by mutableStateOf<SchlafNacht?>(null); private set
+
+    private fun uhr() = java.text.SimpleDateFormat("d. MMM HH:mm", java.util.Locale.GERMAN).format(java.util.Date())
+
+    private fun markeGestellt() {
+        val item = itemId ?: return; if (folgeId != null) return
+        val a = abs ?: return
+        val alt = einstellungen?.getString("nacht.$item", null)?.let { org.json.JSONObject(it) }
+        einstellungen?.edit()?.putString("nacht.$item", org.json.JSONObject().put("gestellt", zeit).toString())?.apply()
+        val z = zeit
+        bereich.launch {
+            if (alt != null && !alt.has("abgeschaltet")) a.lesezeichenLoeschen(item, alt.getDouble("gestellt"))
+            a.lesezeichenSetzen(item, z, "☾ Timer gestellt · ${uhr()}")
+            aufraeumen(item)
+        }
+    }
+
+    private fun markeAbgeschaltet() {
+        val item = itemId ?: return; if (folgeId != null) return
+        val a = abs ?: return
+        val alt = einstellungen?.getString("nacht.$item", null)?.let { org.json.JSONObject(it) } ?: return
+        einstellungen?.edit()?.putString("nacht.$item", alt.put("abgeschaltet", zeit).put("um", System.currentTimeMillis()).toString())?.apply()
+        val z = zeit
+        bereich.launch { a.lesezeichenSetzen(item, z, "☾ Abgeschaltet · ${uhr()}"); aufraeumen(item) }
+    }
+
+    /** Nur die Schlafmarken der letzten 3 Abende behalten. */
+    private suspend fun aufraeumen(item: String) {
+        val a = abs ?: return
+        val marken = runCatching { a.lesezeichen(item) }.getOrDefault(emptyList()).filter { it.second.startsWith("☾ ") }
+        marken.take((marken.size - 6).coerceAtLeast(0)).forEach { a.lesezeichenLoeschen(item, it.first) }
+    }
+
+    private fun schlafFragePruefen(item: String) {
+        val j = einstellungen?.getString("nacht.$item", null)?.let { org.json.JSONObject(it) }
+        schlafFrage = if (j != null && j.has("abgeschaltet") && System.currentTimeMillis() - j.optLong("um") > 3_600_000)
+            SchlafNacht(item, j.getDouble("gestellt"), j.getDouble("abgeschaltet"), j.optLong("um")) else null
+    }
+
+    fun schlafFrageBeantworten(ziel: Double?) {
+        val n = schlafFrage ?: return
+        schlafFrage = null
+        einstellungen?.edit()?.remove("nacht.${n.item}")?.apply()
+        if (ziel != null) springe(ziel)
+    }
+
     fun verbinden(c: Context) {
+        einstellungen = c.getSharedPreferences("wiedergabe", Context.MODE_PRIVATE)
         if (controller != null) return
         val token = SessionToken(c, ComponentName(c, WiedergabeDienst::class.java))
         val zukunft = MediaController.Builder(c, token).buildAsync()
@@ -113,6 +165,7 @@ object Wiedergabe {
                 val s = a.starte(id, folge)
                 sitzung = s.id; spuren = s.spuren; kapitel = s.kapitel; titel = emptyList()
                 itemId = id; folgeId = folge
+                if (folge == null && !nurMitspielen) schlafFragePruefen(id) else schlafFrage = null
                 istHoerbuch = true; istRadio = false; dauer = s.dauer
                 anzeige = Anzeige(s.titel, s.autor, cover ?: a.cover(id))
                 val start = s.position
@@ -159,6 +212,7 @@ object Wiedergabe {
         schlafenAmEnde = false
         schlafenUm = minuten?.let { System.currentTimeMillis() + it * 60_000L }
         controller?.volume = 1f
+        if (minuten != null && istHoerbuch && !nurMitspielen) markeGestellt()
     }
 
     fun schlafenAmEndeAn() { schlafenUm = null; schlafenAmEnde = true; controller?.volume = 1f }
@@ -248,7 +302,7 @@ object Wiedergabe {
         schlafenUm?.let { um ->
             val rest = (um - System.currentTimeMillis()) / 1000.0
             c.volume = (rest / 10).coerceIn(0.0, 1.0).toFloat()
-            if (rest <= 0) { c.pause(); schlafenUm = null; c.volume = 1f }
+            if (rest <= 0) { c.pause(); schlafenUm = null; c.volume = 1f; if (istHoerbuch) markeAbgeschaltet() }
         }
         if (schlafenAmEnde) {
             val ende = aktuellesKapitel?.ende ?: dauer

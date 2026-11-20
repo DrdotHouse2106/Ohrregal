@@ -243,6 +243,17 @@ fun PlayerSeite() {
                 SchlafKnopf()
             }
             Wiedergabe.fehler?.let { Text(it, color = Farben.violett, modifier = Modifier.padding(top = 16.dp)) }
+            // Nach einer Timer-Nacht: wo weiterhören?
+            Wiedergabe.schlafFrage?.let { n ->
+                Text("Gestern eingeschlafen – wo weiterhören?", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Button(onClick = { Wiedergabe.schlafFrageBeantworten(n.gestellt) }) { Text("Ab Timer gestellt · ${zeitText(n.gestellt)}") }
+                    n.abgeschaltet?.let { ab ->
+                        Button(onClick = { Wiedergabe.schlafFrageBeantworten((ab - 300).coerceAtLeast(0.0)) }) { Text("5 Min. vorher") }
+                    }
+                    Button(onClick = { Wiedergabe.schlafFrageBeantworten(null) }) { Text("Weiter wie zuletzt") }
+                }
+            }
             if (Wiedergabe.kapitel.size > 1) {
                 Spacer(Modifier.height(24.dp))
                 LazyColumn(Modifier.height(150.dp)) {

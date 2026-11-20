@@ -93,6 +93,19 @@ class Audiobookshelf(val server: String, private val benutzer: String, private v
         runCatching { hole("/wunsch-api/podcast/favoriten", "PUT", JSONObject().put("favoriten", JSONArray(ids))) }
     }
 
+    /** Lesezeichen (Schlafmarken) dieses Hörbuchs, älteste zuerst. */
+    suspend fun lesezeichen(item: String): List<Pair<Double, String>> =
+        JSONObject(hole("/api/me")).liste("bookmarks").filter { it.optString("libraryItemId") == item }
+            .map { it.optDouble("time") to it.optString("title") }
+
+    suspend fun lesezeichenSetzen(item: String, zeit: Double, titel: String) {
+        runCatching { hole("/api/me/item/$item/bookmark", "POST", JSONObject().put("time", zeit.toInt()).put("title", titel)) }
+    }
+
+    suspend fun lesezeichenLoeschen(item: String, zeit: Double) {
+        runCatching { hole("/api/me/item/$item/bookmark/${zeit.toInt()}", "DELETE") }
+    }
+
     suspend fun markiereGehoert(id: String, folge: String?) {
         runCatching { hole("/api/me/progress/$id" + (folge?.let { "/$it" } ?: ""), "PATCH", JSONObject().put("isFinished", true)) }
     }
