@@ -76,9 +76,10 @@ struct VollPlayer: View {
                 if let n = player.naechsteFolge {
                     Text("Als Nächstes: \(n.titel)").font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(1)
                 }
-                if let k = player.aktuellesKapitel {
+                // Kapitel und Schlafmarken; ohne Kapitel nur die Schlafmarken.
+                if player.aktuellesKapitel != nil || player.hoerbuchItemId != nil {
                     Button { kapitelOffen = true } label: {
-                        Label(k.title, systemImage: "list.bullet").font(.subheadline).lineLimit(1)
+                        Label(player.aktuellesKapitel?.title ?? "Schlafmarken", systemImage: "list.bullet").font(.subheadline).lineLimit(1)
                     }
                     .foregroundStyle(Farben.blau)
                 }
@@ -181,20 +182,45 @@ struct VollPlayer: View {
 
 struct KapitelListe: View {
     @Environment(Player.self) private var player
+    @Environment(Sitzung.self) private var sitzung
     @Environment(\.dismiss) private var schliessen
+    @State private var marken: [Lesezeichen] = []
 
     var body: some View {
         NavigationStack {
-            List(Array(player.kapitel.enumerated()), id: \.offset) { _, k in
-                Button {
-                    player.springe(zu: k.start)
-                    schliessen()
-                } label: {
-                    HStack {
-                        Text(k.title).foregroundStyle(k == player.aktuellesKapitel ? Farben.blau : Farben.text)
-                        Spacer()
-                        Text(dauerText(Int(k.start))).font(.caption.monospacedDigit()).foregroundStyle(Farben.textGedaempft)
+            List {
+                // Schlafmarken der letzten Abende (Lesezeichen in Audiobookshelf).
+                if !marken.isEmpty {
+                    Section("Schlafmarken") {
+                        ForEach(marken.reversed()) { m in
+                            Button { player.springe(zu: m.time); schliessen() } label: {
+                                HStack {
+                                    Text(m.title.replacingOccurrences(of: Schlafmarken.zeichen, with: "☾ "))
+                                    Spacer()
+                                    Text(dauerText(Int(m.time))).font(.caption.monospacedDigit()).foregroundStyle(Farben.textGedaempft)
+                                }
+                            }
+                        }
                     }
+                }
+                Section("Kapitel") {
+                    ForEach(Array(player.kapitel.enumerated()), id: \.offset) { _, k in
+                        Button {
+                            player.springe(zu: k.start)
+                            schliessen()
+                        } label: {
+                            HStack {
+                                Text(k.title).foregroundStyle(k == player.aktuellesKapitel ? Farben.blau : Farben.text)
+                                Spacer()
+                                Text(dauerText(Int(k.start))).font(.caption.monospacedDigit()).foregroundStyle(Farben.textGedaempft)
+                            }
+                        }
+                    }
+                }
+            }
+            .task {
+                if let id = player.hoerbuchItemId, let abs = sitzung.hoerbuchClient {
+                    marken = ((try? await abs.lesezeichen(id)) ?? []).filter(\.istSchlafmarke)
                 }
             }
             .navigationTitle("Kapitel")

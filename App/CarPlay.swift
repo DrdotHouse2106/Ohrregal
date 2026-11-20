@@ -25,8 +25,32 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         }
     }
 
+    /// Schlafmarken: nach einer Timer-Nacht auch im Auto fragen, wo es weitergehen soll.
+    private var gefragt: String?
+
+    @MainActor private func schlafFrageZeigen(_ n: SchlafNacht) {
+        guard gefragt != n.hoerbuch + "\(n.abgeschaltetUm?.timeIntervalSince1970 ?? 0)", let steuerung else { return }
+        gefragt = n.hoerbuch + "\(n.abgeschaltetUm?.timeIntervalSince1970 ?? 0)"
+        let player = geteilterPlayer
+        var aktionen = [CPAlertAction(title: "Ab Timer gestellt", style: .default) { [weak self] _ in
+            player.schlafFrageBeantworten(n.gestellt); self?.steuerung?.dismissTemplate(animated: true, completion: nil)
+        }]
+        if let ab = n.abgeschaltet {
+            aktionen.append(CPAlertAction(title: "5 Min. vor dem Abschalten", style: .default) { [weak self] _ in
+                player.schlafFrageBeantworten(max(ab - 300, 0)); self?.steuerung?.dismissTemplate(animated: true, completion: nil)
+            })
+        }
+        aktionen.append(CPAlertAction(title: "Weiter wie zuletzt", style: .cancel) { [weak self] _ in
+            player.schlafFrageBeantworten(nil); self?.steuerung?.dismissTemplate(animated: true, completion: nil)
+        })
+        let frage = CPAlertTemplate(titleVariants: ["Gestern eingeschlafen – wo weiterhören?", "Wo weiterhören?"],
+                                    actions: Array(aktionen.prefix(Int(CPAlertTemplate.maximumActionCount))))
+        steuerung.presentTemplate(frage, animated: true, completion: nil)
+    }
+
     @MainActor private func knoepfeSetzen() {
         let player = geteilterPlayer
+        if let n = player.schlafFrage { schlafFrageZeigen(n) }
         if player.istHoerbuch {
             let tempo = CPNowPlayingPlaybackRateButton { _ in
                 Task { @MainActor in

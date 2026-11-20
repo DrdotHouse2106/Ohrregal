@@ -191,6 +191,16 @@ struct Hauptansicht: View {
         }
         .miniPlayerInTabLeiste($playerOffen, aktiv: player.anzeige != nil)
         .sheet(isPresented: $playerOffen) { VollPlayer() }
+        // Nach einer Timer-Nacht: wo weiterhören?
+        .confirmationDialog("Gestern bist du eingeschlafen. Wo weiterhören?",
+                            isPresented: Binding(get: { player.schlafFrage != nil }, set: { if !$0 { player.schlafFrageBeantworten(nil) } }),
+                            titleVisibility: .visible, presenting: player.schlafFrage) { n in
+            Button("Ab Timer gestellt (\(n.gestelltUm.formatted(date: .omitted, time: .shortened))) · \(dauerText(Int(n.gestellt)))") { player.schlafFrageBeantworten(n.gestellt) }
+            if let ab = n.abgeschaltet {
+                Button("5 Minuten vor dem Abschalten · \(dauerText(Int(max(ab - 300, 0))))") { player.schlafFrageBeantworten(max(ab - 300, 0)) }
+                Button("Wo der Timer abgeschaltet hat · \(dauerText(Int(ab)))") { player.schlafFrageBeantworten(nil) }
+            }
+        }
         .sheet(isPresented: Binding(get: { sitzung.playlistFuer != nil }, set: { if !$0 { sitzung.playlistFuer = nil } })) {
             PlaylistAuswahl(titel: sitzung.playlistFuer ?? [])
         }

@@ -197,6 +197,24 @@ public final class AudiobookshelfClient {
     }
 
     /// Als gehört bzw. ungehört markieren (wie in Audiobookshelf).
+    // MARK: Lesezeichen (Schlafmarken)
+
+    /// Lesezeichen dieses Hörbuchs, älteste zuerst.
+    public func lesezeichen(_ hoerbuch: String) async throws -> [Lesezeichen] {
+        struct Ich: Decodable { let bookmarks: [Lesezeichen]? }
+        let ich: Ich = try await hole("/api/me")
+        return (ich.bookmarks ?? []).filter { $0.libraryItemId == hoerbuch }
+    }
+
+    public func lesezeichenSetzen(_ hoerbuch: String, zeit: Double, titel: String) async throws {
+        let (daten, code) = try await sende("/api/me/item/\(hoerbuch)/bookmark", methode: "POST", json: ["time": Int(zeit), "title": titel])
+        guard (200..<300).contains(code) else { throw Self.fehler(daten, code) }
+    }
+
+    public func lesezeichenLoeschen(_ hoerbuch: String, zeit: Double) async throws {
+        _ = try await sende("/api/me/item/\(hoerbuch)/bookmark/\(Int(zeit))", methode: "DELETE")
+    }
+
     public func markiere(_ hoerbuch: String, folge: String? = nil, gehoert: Bool) async throws {
         let json: [String: Any] = gehoert ? ["isFinished": true] : ["isFinished": false, "progress": 0, "currentTime": 0]
         let (daten, code) = try await sende("/api/me/progress/\(hoerbuch)" + (folge.map { "/\($0)" } ?? ""), methode: "PATCH", json: json)

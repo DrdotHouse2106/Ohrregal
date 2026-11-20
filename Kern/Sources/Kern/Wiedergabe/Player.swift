@@ -200,6 +200,7 @@ public final class Player {
             folgeId = folge
             naechsteFolge = nil
             endeGemeldet = false
+            schlafFrage = folge == nil ? Schlafmarken.offeneFrage(id) : nil
             if let folge { Task { await naechsteBestimmen(podcast: id, folge: folge) } }
             istHoerbuch = true
             istRadio = false
@@ -363,6 +364,23 @@ public final class Player {
         schlafenAmKapitelende = false
         schlafenUm = minuten.map { Date().addingTimeInterval(Double($0) * 60) }
         player.volume = 1
+        // Schlafmarke: wo der Timer gestellt wurde (nur Hörbücher, nur Minuten-Timer).
+        if minuten != nil, istHoerbuch, folgeId == nil, let id = hoerbuchId, let abs = hoerbuchClient {
+            Schlafmarken.gestellt(id, zeit: zeit, abs)
+        }
+    }
+
+    /// Audiobookshelf-ID des laufenden Hörbuchs (nicht bei Podcast-Folgen).
+    public var hoerbuchItemId: String? { istHoerbuch && folgeId == nil ? hoerbuchId : nil }
+
+    /// Nach einer Timer-Nacht: Frage beim nächsten Start dieses Hörbuchs („Wo weiterhören?“).
+    public private(set) var schlafFrage: SchlafNacht?
+
+    public func schlafFrageBeantworten(_ ziel: Double?) {
+        guard let n = schlafFrage else { return }
+        schlafFrage = nil
+        Schlafmarken.beantwortet(n.hoerbuch)
+        if let ziel { springe(zu: ziel) }
     }
 
     /// Wofür „Ende“ beim Schlaf-Timer steht; nil beim Radio (kein Ende).
@@ -455,7 +473,10 @@ public final class Player {
         if let um = schlafenUm {
             let rest = um.timeIntervalSinceNow
             player.volume = Float(min(max(rest / 10, 0), 1))
-            if rest <= 0 { schlafPause = true; player.pause(); schlafenUm = nil; player.volume = 1 }
+            if rest <= 0 {
+                schlafPause = true; player.pause(); schlafenUm = nil; player.volume = 1
+                if istHoerbuch, folgeId == nil, let id = hoerbuchId, let abs = hoerbuchClient { Schlafmarken.abgeschaltet(id, zeit: zeit, abs) }
+            }
         }
         // „Ende“: Kapitel, sonst Folge bzw. Titel (bei Musik ist `zeit` die Stelle im Titel).
         if schlafenAmKapitelende {
