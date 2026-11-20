@@ -1,3 +1,4 @@
+import AVFoundation
 import Kern
 import ShazamKit
 import SwiftUI
@@ -80,7 +81,14 @@ struct ErkennenView: View {
         treffer = []
         lidarr = nil
         player.pause()
-        switch await SHManagedSession().result() {
+        // Ohrregal hält die Tonausgabe sonst auf reiner Wiedergabe; zum Zuhören das Mikrofon freigeben, danach zurück.
+        let ton = AVAudioSession.sharedInstance()
+        try? ton.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothA2DP])
+        try? ton.setActive(true)
+        defer { try? ton.setCategory(.playback) }
+        let sitzungShazam = SHManagedSession()
+        await sitzungShazam.prepare()
+        switch await sitzungShazam.result() {
         case .match(let treffer):
             guard let item = treffer.mediaItems.first, let titel = item.title else { meldung = "Nicht erkannt."; return }
             let kuenstler = item.artist ?? ""
@@ -90,7 +98,10 @@ struct ErkennenView: View {
         case .noMatch:
             meldung = "Nicht erkannt. Halte das iPhone näher an die Musik und versuche es noch einmal."
         case .error(let fehler, _):
-            meldung = "Erkennen fehlgeschlagen: \(fehler.deutsch)"
+            let code = (fehler as NSError).code
+            meldung = code == 202
+                ? "Shazam konnte gerade nicht abgleichen. Prüfe die Internetverbindung und versuche es noch einmal."
+                : "Erkennen fehlgeschlagen: \(fehler.deutsch)"
         @unknown default:
             meldung = "Nicht erkannt."
         }
