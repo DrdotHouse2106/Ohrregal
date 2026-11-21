@@ -126,6 +126,7 @@ public final class Player {
 
     public func spiele(_ titel: [Titel], ab start: Int = 0, quelle: String? = nil) {
         guard let client, !titel.isEmpty else { return }
+        folgenListe = []
         self.quelle = quelle
         beendeHoerbuch()
         istHoerbuch = false
@@ -146,6 +147,7 @@ public final class Player {
         istHoerbuch = false
         istRadio = true
         self.sender = sender
+        folgenListe = []
         kapitel = []
         warteschlange = []
         spuren = [(url, 0)]
@@ -199,6 +201,7 @@ public final class Player {
             hoerbuchId = id
             folgeId = folge
             naechsteFolge = nil
+            if folge == nil { folgenListe = [] }
             endeGemeldet = false
             schlafFrage = folge == nil ? Schlafmarken.offeneFrage(id) : nil
             if let folge { Task { await naechsteBestimmen(podcast: id, folge: folge) } }
@@ -533,11 +536,29 @@ public final class Player {
         sitzung = nil
         Task {
             try? await abs.markiere(id, folge: folge, gehoert: true)
-            if folge != nil, let naechste { await spiele(folge: naechste, podcast: id, podcastTitel: podcastTitel) }
+            // In „Alle neuen Folgen“ kann die nächste Folge zu einem anderen Podcast gehören.
+            if folge != nil, let naechste {
+                await spiele(folge: naechste, podcast: naechste.libraryItemId ?? id, podcastTitel: naechste.podcastTitel ?? podcastTitel)
+            }
         }
     }
 
+    /// „Alle neuen Folgen“: Warteschlange quer über die Lieblings-Podcasts (neueste zuerst).
+    public private(set) var folgenListe: [Folge] = []
+
+    /// Spielt die Folgen nacheinander, über Podcast-Grenzen hinweg; jede andere Wiedergabe beendet die Liste.
+    public func spieleFolgen(_ folgen: [Folge]) async {
+        guard let erste = folgen.first, let podcast = erste.libraryItemId else { return }
+        folgenListe = folgen
+        await spiele(folge: erste, podcast: podcast, podcastTitel: erste.podcastTitel ?? "")
+    }
+
     private func naechsteBestimmen(podcast: String, folge: String) async {
+        if let i = folgenListe.firstIndex(where: { $0.id == folge }) {
+            naechsteFolge = folgenListe.indices.contains(i + 1) ? folgenListe[i + 1] : nil
+            return
+        }
+        folgenListe = []
         guard let abs = hoerbuchClient, let alle = try? await abs.folgen(podcast), let stand = try? await abs.folgenFortschritt() else { return }
         let kandidat = FolgenRichtung.naechste(nach: folge, in: alle, stand: stand, richtung: FolgenRichtung.fuer(podcast))
         if folgeId == folge { naechsteFolge = kandidat }

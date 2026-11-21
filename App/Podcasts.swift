@@ -45,7 +45,14 @@ struct NeueFolgenReihe: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Neue Folgen").font(.title2.bold()).padding(.horizontal)
+            HStack {
+                Text("Neue Folgen").font(.title2.bold())
+                Spacer()
+                // Alle neuen Folgen der Lieblings-Podcasts nacheinander, neueste zuerst.
+                Button("Alle abspielen", systemImage: "play.fill") { Task { await NeueFolgen.alleAbspielen(sitzung, player) } }
+                    .font(.subheadline)
+            }
+            .padding(.horizontal)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
                     // Folgen der Lieblings-Podcasts zuerst.
@@ -336,5 +343,21 @@ struct FolgenCover: View {
                 guard let abs = sitzung.hoerbuchClient, !podcast.isEmpty else { return }
                 bild = await FolgenBild.bild(folge, podcast: podcast, abs)
             }
+    }
+}
+
+
+/// „Alle neuen Folgen“: ungehörte Folgen der Lieblings-Podcasts (ohne Favoriten: aller Podcasts), neueste zuerst.
+enum NeueFolgen {
+    @MainActor static func liste(_ abs: AudiobookshelfClient) async -> [Folge] {
+        let alle = (try? await abs.neueFolgen(anzahl: 60)) ?? []
+        let fav = Set(PodcastFavoriten.geteilt.ids)
+        let auswahl = fav.isEmpty ? alle : alle.filter { fav.contains($0.libraryItemId ?? "") }
+        return auswahl.sorted { ($0.datum ?? .distantPast) > ($1.datum ?? .distantPast) }
+    }
+
+    @MainActor static func alleAbspielen(_ sitzung: Sitzung, _ player: Player) async {
+        guard let abs = sitzung.hoerbuchClient else { return }
+        await player.spieleFolgen(await liste(abs))
     }
 }

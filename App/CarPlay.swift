@@ -132,12 +132,21 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             geteilterPlayer.spiele(titel, quelle: "CarPlay: Spiel etwas für mich")
         }
         spiel.setImage(UIImage(systemName: "sparkles"))
+        // Alle neuen Folgen der Lieblings-Podcasts nacheinander (neueste zuerst).
+        var oben: [CPListItem] = [spiel]
+        if let abs = geteilteSitzung.hoerbuchClient {
+            let folgen = abspielen("Neue Folgen meiner Podcasts", nil, bild: nil) {
+                await geteilterPlayer.spieleFolgen(await NeueFolgen.liste(abs))
+            }
+            folgen.setImage(UIImage(systemName: "dot.radiowaves.up.forward"))
+            oben.append(folgen)
+        }
 
         // Zeilen erscheinen nach und nach, „Spiel etwas für mich“ sofort.
         var zeilen: [CPListImageRowItem] = [] {
-            didSet { liste.updateSections([CPListSection(items: [spiel]), CPListSection(items: zeilen)]) }
+            didSet { liste.updateSections([CPListSection(items: oben), CPListSection(items: zeilen)]) }
         }
-        liste.updateSections([CPListSection(items: [spiel])])
+        liste.updateSections([CPListSection(items: oben)])
         if !mixe.isEmpty {
             zeilen.append(await bildzeile("Für dich", mixe.map { m -> Bildeintrag in
                 (client.coverURL(m.cover.first, groesse: 300), { geteilterPlayer.spiele(m.titel, quelle: "CarPlay: Mix: \(m.name)") })
@@ -162,7 +171,7 @@ final class CarPlayDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
                 })
             }, liste: alben.map { albumEintrag($0, client) }))
         }
-        liste.updateSections([CPListSection(items: [spiel]), CPListSection(items: zeilen)])
+        liste.updateSections([CPListSection(items: oben), CPListSection(items: zeilen)])
     }
 
     /// Zeile mit Covern; die Bilder werden geladen, bevor die Zeile erscheint.
