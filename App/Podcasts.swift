@@ -353,7 +353,12 @@ enum NeueFolgen {
         let alle = (try? await abs.neueFolgen(anzahl: 60)) ?? []
         let fav = Set(PodcastFavoriten.geteilt.ids)
         let auswahl = fav.isEmpty ? alle : alle.filter { fav.contains($0.libraryItemId ?? "") }
-        return auswahl.sorted { ($0.datum ?? .distantPast) > ($1.datum ?? .distantPast) }
+        // Angefangene Folgen zuerst (an ihrer Stelle weiter), dann die ungehörten, jeweils neueste zuerst.
+        let stand = (try? await abs.folgenFortschritt()) ?? [:]
+        return auswahl.sorted { a, b in
+            let aa = (stand[a.id] ?? 0) > 0, ba = (stand[b.id] ?? 0) > 0
+            return aa != ba ? aa : (a.datum ?? .distantPast) > (b.datum ?? .distantPast)
+        }
     }
 
     @MainActor static func alleAbspielen(_ sitzung: Sitzung, _ player: Player) async {
