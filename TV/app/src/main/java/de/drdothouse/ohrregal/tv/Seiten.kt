@@ -101,13 +101,21 @@ fun PodcastsTab(abs: Audiobookshelf, oeffne: (Seite) -> Unit) {
     val (fav, _) = laden(abs) { abs.favoriten() }
     val rang = { id: String -> (fav ?: emptyList()).indexOf(id).let { if (it < 0) Int.MAX_VALUE else it } }
     // Lieblings-Podcasts (vom iPhone gemerkt) und ihre Folgen zuerst.
-    val (folgenRoh, fehler) = laden(abs) { abs.neueFolgen(20) }
+    val (folgenRoh, fehler) = laden(abs) { abs.neueFolgen(60) }
     val (podcastsRoh, _) = laden(abs) { abs.bibliotheken("podcast").flatMap { abs.eintraege(it, anzahl = 100) } }
     val folgen = folgenRoh?.sortedBy { rang(it.itemId) }
     val podcasts = podcastsRoh?.sortedBy { rang(it.id) }
     if (fehler != null && folgen == null) { Hinweis(fehler); return }
     if (folgen?.isEmpty() == true && podcasts?.isEmpty() == true) { Hinweis("Keine Podcasts in Audiobookshelf."); return }
     LazyColumn(contentPadding = PaddingValues(bottom = 48.dp)) {
+        item {
+            // Alle neuen Folgen der Lieblings-Podcasts nacheinander, neueste zuerst (ohne Favoriten: alle).
+            Button(onClick = {
+                val f = fav ?: emptyList()
+                val liste = (folgenRoh ?: emptyList()).filter { f.isEmpty() || it.itemId in f }.sortedByDescending { it.datum }
+                Wiedergabe.spieleFolgen(liste); oeffne(Seite.Player)
+            }, modifier = Modifier.padding(start = 48.dp, top = 8.dp)) { Text("▶  Alle neuen Folgen meiner Podcasts") }
+        }
         item { Reihe("Neue Folgen", folgen ?: emptyList()) { f -> FolgenKarte(f, abs, oeffne) } }
         item { Reihe("Podcasts", podcasts ?: emptyList()) { p -> Karte(abs.cover(p.id, p.stand), (if (rang(p.id) != Int.MAX_VALUE) "★ " else "") + p.titel, p.autor) { oeffne(Seite.PodcastS(p)) } } }
     }

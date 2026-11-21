@@ -139,6 +139,7 @@ object Wiedergabe {
 
     fun spiele(liste: List<Titel>, ab: Int = 0, startMs: Long = 0) {
         val n = navidrome ?: return
+        folgenListe = emptyList()
         beendeSitzung()
         titel = liste; spuren = emptyList(); kapitel = emptyList(); istHoerbuch = false; istRadio = false
         mitController { c ->
@@ -151,6 +152,7 @@ object Wiedergabe {
     fun spiele(sender: Sender) {
         beendeSitzung()
         this.sender = sender
+        folgenListe = emptyList()
         titel = emptyList(); spuren = emptyList(); kapitel = emptyList(); istHoerbuch = false; istRadio = true
         anzeige = Anzeige(sender.name, "Internetradio", null); dauer = 0.0
         mitController { c -> c.setMediaItem(eintrag(sender.url, sender.name, "Internetradio", null)); c.prepare(); c.play() }
@@ -165,6 +167,7 @@ object Wiedergabe {
                 val s = a.starte(id, folge)
                 sitzung = s.id; spuren = s.spuren; kapitel = s.kapitel; titel = emptyList()
                 itemId = id; folgeId = folge
+                if (folge == null || folgenListe.none { it.id == folge }) folgenListe = emptyList()
                 if (folge == null && !nurMitspielen) schlafFragePruefen(id) else schlafFrage = null
                 istHoerbuch = true; istRadio = false; dauer = s.dauer
                 anzeige = Anzeige(s.titel, s.autor, cover ?: a.cover(id))
@@ -314,6 +317,15 @@ object Wiedergabe {
         }
     }
 
+    /** „Alle neuen Folgen“ quer über die Lieblings-Podcasts; jede andere Wiedergabe beendet die Liste. */
+    private var folgenListe: List<Folge> = emptyList()
+
+    fun spieleFolgen(liste: List<Folge>) {
+        val erste = liste.firstOrNull() ?: return
+        folgenListe = liste
+        spiele(erste.itemId, erste.id)
+    }
+
     /** Ende von Hörbuch oder Folge: als gehört markieren, bei Podcasts die nächste ungehörte Folge starten. */
     private fun zuEnde() {
         if (nurMitspielen) return
@@ -325,7 +337,10 @@ object Wiedergabe {
         sitzung = null
         bereich.launch {
             a.markiereGehoert(id, folge)
-            if (folge != null) runCatching { a.naechsteFolge(id, folge) }.getOrNull()?.let { spiele(id, it.id) }
+            if (folge == null) return@launch
+            val i = folgenListe.indexOfFirst { it.id == folge }
+            if (i >= 0) folgenListe.getOrNull(i + 1)?.let { spiele(it.itemId, it.id) }
+            else runCatching { a.naechsteFolge(id, folge) }.getOrNull()?.let { spiele(id, it.id) }
         }
     }
 
