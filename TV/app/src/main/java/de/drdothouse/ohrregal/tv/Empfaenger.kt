@@ -72,7 +72,8 @@ object Empfaenger {
         val s = runCatching { ServerSocket(PORT) }.getOrElse { ServerSocket(0) }
         server = s
         val info = NsdServiceInfo().apply {
-            serviceName = name
+            // IP zusätzlich im Namen: Ältere Sticks (Android 5) senden die TXT-Einträge nicht mit.
+            serviceName = adresseIp()?.let { "$name · $it" } ?: name
             serviceType = "_ohrregal._tcp"
             port = s.localPort
             // Alle Sticks heißen im Netz „Android.local“; deshalb die eigene IPv4 mitschicken, das iPhone verbindet direkt.

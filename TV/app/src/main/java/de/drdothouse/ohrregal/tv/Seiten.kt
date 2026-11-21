@@ -353,11 +353,12 @@ fun GruppeBereich() {
         return
     }
     Text("Andere Fernseher holen dazu und spielen dann genau dasselbe wie dieser.", color = Farben.gedaempft)
+    Gruppe.meldung?.let { Text(it, color = Color.White, style = MaterialTheme.typography.titleMedium) }
     if (Gruppe.gefunden.isEmpty()) Text("Suche andere Fernseher mit geöffnetem Ohrregal …", color = Farben.gedaempft)
     Gruppe.gefunden.forEach { f ->
         val dabei = Gruppe.mitspieler.any { it.adresse == f.adresse }
         Button(onClick = { if (dabei) Gruppe.entlassen(f) else Gruppe.dazuholen(f) }) {
-            Text(if (dabei) "✓ ${f.name} – entfernen" else "+ ${f.name} dazuholen")
+            Text(if (dabei) "✓ ${f.name} – entfernen" else "+ ${f.name} dazuholen (${f.adresse.substringBefore(":")})")
         }
     }
 }

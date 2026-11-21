@@ -189,7 +189,7 @@ object Wiedergabe {
     fun stopp() {
         beendeSitzung()
         controller?.run { stop(); clearMediaItems() }
-        anzeige = null; titel = emptyList(); spuren = emptyList(); kapitel = emptyList(); istHoerbuch = false; istRadio = false
+        spielt = false; anzeige = null; titel = emptyList(); spuren = emptyList(); kapitel = emptyList(); istHoerbuch = false; istRadio = false
     }
 
     fun pause() = mitController { it.pause() }

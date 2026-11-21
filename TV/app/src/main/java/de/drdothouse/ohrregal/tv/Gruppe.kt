@@ -35,6 +35,8 @@ object Gruppe {
     /** Fernseher, die diesem hier folgen. */
     val mitspieler = mutableStateListOf<Fernseher>()
     var verzoegerungMs by mutableStateOf(0L)
+    /** Rückmeldung in den Einstellungen („Verbinde …“, Fehler mit Grund). */
+    var meldung by mutableStateOf<String?>(null)
 
     // MARK: Suchen
 
@@ -53,11 +55,14 @@ object Gruppe {
             nsd.resolveService(info, object : NsdManager.ResolveListener {
                 override fun onResolveFailed(i: NsdServiceInfo, e: Int) { bereich.launch { loest = false; naechste() } }
                 override fun onServiceResolved(i: NsdServiceInfo) {
-                    val ip = i.attributes["ip"]?.let { String(it) } ?: i.host?.hostAddress
+                    // Reihenfolge: TXT-Eintrag, IP im Namen, zuletzt Hostname (unsicher, alle heißen „Android.local“).
+                    val ip = i.attributes["ip"]?.let { String(it) }
+                        ?: Regex(""" · (\d+\.\d+\.\d+\.\d+)$""").find(i.serviceName)?.groupValues?.get(1)
+                        ?: (i.host as? java.net.Inet4Address)?.hostAddress
                     val adresse = "$ip:${i.port}"
                     bereich.launch {
                         if (ip != null && !adresse.startsWith(Empfaenger.eigeneIp() + ":") && gefunden.none { it.adresse == adresse })
-                            gefunden.add(Fernseher(i.serviceName.removePrefix("Ohrregal – "), adresse))
+                            gefunden.add(Fernseher(i.serviceName.removePrefix("Ohrregal – ").substringBefore(" · "), adresse))
                         loest = false; naechste()
                     }
                 }
@@ -79,10 +84,15 @@ object Gruppe {
 
     /** Holt einen anderen Fernseher dazu: Er folgt ab jetzt diesem hier. */
     fun dazuholen(f: Fernseher) = bereich.launch {
-        val (code, _) = runCatching { Netz.hole("http://${f.adresse}/gruppe/folgen", "POST",
-            JSONObject().put("leiter", Empfaenger.eigeneAdresse()).put("name", Empfaenger.name)) }.getOrDefault(0 to "")
-        if (code == 200 && mitspieler.none { it.adresse == f.adresse }) mitspieler.add(f)
-        else if (code != 200) Wiedergabe.fehler = "„${f.name}“ antwortet nicht. Ist Ohrregal dort geöffnet und eine Person gewählt?"
+        meldung = "Verbinde mit „${f.name}“ (${f.adresse}) …"
+        val antwort = runCatching { Netz.hole("http://${f.adresse}/gruppe/folgen", "POST",
+            JSONObject().put("leiter", Empfaenger.eigeneAdresse()).put("name", Empfaenger.name)) }
+        val (code, text) = antwort.getOrDefault(0 to "")
+        meldung = when {
+            code == 200 -> { if (mitspieler.none { it.adresse == f.adresse }) mitspieler.add(f); "„${f.name}“ spielt jetzt mit. Starte hier etwas." }
+            code == 0 -> "„${f.name}“ (${f.adresse}) antwortet nicht: ${antwort.exceptionOrNull()?.let { it::class.simpleName + " " + (it.message ?: "") } ?: "keine Antwort"}"
+            else -> "„${f.name}“ lehnt ab (Fehler $code): " + (runCatching { JSONObject(text).optString("text") }.getOrNull() ?: text.take(80))
+        }
     }
 
     fun entlassen(f: Fernseher) = bereich.launch {
