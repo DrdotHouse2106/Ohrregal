@@ -84,14 +84,14 @@ object Gruppe {
 
     /** Holt einen anderen Fernseher dazu: Er folgt ab jetzt diesem hier. */
     fun dazuholen(f: Fernseher) = bereich.launch {
-        meldung = "Verbinde mit „${f.name}“ (${f.adresse}) …"
+        meldung = "Verbinde mit „${f.name}“ …"
         val antwort = runCatching { Netz.hole("http://${f.adresse}/gruppe/folgen", "POST",
             JSONObject().put("leiter", Empfaenger.eigeneAdresse()).put("name", Empfaenger.name)) }
         val (code, text) = antwort.getOrDefault(0 to "")
         meldung = when {
-            code == 200 -> { if (mitspieler.none { it.adresse == f.adresse }) mitspieler.add(f); "„${f.name}“ spielt jetzt mit. Starte hier etwas." }
-            code == 0 -> "„${f.name}“ (${f.adresse}) antwortet nicht: ${antwort.exceptionOrNull()?.let { it::class.simpleName + " " + (it.message ?: "") } ?: "keine Antwort"}"
-            else -> "„${f.name}“ lehnt ab (Fehler $code): " + (runCatching { JSONObject(text).optString("text") }.getOrNull() ?: text.take(80))
+            code == 200 -> { if (mitspieler.none { it.adresse == f.adresse }) mitspieler.add(f); "„${f.name}“ ist verbunden. Starte jetzt hier etwas." }
+            code == 0 -> "„${f.name}“ antwortet nicht. Ist Ohrregal dort geöffnet? (${f.adresse}: ${antwort.exceptionOrNull()?.let { it::class.simpleName + " " + (it.message ?: "") } ?: "keine Antwort"})"
+            else -> "„${f.name}“ hat abgelehnt (Fehler $code): " + (runCatching { JSONObject(text).optString("text") }.getOrNull() ?: text.take(80))
         }
     }
 

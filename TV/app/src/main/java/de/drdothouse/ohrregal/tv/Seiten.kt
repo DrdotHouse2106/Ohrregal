@@ -339,26 +339,26 @@ fun FavoritKnopf(id: String, abs: Audiobookshelf?) {
 /** Mehrere Fernseher gleichzeitig: andere dazuholen bzw. als Mitspieler die Verzögerung einstellen. */
 @Composable
 fun GruppeBereich() {
-    Text("Mehrere Fernseher gleichzeitig", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp))
+    Text("Auf mehreren Fernsehern gleichzeitig hören", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp))
     val leiter = Gruppe.leiter
     if (leiter != null) {
-        Text("Dieser Fernseher spielt mit „${Gruppe.leiterName}“.", color = Color.White)
+        Text("Dieser Fernseher spielt dasselbe wie „${Gruppe.leiterName}“.", color = Color.White)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { Gruppe.verzoegerungMs -= 20 }) { Text("− 20 ms") }
-            Text("Verzögerung: ${Gruppe.verzoegerungMs} ms", color = Color.White)
-            Button(onClick = { Gruppe.verzoegerungMs += 20 }) { Text("+ 20 ms") }
-            Button(onClick = { Gruppe.verlassen() }) { Text("Gruppe verlassen") }
+            Button(onClick = { Gruppe.verzoegerungMs -= 20 }) { Text("Früher") }
+            Text("Ton: ${Gruppe.verzoegerungMs} ms", color = Color.White)
+            Button(onClick = { Gruppe.verzoegerungMs += 20 }) { Text("Später") }
+            Button(onClick = { Gruppe.verlassen() }) { Text("Trennen") }
         }
-        Text("Klingt dieser Fernseher früher als die anderen: Verzögerung erhöhen.", color = Farben.gedaempft)
+        Text("Ist der Ton hier nicht genau gleich wie beim anderen Fernseher, mit „Früher“ oder „Später“ angleichen.", color = Farben.gedaempft)
         return
     }
-    Text("Andere Fernseher holen dazu und spielen dann genau dasselbe wie dieser.", color = Farben.gedaempft)
+    Text("Wähle einen Fernseher aus. Er spielt dann dasselbe wie dieser, zur selben Zeit.", color = Farben.gedaempft)
     Gruppe.meldung?.let { Text(it, color = Color.White, style = MaterialTheme.typography.titleMedium) }
-    if (Gruppe.gefunden.isEmpty()) Text("Suche andere Fernseher mit geöffnetem Ohrregal …", color = Farben.gedaempft)
+    if (Gruppe.gefunden.isEmpty()) Text("Suche andere Fernseher … Dort muss Ohrregal geöffnet sein.", color = Farben.gedaempft)
     Gruppe.gefunden.forEach { f ->
         val dabei = Gruppe.mitspieler.any { it.adresse == f.adresse }
         Button(onClick = { if (dabei) Gruppe.entlassen(f) else Gruppe.dazuholen(f) }) {
-            Text(if (dabei) "✓ ${f.name} – entfernen" else "+ ${f.name} dazuholen (${f.adresse.substringBefore(":")})")
+            Text(if (dabei) "✓ ${f.name} trennen" else "${f.name} verbinden")
         }
     }
 }
