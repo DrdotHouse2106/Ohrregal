@@ -98,7 +98,6 @@ fun HoerbuecherTab(abs: Audiobookshelf, oeffne: (Seite) -> Unit) {
 
 @Composable
 fun PodcastsTab(abs: Audiobookshelf, oeffne: (Seite) -> Unit) {
-    val bereich = rememberCoroutineScope()
     val (fav, _) = laden(abs) { abs.favoriten() }
     val rang = { id: String -> (fav ?: emptyList()).indexOf(id).let { if (it < 0) Int.MAX_VALUE else it } }
     // Lieblings-Podcasts (vom iPhone gemerkt) und ihre Folgen zuerst.
@@ -113,13 +112,8 @@ fun PodcastsTab(abs: Audiobookshelf, oeffne: (Seite) -> Unit) {
             // Alle neuen Folgen der Lieblings-Podcasts nacheinander, neueste zuerst (ohne Favoriten: alle).
             Button(onClick = {
                 val f = fav ?: emptyList()
-                // Angefangene zuerst (dort weiter), dann ungehörte, jeweils neueste zuerst.
-                bereich.launch {
-                    val stand = runCatching { abs.folgenStand() }.getOrDefault(emptyMap())
-                    val liste = (folgenRoh ?: emptyList()).filter { f.isEmpty() || it.itemId in f }
-                        .sortedWith(compareByDescending<Folge> { (stand[it.id] ?: 0.0) > 0 }.thenByDescending { it.datum })
-                    Wiedergabe.spieleFolgen(liste); oeffne(Seite.Player)
-                }
+                val liste = (folgenRoh ?: emptyList()).filter { f.isEmpty() || it.itemId in f }.sortedByDescending { it.datum }
+                Wiedergabe.spieleFolgen(liste); oeffne(Seite.Player)
             }, modifier = Modifier.padding(start = 48.dp, top = 8.dp)) { Text("▶  Alle neuen Folgen meiner Podcasts") }
         }
         item { Reihe("Neue Folgen", folgen ?: emptyList()) { f -> FolgenKarte(f, abs, oeffne) } }
