@@ -105,7 +105,16 @@ public final class Player {
             let info = meldung.userInfo
             let beginn = (info?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue
             let weiter = AVAudioSession.InterruptionOptions(rawValue: info?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0).contains(.shouldResume)
-            MainActor.assumeIsolated { self?.unterbrochen(beginn: beginn, weiter: weiter) }
+            let grund = info?[AVAudioSessionInterruptionReasonKey] as? UInt
+            MainActor.assumeIsolated {
+                if beginn { self?.pauseGrund = "unterbrechung" + (grund.map { ":\($0)" } ?? "") }
+                self?.unterbrochen(beginn: beginn, weiter: weiter)
+            }
+        })
+        // Ausgabe gewechselt (z. B. Auto getrennt): iOS hält dann selbst an. Grund fürs Hörprotokoll merken.
+        beobachter.append(NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] meldung in
+            let grund = meldung.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
+            MainActor.assumeIsolated { self?.pauseGrund = "ausgabe:\(grund)" }
         })
         #endif
         fernsteuerung()
@@ -267,9 +276,23 @@ public final class Player {
 
     // MARK: Steuerung
 
-    public func umschalten() { spielt ? player.pause() : player.play() }
+    public func umschalten() { if spielt { pauseGrund = "app" }; spielt ? player.pause() : player.play() }
 
-    public func pause() { player.pause() }
+    public func pause() { pauseGrund = "app"; player.pause() }
+
+    /// Warum zuletzt angehalten wurde (steht im Hörprotokoll beim Ereignis „pause“).
+    @ObservationIgnored var pauseGrund: String?
+    @ObservationIgnored private var gestartetUm = Date.distantPast
+
+    /// Pause vom Auto, Kopfhörer oder Sperrbildschirm. Manche Autos schicken kurz nach dem Start ein Pause,
+    /// obwohl niemand gedrückt hat; das wird in den ersten 2 Sekunden übergangen.
+    private func fernPause(_ art: String) {
+        guard Date().timeIntervalSince(gestartetUm) > 2 else {
+            Protokoll.geteilt.merke("pause-uebergangen", art: istHoerbuch ? "hoerbuch" : "musik", position: zeit, wert: art); return
+        }
+        pauseGrund = "fern:" + art
+        player.pause()
+    }
 
     /// Musik: nächster Titel. Hörbuch: 30 Sekunden vor.
     public func weiter() {
@@ -494,9 +517,14 @@ public final class Player {
 
     private func laeuftGeaendert(_ laeuft: Bool) {
         if spielt && !laeuft {
+            var grund = schlafPause ? "schlaf" : (pauseGrund ?? "unbekannt")
+            #if os(iOS)
+            grund += " · " + (AVAudioSession.sharedInstance().currentRoute.outputs.first?.portName ?? "")
+            #endif
             Protokoll.geteilt.merke("pause", titel: aktuell, art: istHoerbuch ? "hoerbuch" : "musik", position: zeit,
-                                    id: hoerbuchId, name: istHoerbuch ? anzeige?.titel : nil)
+                                    wert: grund, id: hoerbuchId, name: istHoerbuch ? anzeige?.titel : nil)
         }
+        if laeuft && !spielt { gestartetUm = Date(); pauseGrund = nil }
         spielt = laeuft
         // Hält der Player in der letzten Datei knapp vor Schluss an, ist das das Ende (falls keine Meldung kam).
         if !laeuft, istHoerbuch, !schlafPause, spur == spuren.count - 1, dauer > 0, zeit >= dauer - 2 {
@@ -593,8 +621,9 @@ public final class Player {
     private func fernsteuerung() {
         let c = MPRemoteCommandCenter.shared()
         _ = c.playCommand.addTarget { [weak self] _ in Task { @MainActor in self?.player.play() }; return .success }
-        _ = c.pauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.player.pause() }; return .success }
-        _ = c.togglePlayPauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.umschalten() }; return .success }
+        _ = c.pauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.fernPause("pause") }; return .success }
+        _ = c.togglePlayPauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor in guard let self else { return }; self.spielt ? self.fernPause("umschalten") : self.player.play() }; return .success }
         _ = c.nextTrackCommand.addTarget { [weak self] _ in Task { @MainActor in self?.weiter() }; return .success }
         _ = c.previousTrackCommand.addTarget { [weak self] _ in Task { @MainActor in self?.zurueck() }; return .success }
         c.skipForwardCommand.preferredIntervals = [30]
