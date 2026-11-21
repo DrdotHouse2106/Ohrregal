@@ -57,6 +57,8 @@ class Navidrome(val server: String, val benutzer: String, private val passwort: 
 
     suspend fun playlist(id: String) = hole("getPlaylist", mapOf("id" to id)).getJSONObject("playlist").liste("entry").map(::titel)
 
+    suspend fun aehnlich(id: String, anzahl: Int = 40) = hole("getSimilarSongs2", mapOf("id" to id, "count" to "$anzahl")).optJSONObject("similarSongs2")?.liste("song")?.map(::titel) ?: emptyList()
+
     suspend fun zufall(anzahl: Int = 50) = hole("getRandomSongs", mapOf("size" to "$anzahl")).optJSONObject("randomSongs")?.liste("song")?.map(::titel) ?: emptyList()
 
     suspend fun sender() = hole("getInternetRadioStations").optJSONObject("internetRadioStations")?.liste("internetRadioStation")

@@ -261,10 +261,13 @@ object Wiedergabe {
         val c = controller ?: return
         val leiterTempo = s.optDouble("tempo", 1.0)
         val soll = s.getDouble("position") + (if (s.optBoolean("spielt")) (System.currentTimeMillis() + versatz - s.getLong("zeit")) / 1000.0 * leiterTempo else 0.0) - verzoegerungMs / 1000.0
+        val leiterTitel = if (s.optString("art") == "musik") s.liste("titel").map { Titel(it.getString("id"), it.optString("titel"), it.optString("kuenstler"), it.optString("album"), it.text("cover"), it.optLong("dauer")) } else emptyList()
+        // Leiter hat nur Titel angehängt: anhängen statt neu laden (kein Aussetzer).
+        if (!istHoerbuch && !istRadio && anzeige != null && titel.isNotEmpty() && leiterTitel.size > titel.size && leiterTitel.take(titel.size).map { it.id } == titel.map { it.id })
+            anhaengen(leiterTitel.drop(titel.size))
         if (s.optString("schluessel") != schluessel() || anzeige == null) {
             when (s.optString("art")) {
-                "musik" -> spiele(s.liste("titel").map { Titel(it.getString("id"), it.optString("titel"), it.optString("kuenstler"), it.optString("album"), it.text("cover"), it.optLong("dauer")) },
-                    s.optInt("index"), (soll * 1000).toLong().coerceAtLeast(0))
+                "musik" -> spiele(leiterTitel, s.optInt("index"), (soll * 1000).toLong().coerceAtLeast(0))
                 "hoerbuch" -> spiele(s.getString("id"), s.text("folge"))
                 "radio" -> spiele(Sender("", s.optString("name"), s.optString("url")))
             }
@@ -293,6 +296,32 @@ object Wiedergabe {
         anzeige = Anzeige(t.titel, t.kuenstler, navidrome?.cover(t.cover, 600))
         dauer = t.dauer.toDouble()
         if (!nurMitspielen) bereich.launch { navidrome?.scrobble(t.id, false) }
+        if (!nurMitspielen && i >= titel.size - 2) nachladen(t)
+    }
+
+    private var laedtNach = false
+
+    /** Endlos wie auf dem iPhone: Läuft die Liste aus, kommen ähnliche Titel dazu, sonst Zufallstitel. */
+    private fun nachladen(ab: Titel) {
+        val n = navidrome ?: return
+        if (laedtNach) return
+        laedtNach = true
+        bereich.launch {
+            val vorher = titel
+            val schon = vorher.map { it.id }.toSet()
+            var neu = runCatching { n.aehnlich(ab.id) }.getOrDefault(emptyList()).filter { it.id !in schon }
+            if (neu.size < 5) neu += runCatching { n.zufall(20) }.getOrDefault(emptyList()).filter { it.id !in schon }
+            // Inzwischen etwas anderes gestartet? Dann nichts anhängen.
+            if (titel === vorher && !istHoerbuch && !istRadio) anhaengen(neu.distinctBy { it.id }.shuffled().take(20))
+            laedtNach = false
+        }
+    }
+
+    private fun anhaengen(neu: List<Titel>) {
+        val n = navidrome ?: return
+        if (neu.isEmpty()) return
+        titel = titel + neu
+        mitController { c -> c.addMediaItems(neu.map { eintrag(n.stream(it.id), it.titel, it.kuenstler, n.cover(it.cover, 600)) }) }
     }
 
     private fun tick() {
