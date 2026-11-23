@@ -24,6 +24,7 @@ struct MusikView: View {
                 NavigationLink(value: Ziel.erkennen) { Label("Titel erkennen", systemImage: "shazam.logo") }
                 if sitzung.dienstDa {
                     NavigationLink(value: Ziel.musikwuensche("")) { Label("Musik wünschen", systemImage: "sparkles") }
+                    NavigationLink(value: Ziel.ohrwurm) { Label("Ohrwurm", systemImage: "music.note.house") }
                 }
             }
         }

@@ -57,6 +57,8 @@ enum Ziel: Hashable {
     case podcast(Hoerbuch)
     case podcastNachId(String)
     case podcastSuche
+    case ohrwurm
+    case ohrwurmKuenstler(String, String)
 
     @ViewBuilder var ansicht: some View {
         switch self {
@@ -81,6 +83,8 @@ enum Ziel: Hashable {
         case .podcast(let p): PodcastView(podcast: p)
         case .podcastNachId(let id): PodcastNachId(id: id)
         case .podcastSuche: PodcastSucheView()
+        case .ohrwurm: OhrwurmView()
+        case .ohrwurmKuenstler(let id, let name): OhrwurmKuenstlerView(id: id, name: name)
         }
     }
 }

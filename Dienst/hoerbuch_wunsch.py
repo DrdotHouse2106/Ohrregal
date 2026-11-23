@@ -39,7 +39,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.9.1"
+VERSION = "2.10.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -108,6 +108,9 @@ class Einstellungen:
         self.parallel = int(env("WUNSCH_PARALLEL", "2"))
         self.takt = int(env("WUNSCH_TAKT_SEKUNDEN", "60"))
         self.neuversuch_h = int(env("WUNSCH_NEUVERSUCH_STUNDEN", "24"))
+        # Ohrwurm (Musiksammlung mit Apple-Katalog): Die App spricht nur über diesen Dienst mit ihm.
+        self.ohrwurm = env("OHRWURM_URL", "").rstrip("/")
+        self.ohrwurm_zugang = env("OHRWURM_ZUGANG", "")
         # Reverse-Proxys, deren X-Forwarded-For/X-Real-IP geglaubt wird (für die Fehlversuchssperre)
         self.proxys = {p.strip() for p in env("WUNSCH_PROXYS", "").split(",") if p.strip()}
 
@@ -2343,10 +2346,42 @@ class Schnittstelle(BaseHTTPRequestHandler):
         self._start = time.time()
         super().handle_one_request()
 
+    # Erlaubte Aufrufe an Ohrwurm (Methode, Pfad nach /ohrwurm/). Einsortieren und Stand bleiben dem Server vorbehalten.
+    OHRWURM_ERLAUBT = [("GET", r"status|suche|wuensche|folgen|neuheiten|kuenstler/\d+"),
+                       ("POST", r"wuensche|folgen|neuheiten/gesehen"), ("DELETE", r"(wuensche|folgen)/\d+")]
+
+    def ohrwurm_weiter(self, methode, teile):
+        if not E.ohrwurm or not E.ohrwurm_zugang:
+            return self.fehler(503, "nicht_eingerichtet", "Ohrwurm ist am Server noch nicht eingerichtet")
+        rest = "/".join(teile[1:])
+        if not any(m == methode and re.fullmatch(p, rest) for m, p in self.OHRWURM_ERLAUBT):
+            return self.fehler(404, "unbekannt", "Unbekannter Aufruf")
+        abfrage = urllib.parse.urlsplit(self.path).query
+        try:
+            daten = json.dumps(self.koerper()).encode() if methode == "POST" else None
+        except (ValueError, json.JSONDecodeError):
+            return self.fehler(400, "ungueltig", "Kein gültiges JSON-Objekt")
+        kopf = {"Authorization": "Bearer " + E.ohrwurm_zugang, "Content-Type": "application/json"}
+        url = f"{E.ohrwurm}/api/{rest}" + (f"?{abfrage}" if abfrage else "")
+        try:
+            # „Alles von Künstler X“ und die erste Künstlerseite holen viele Katalogseiten
+            antwort, code = hole(url, daten, kopf, zeit=300, methode=methode), 200
+        except urllib.error.HTTPError as f:
+            antwort, code = f.read(), f.code
+        except (urllib.error.URLError, OSError):
+            return self.fehler(502, "ohrwurm_weg", "Ohrwurm antwortet nicht")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(antwort)))
+        self.end_headers()
+        self.wfile.write(antwort)
+
     def do_GET(self):
         teile, abfrage = self.pfad()
         if teile == ["status"]:
             return self.antworte(200, {"ok": True, "version": VERSION})
+        if teile[:1] == ["ohrwurm"]:
+            return self.benutzer() and self.ohrwurm_weiter("GET", teile)
         if teile[:1] == ["musik"]:
             name = self.benutzer()
             if not name:
@@ -2459,6 +2494,8 @@ class Schnittstelle(BaseHTTPRequestHandler):
         name = self.benutzer()
         if not name:
             return
+        if teile[:1] == ["ohrwurm"]:
+            return self.ohrwurm_weiter("POST", teile)
         if teile == ["reihe"]:
             return self.reihe_folgen(name)
         if teile == ["podcast"]:
@@ -2738,6 +2775,8 @@ class Schnittstelle(BaseHTTPRequestHandler):
         name = self.benutzer()
         if not name:
             return
+        if teile[:1] == ["ohrwurm"]:
+            return self.ohrwurm_weiter("DELETE", teile)
         if teile == ["ereignisse"]:
             abfrage = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             sql, werte = "DELETE FROM ereignis WHERE benutzer=?", [name]
