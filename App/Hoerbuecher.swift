@@ -311,7 +311,22 @@ struct HoerbuchView: View {
     @State private var startet = false
     /// Volle Daten (Beschreibung, Sprecher …); Listen liefern nur eine gekürzte Form.
     @State private var voll: Hoerbuch?
+    @State private var liste: HoerbuchFilter?
     private var h: Hoerbuch { voll ?? hoerbuch }
+
+    /// Autor, Sprecher oder Reihe antippen → alle Hörbücher dazu. Bei mehreren erst auswählen.
+    @ViewBuilder private func verweis(_ v: [Hoerbuch.Metadaten.Verweis], art: String, text: String, titel: String? = nil) -> some View {
+        let bib = h.libraryId ?? hoerbuch.libraryId
+        if v.count == 1, let e = v.first {
+            Button(text) { liste = HoerbuchFilter(bibliothek: bib, art: art, wert: e.id, titel: e.name) }.buttonStyle(.plain)
+        } else if v.count > 1 {
+            Menu(text) {
+                ForEach(v, id: \.id) { e in Button(e.name) { liste = HoerbuchFilter(bibliothek: bib, art: art, wert: e.id, titel: e.name) } }
+            }
+        } else {
+            Text(text)
+        }
+    }
 
     private var istGeladen: Bool {
         player.istHoerbuch && player.anzeige?.cover == sitzung.hoerbuchClient?.coverURL(hoerbuch.id)
@@ -323,12 +338,15 @@ struct HoerbuchView: View {
                 Cover(url: sitzung.hoerbuchClient?.coverURL(hoerbuch.id), groesse: 260)
                     .shadow(radius: 20)
                 Text(h.titel).font(.title2.bold()).multilineTextAlignment(.center)
-                Text(h.autor).font(.title3).foregroundStyle(Farben.blau)
-                if let sprecher = h.media.metadata.narratorName, !sprecher.isEmpty {
-                    Text("Gelesen von \(sprecher)").font(.subheadline).foregroundStyle(Farben.textGedaempft)
+                let m = h.media.metadata
+                verweis(m.autoren, art: "authors", text: h.autor).font(.title3).foregroundStyle(Farben.blau)
+                if let sprecher = m.narratorName, !sprecher.isEmpty {
+                    verweis(m.sprecher, art: "narrators", text: "Gelesen von \(sprecher)", titel: "Gelesen von")
+                        .font(.subheadline).foregroundStyle(m.sprecher.isEmpty ? Farben.textGedaempft : Farben.blau)
                 }
-                if let reihe = h.media.metadata.seriesName, !reihe.isEmpty {
-                    Text(reihe).font(.subheadline).foregroundStyle(Farben.textGedaempft)
+                if let reihe = m.seriesName, !reihe.isEmpty {
+                    verweis(m.reihen, art: "series", text: reihe).font(.subheadline)
+                        .foregroundStyle(m.reihen.isEmpty ? Farben.textGedaempft : Farben.blau)
                 }
                 if let dauer = h.media.duration {
                     Text(stundenText(dauer)).font(.caption).foregroundStyle(Farben.textGedaempft)
@@ -379,6 +397,46 @@ struct HoerbuchView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { player.fehler = nil }
         .task { if voll == nil { voll = try? await sitzung.hoerbuchClient?.hoerbuch(hoerbuch.id) } }
+        .navigationDestination(item: $liste) { HoerbuchFilterView(filter: $0) }
+    }
+}
+
+struct HoerbuchFilter: Hashable {
+    let bibliothek: String?
+    /// authors, narrators oder series
+    let art: String
+    let wert: String
+    let titel: String
+}
+
+/// Alle Hörbücher eines Autors, Sprechers oder einer Reihe (Reihe nach Teil sortiert).
+struct HoerbuchFilterView: View {
+    @Environment(Sitzung.self) private var sitzung
+    let filter: HoerbuchFilter
+    @State private var hoerbuecher: [Hoerbuch]?
+
+    var body: some View {
+        ScrollView {
+            if hoerbuecher == nil { ProgressView().padding(.top, 40) }
+            if hoerbuecher?.isEmpty == true { Text("Nichts gefunden.").foregroundStyle(Farben.textGedaempft).padding(.top, 40) }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 14)], spacing: 18) {
+                ForEach(hoerbuecher ?? []) { h in
+                    NavigationLink(value: h) { HoerbuchKarte(hoerbuch: h) }
+                        .buttonStyle(.plain)
+                        .contextMenu { GehoertKnopf(hoerbuch: h) }
+                }
+            }
+            .padding()
+        }
+        .background(Farben.hintergrund)
+        .navigationTitle(filter.art == "narrators" ? "Gelesen von \(filter.titel)" : filter.titel)
+        .task {
+            guard hoerbuecher == nil, let abs = sitzung.hoerbuchClient else { return }
+            var bib = filter.bibliothek
+            if bib == nil { bib = try? await abs.bibliotheken().first?.id }
+            guard let bib else { hoerbuecher = []; return }
+            hoerbuecher = (try? await abs.hoerbuecher(in: bib, filter: filter.art, wert: filter.wert)) ?? []
+        }
     }
 }
 

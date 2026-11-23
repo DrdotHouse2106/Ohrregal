@@ -13,6 +13,7 @@ public struct Hoerbuch: Decodable, Hashable, Identifiable, Sendable {
     public let mediaType: String?
     /// Zuletzt geändert (ms), z. B. neues Cover.
     public let updatedAt: Double?
+    public let libraryId: String?
     public let media: Medium
 
     public struct Medium: Decodable, Hashable, Sendable {
@@ -27,9 +28,20 @@ public struct Hoerbuch: Decodable, Hashable, Identifiable, Sendable {
         public let narratorName: String?
         public let seriesName: String?
         public let description: String?
+        /// Nur in der vollen Form: zum Antippen (Autor, Sprecher, Reihe → Liste der Hörbücher).
+        public let autoren: [Verweis]
+        public let sprecher: [Verweis]
+        public let reihen: [Verweis]
+
+        public struct Verweis: Hashable, Sendable {
+            /// Audiobookshelf-ID (Autor, Reihe); bei Sprechern der Name selbst.
+            public let id: String
+            public let name: String
+            public let teil: String?
+        }
 
         enum CodingKeys: String, CodingKey { case title, authorName, narratorName, seriesName, description, authors, narrators, series, author }
-        struct Name: Decodable { let name: String; let sequence: String? }
+        struct Name: Decodable { let id: String?; let name: String; let sequence: String? }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -43,6 +55,10 @@ public struct Hoerbuch: Decodable, Hashable, Identifiable, Sendable {
             seriesName = leer((try? c.decode(String.self, forKey: .seriesName))
                 ?? (try? c.decode([Name].self, forKey: .series))?.map { n in n.sequence.map { "\(n.name) – Teil \($0)" } ?? n.name }.joined(separator: ", "))
             description = leer((try? c.decode(String.self, forKey: .description))?.ohneHTML)
+            let a = (try? c.decode([Name].self, forKey: .authors)) ?? [], r = (try? c.decode([Name].self, forKey: .series)) ?? []
+            autoren = a.compactMap { n in n.id.map { Verweis(id: $0, name: n.name, teil: nil) } }
+            reihen = r.compactMap { n in n.id.map { Verweis(id: $0, name: n.name, teil: n.sequence) } }
+            sprecher = ((try? c.decode([String].self, forKey: .narrators)) ?? []).map { Verweis(id: $0, name: $0, teil: nil) }
         }
     }
 

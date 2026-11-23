@@ -263,6 +263,17 @@ public final class AudiobookshelfClient {
         return liste.results
     }
 
+    /// Alle Hörbücher eines Autors („authors“, ID), Sprechers („narrators“, Name) oder einer Reihe („series“, ID).
+    /// Reihen nach Teil sortiert, sonst nach Titel.
+    public func hoerbuecher(in bibliothek: String, filter art: String, wert: String) async throws -> [Hoerbuch] {
+        struct Liste: Decodable { let results: [Hoerbuch] }
+        let w = Data(wert.utf8).base64EncodedString().addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+        let liste: Liste = try await hole("/api/libraries/\(bibliothek)/items?limit=500&minified=1&sort=media.metadata.title&filter=\(art).\(w)")
+        guard art == "series" else { return liste.results }
+        func teil(_ h: Hoerbuch) -> Double { Double(h.media.metadata.seriesName?.split(separator: "#").last.map { String($0).trimmingCharacters(in: .whitespaces) } ?? "") ?? .infinity }
+        return liste.results.sorted { teil($0) < teil($1) }
+    }
+
     public func genres(in bibliothek: String) async throws -> [String] {
         struct Filter: Decodable { let genres: [String]? }
         let filter: Filter = try await hole("/api/libraries/\(bibliothek)/filterdata")
