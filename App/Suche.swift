@@ -12,10 +12,10 @@ struct SucheView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Farben.hintergrund)
             .safeAreaInset(edge: .bottom) {
-                // Nichts gefunden? Direkt bei Lidarr weitersuchen und wünschen.
+                // Nichts gefunden? Direkt in Ohrwurm weitersuchen und wünschen.
                 if text.count >= 2 && sitzung.dienstDa {
-                    NavigationLink(value: Ziel.musikwuensche(text)) {
-                        Label("„\(text)“ bei Lidarr suchen und wünschen", systemImage: "sparkles")
+                    NavigationLink(value: Ziel.ohrwurm(text)) {
+                        Label("„\(text)“ in Ohrwurm suchen und wünschen", systemImage: "sparkles")
                             .frame(maxWidth: .infinity).padding(.vertical, 10)
                     }
                     .buttonStyle(.bordered)

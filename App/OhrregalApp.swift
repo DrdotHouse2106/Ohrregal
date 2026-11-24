@@ -219,7 +219,7 @@ struct Hauptansicht: View {
         sitzung.sprung = nil
         if ziel == .musikwuensche {
             tab = 1
-            musikPfad = NavigationPath([Ziel.musikwuensche("")])
+            musikPfad = NavigationPath([Ziel.ohrwurm("")])
             return
         }
         tab = 2

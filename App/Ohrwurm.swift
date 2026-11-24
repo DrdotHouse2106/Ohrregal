@@ -4,7 +4,7 @@ import SwiftUI
 /// Ohrwurm: Künstler im Apple-Katalog suchen, sehen was da ist und was fehlt, Lieder wünschen, Künstlern folgen.
 struct OhrwurmView: View {
     @Environment(Sitzung.self) private var sitzung
-    @State private var text = ""
+    @State var text = ""
     @State private var treffer: [Ohrwurm.Treffer]?
     @State private var neu: [Ohrwurm.Neuheit] = []
     @State private var gefolgt: [Ohrwurm.Gefolgt] = []
@@ -57,7 +57,10 @@ struct OhrwurmView: View {
         .scrollContentBackground(.hidden)
         .background(Farben.hintergrund)
         .navigationTitle("Ohrwurm")
-        .task { await laden() }
+        .task {
+            if treffer == nil && !text.isEmpty { await suchen() }
+            await laden()
+        }
         .refreshable { await laden() }
     }
 

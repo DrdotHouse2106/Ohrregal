@@ -23,8 +23,7 @@ struct MusikView: View {
                 NavigationLink(value: Ziel.radio) { Label("Radio", systemImage: "dot.radiowaves.left.and.right") }
                 NavigationLink(value: Ziel.erkennen) { Label("Titel erkennen", systemImage: "shazam.logo") }
                 if sitzung.dienstDa {
-                    NavigationLink(value: Ziel.musikwuensche("")) { Label("Musik wünschen", systemImage: "sparkles") }
-                    NavigationLink(value: Ziel.ohrwurm) { Label("Ohrwurm", systemImage: "music.note.house") }
+                    NavigationLink(value: Ziel.ohrwurm("")) { Label("Musik wünschen", systemImage: "sparkles") }
                 }
             }
         }
@@ -177,7 +176,8 @@ struct KuenstlerView: View {
             }
             .padding()
             if !alben.isEmpty && sitzung.dienstDa {
-                FehltNoch(name: kuenstler.name, vorhanden: Set(alben.map(\.name)))
+                NavigationLink(value: Ziel.ohrwurm(kuenstler.name)) { Label("Was fehlt noch?", systemImage: "sparkles") }
+                    .buttonStyle(.bordered)
                     .padding(.bottom)
             }
         }
