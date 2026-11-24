@@ -66,9 +66,10 @@ final class Sitzung {
     var playlistFuer: [Titel]?
     /// Ist ein eigener Wunsch-Dienst eingerichtet? Nur dann gibt es Wünschen, Stöbern, Entdecken, Mitteilungen und Hörprotokoll.
     var dienstDa = UserDefaults.standard.bool(forKey: "dienstDa")
-    /// Ohrwurm bzw. Lidarr am Dienst eingerichtet? Ältere Dienste melden das nicht: dann gilt beides als da.
-    var ohrwurmDa = UserDefaults.standard.object(forKey: "ohrwurmDa") as? Bool ?? true
-    var lidarrDa = UserDefaults.standard.object(forKey: "lidarrDa") as? Bool ?? true
+    /// Ohrwurm bzw. Lidarr am Dienst eingerichtet? Nur dann gibt es Musikwünsche. Meldet der Dienst nichts (ältere Fassung),
+    /// gilt beides als nicht da: Ohne Erweiterung auf dem Server zeigt die App keine Musikwünsche (auch für die App-Prüfung).
+    var ohrwurmDa = UserDefaults.standard.bool(forKey: "ohrwurmDa")
+    var lidarrDa = UserDefaults.standard.bool(forKey: "lidarrDa")
 
     /// Fragt `/wunsch-api/status` ab (ohne Anmeldung). Ohne Antwort bleibt der letzte bekannte Stand.
     func dienstPruefen() async {
@@ -78,8 +79,8 @@ final class Sitzung {
             let (daten, antwort) = try await URLSession.shared.data(from: basis.appending(path: "status"))
             let status = (antwort as? HTTPURLResponse)?.statusCode == 200 ? try? JSONDecoder().decode(Status.self, from: daten) : nil
             dienstDa = status?.ok ?? false
-            ohrwurmDa = status?.ohrwurm ?? true
-            lidarrDa = status?.lidarr ?? true
+            ohrwurmDa = dienstDa && status?.ohrwurm == true
+            lidarrDa = dienstDa && status?.lidarr == true
             UserDefaults.standard.set(dienstDa, forKey: "dienstDa")
             UserDefaults.standard.set(ohrwurmDa, forKey: "ohrwurmDa")
             UserDefaults.standard.set(lidarrDa, forKey: "lidarrDa")
@@ -225,8 +226,9 @@ struct Hauptansicht: View {
         guard let ziel = sitzung.sprung else { return }
         sitzung.sprung = nil
         if ziel == .musikwuensche {
+            guard sitzung.lidarrDa || sitzung.ohrwurmDa else { return }
             tab = 1
-            musikPfad = NavigationPath([Ziel.musikwuensche("")])
+            musikPfad = NavigationPath([sitzung.lidarrDa ? Ziel.musikwuensche("") : Ziel.ohrwurm("")])
             return
         }
         tab = 2
