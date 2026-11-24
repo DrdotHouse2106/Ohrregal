@@ -39,7 +39,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "2.10.0"
+VERSION = "2.11.0"
 
 
 def env(name, standard=None, pflicht=False):
@@ -2347,8 +2347,8 @@ class Schnittstelle(BaseHTTPRequestHandler):
         super().handle_one_request()
 
     # Erlaubte Aufrufe an Ohrwurm (Methode, Pfad nach /ohrwurm/). Einsortieren und Stand bleiben dem Server vorbehalten.
-    OHRWURM_ERLAUBT = [("GET", r"status|suche|wuensche|folgen|neuheiten|kuenstler/\d+"),
-                       ("POST", r"wuensche|folgen|neuheiten/gesehen"), ("DELETE", r"(wuensche|folgen)/\d+")]
+    OHRWURM_ERLAUBT = [("GET", r"status|suche|wuensche|folgen|neuheiten|kuenstler/\d+|wuensche/\d+/treffer"),
+                       ("POST", r"wuensche|folgen|neuheiten/gesehen|wuensche/\d+/treffer"), ("DELETE", r"(wuensche|folgen)/\d+")]
 
     def ohrwurm_weiter(self, methode, teile):
         if not E.ohrwurm or not E.ohrwurm_zugang:

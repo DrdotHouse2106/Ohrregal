@@ -242,7 +242,7 @@ struct OhrwurmAlbumView: View {
     }
 }
 
-/// Alle Ohrwurm-Wünsche mit Stand; Wischen zieht einen Wunsch zurück.
+/// Alle Ohrwurm-Wünsche mit Stand; Antippen sucht von Hand, Wischen zieht einen Wunsch zurück.
 struct OhrwurmWunschliste: View {
     @Environment(Sitzung.self) private var sitzung
     @State private var wuensche: [Ohrwurm.Wunsch] = []
@@ -257,14 +257,14 @@ struct OhrwurmWunschliste: View {
                 if let erster = liste.first {
                     Section(erster.standText.prefix(1).uppercased() + String(erster.standText.dropFirst())) {
                         ForEach(liste) { w in
-                            HStack(spacing: 12) {
+                            NavigationLink { OhrwurmTrefferView(wunsch: w) { Task { await laden() } } } label: { HStack(spacing: 12) {
                                 Cover(url: w.cover.flatMap(URL.init(string:)), groesse: 44)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(w.titel).lineLimit(1)
                                     Text([w.kuenstler, w.album, w.text].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                                         .font(.caption).foregroundStyle(Farben.textGedaempft).lineLimit(2)
                                 }
-                            }
+                            } }
                             .swipeActions {
                                 if w.stand != "erledigt" {
                                     Button("Zurückziehen", role: .destructive) { Task { await zurueckziehen(w) } }
@@ -290,5 +290,70 @@ struct OhrwurmWunschliste: View {
     private func zurueckziehen(_ w: Ohrwurm.Wunsch) async {
         guard let dienst = sitzung.musikwunsch else { return }
         do { try await dienst.ohrwurmZurueckziehen(w.id); wuensche.removeAll { $0.id == w.id } } catch { fehler = error.deutsch }
+    }
+}
+
+/// Von-Hand-Suche: Treffer der Anschlüsse für einen Wunsch; Antippen lädt diesen Treffer.
+struct OhrwurmTrefferView: View {
+    @Environment(Sitzung.self) private var sitzung
+    @Environment(\.dismiss) private var dismiss
+    let wunsch: Ohrwurm.Wunsch
+    let gewaehlt: () -> Void
+    @State private var treffer: [Ohrwurm.Kandidat]?
+    @State private var fehler: String?
+    @State private var laedt = false
+
+    var body: some View {
+        List {
+            Section {
+                Text([wunsch.kuenstler, wunsch.album, wunsch.text].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(Farben.textGedaempft)
+                if let fehler { Text(fehler).foregroundStyle(.red) }
+            }
+            if let treffer {
+                if treffer.isEmpty { Text("Keine Treffer.").foregroundStyle(Farben.textGedaempft) }
+                ForEach(treffer) { k in
+                    Button { Task { await nehmen(k) } } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(k.titel).lineLimit(3)
+                            Text(beschreibung(k)).font(.caption).foregroundStyle(Farben.textGedaempft)
+                        }
+                        .opacity(k.gesperrt == true ? 0.5 : 1)
+                    }
+                    .disabled(laedt)
+                }
+            } else {
+                HStack { ProgressView(); Text("Suche läuft …").foregroundStyle(Farben.textGedaempft) }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Farben.hintergrund)
+        .navigationTitle(wunsch.titel)
+        .navigationBarTitleDisplayMode(.inline)
+        .task { if treffer == nil { await suchen() } }
+        .refreshable { await suchen() }
+    }
+
+    private func beschreibung(_ k: Ohrwurm.Kandidat) -> String {
+        var teile = [k.indexer, k.groesse.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) },
+                     k.alterTage.map { "vor \($0) Tagen" }].compactMap { $0 }
+        if k.gesperrt == true { teile.append("schon gescheitert") }
+        return teile.joined(separator: " · ")
+    }
+
+    private func suchen() async {
+        guard let dienst = sitzung.musikwunsch else { return }
+        do { treffer = try await dienst.ohrwurmTreffer(wunsch.id); fehler = nil } catch { fehler = error.deutsch; treffer = treffer ?? [] }
+    }
+
+    private func nehmen(_ k: Ohrwurm.Kandidat) async {
+        guard let dienst = sitzung.musikwunsch else { return }
+        laedt = true
+        defer { laedt = false }
+        do {
+            try await dienst.ohrwurmNehmen(wunsch.id, k)
+            gewaehlt()
+            dismiss()
+        } catch { fehler = "\(error.deutsch) – bitte neu suchen." }
     }
 }

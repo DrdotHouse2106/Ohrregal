@@ -68,6 +68,19 @@ public enum Ohrwurm {
         }
     }
 
+    /// Treffer der Von-Hand-Suche (z. B. eine Usenet-Veröffentlichung aus Prowlarr).
+    public struct Kandidat: Decodable, Hashable, Identifiable, Sendable {
+        public let anschluss: String
+        public let kennung: String
+        public let titel: String
+        public let groesse: Int64?
+        public let indexer: String?
+        public let alterTage: Int?
+        public let grabs: Int?
+        public let gesperrt: Bool?
+        public var id: String { anschluss + kennung }
+    }
+
     public struct Gefolgt: Decodable, Hashable, Identifiable, Sendable {
         public let appleId: String
         public let name: String
@@ -120,6 +133,13 @@ extension MusikwunschClient {
 
     public func ohrwurmZurueckziehen(_ id: Int) async throws {
         let _: Ok = try await ohrwurm("wuensche/\(id)", methode: "DELETE")
+    }
+
+    /// Von-Hand-Suche: alle Treffer der Anschlüsse für einen Wunsch (kann bis zu einer Minute dauern).
+    public func ohrwurmTreffer(_ id: Int) async throws -> [Ohrwurm.Kandidat] { try await ohrwurm("wuensche/\(id)/treffer") }
+
+    public func ohrwurmNehmen(_ id: Int, _ k: Ohrwurm.Kandidat) async throws {
+        let _: Ok = try await ohrwurm("wuensche/\(id)/treffer", methode: "POST", json: ["anschluss": k.anschluss, "kennung": k.kennung])
     }
 
     public func ohrwurmGefolgt() async throws -> [Ohrwurm.Gefolgt] { try await ohrwurm("folgen") }
