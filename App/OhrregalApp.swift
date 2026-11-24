@@ -66,16 +66,23 @@ final class Sitzung {
     var playlistFuer: [Titel]?
     /// Ist ein eigener Wunsch-Dienst eingerichtet? Nur dann gibt es Wünschen, Stöbern, Entdecken, Mitteilungen und Hörprotokoll.
     var dienstDa = UserDefaults.standard.bool(forKey: "dienstDa")
+    /// Ohrwurm bzw. Lidarr am Dienst eingerichtet? Ältere Dienste melden das nicht: dann gilt beides als da.
+    var ohrwurmDa = UserDefaults.standard.object(forKey: "ohrwurmDa") as? Bool ?? true
+    var lidarrDa = UserDefaults.standard.object(forKey: "lidarrDa") as? Bool ?? true
 
     /// Fragt `/wunsch-api/status` ab (ohne Anmeldung). Ohne Antwort bleibt der letzte bekannte Stand.
     func dienstPruefen() async {
         guard let basis = musikwunsch?.basis else { dienstDa = false; return }
-        struct Status: Decodable { let ok: Bool }
+        struct Status: Decodable { let ok: Bool; let ohrwurm: Bool?; let lidarr: Bool? }
         do {
             let (daten, antwort) = try await URLSession.shared.data(from: basis.appending(path: "status"))
-            let da = (antwort as? HTTPURLResponse)?.statusCode == 200 && ((try? JSONDecoder().decode(Status.self, from: daten).ok) ?? false)
-            dienstDa = da
-            UserDefaults.standard.set(da, forKey: "dienstDa")
+            let status = (antwort as? HTTPURLResponse)?.statusCode == 200 ? try? JSONDecoder().decode(Status.self, from: daten) : nil
+            dienstDa = status?.ok ?? false
+            ohrwurmDa = status?.ohrwurm ?? true
+            lidarrDa = status?.lidarr ?? true
+            UserDefaults.standard.set(dienstDa, forKey: "dienstDa")
+            UserDefaults.standard.set(ohrwurmDa, forKey: "ohrwurmDa")
+            UserDefaults.standard.set(lidarrDa, forKey: "lidarrDa")
         } catch {}
     }
 
@@ -219,7 +226,7 @@ struct Hauptansicht: View {
         sitzung.sprung = nil
         if ziel == .musikwuensche {
             tab = 1
-            musikPfad = NavigationPath([Ziel.ohrwurm("")])
+            musikPfad = NavigationPath([Ziel.musikwuensche("")])
             return
         }
         tab = 2

@@ -23,7 +23,12 @@ struct MusikView: View {
                 NavigationLink(value: Ziel.radio) { Label("Radio", systemImage: "dot.radiowaves.left.and.right") }
                 NavigationLink(value: Ziel.erkennen) { Label("Titel erkennen", systemImage: "shazam.logo") }
                 if sitzung.dienstDa {
-                    NavigationLink(value: Ziel.ohrwurm("")) { Label("Musik wünschen", systemImage: "sparkles") }
+                    if sitzung.ohrwurmDa {
+                        NavigationLink(value: Ziel.ohrwurm("")) { Label("Musik wünschen", systemImage: "sparkles") }
+                    }
+                    if sitzung.lidarrDa {
+                        NavigationLink(value: Ziel.musikwuensche("")) { Label("Bei Lidarr wünschen", systemImage: "music.note.house") }
+                    }
                 }
             }
         }
@@ -176,9 +181,14 @@ struct KuenstlerView: View {
             }
             .padding()
             if !alben.isEmpty && sitzung.dienstDa {
-                NavigationLink(value: Ziel.ohrwurm(kuenstler.name)) { Label("Was fehlt noch?", systemImage: "sparkles") }
-                    .buttonStyle(.bordered)
-                    .padding(.bottom)
+                if sitzung.ohrwurmDa {
+                    NavigationLink(value: Ziel.ohrwurm(kuenstler.name)) { Label("Was fehlt noch?", systemImage: "sparkles") }
+                        .buttonStyle(.bordered)
+                        .padding(.bottom)
+                } else if sitzung.lidarrDa {
+                    FehltNoch(name: kuenstler.name, vorhanden: Set(alben.map(\.name)))
+                        .padding(.bottom)
+                }
             }
         }
         .background(Farben.hintergrund)

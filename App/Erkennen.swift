@@ -3,7 +3,7 @@ import Kern
 import ShazamKit
 import SwiftUI
 
-/// Titel erkennen (ShazamKit): liegt er auf dem Server, abspielen oder zur Mediathek; sonst über Ohrwurm wünschen.
+/// Titel erkennen (ShazamKit): liegt er auf dem Server, abspielen oder zur Mediathek; sonst über Ohrwurm (oder Lidarr) wünschen.
 struct ErkennenView: View {
     @Environment(\.client) private var client
     @Environment(Sitzung.self) private var sitzung
@@ -11,7 +11,7 @@ struct ErkennenView: View {
     @State private var laeuft = false
     @State private var erkannt: (titel: String, kuenstler: String, cover: URL?)?
     @State private var treffer: [Titel] = []
-    @State private var fehlt = false
+    @State private var lidarr: [LidarrAlbum]?
     @State private var meldung: String?
 
     var body: some View {
@@ -61,9 +61,14 @@ struct ErkennenView: View {
                         .contextMenu { TitelMenue(titel: t) }
                     }
                 }
-            } else if fehlt, let erkannt {
+            } else if sitzung.ohrwurmDa && sitzung.dienstDa, laeuft == false, let erkannt {
                 Section("Nicht auf deinem Server") {
                     NavigationLink(value: Ziel.ohrwurm(erkannt.kuenstler)) { Label("In Ohrwurm wünschen", systemImage: "sparkles") }
+                }
+            } else if let lidarr {
+                Section("Nicht auf deinem Server – bei Lidarr") {
+                    if lidarr.isEmpty { Text("Auch bei Lidarr nicht gefunden.").foregroundStyle(Farben.textGedaempft) }
+                    ForEach(lidarr) { LidarrAlbumZeile(album: $0) }
                 }
             }
         }
@@ -78,7 +83,7 @@ struct ErkennenView: View {
         meldung = nil
         erkannt = nil
         treffer = []
-        fehlt = false
+        lidarr = nil
         player.pause()
         // Ohrregal hält die Tonausgabe sonst auf reiner Wiedergabe; zum Zuhören das Mikrofon freigeben, danach zurück.
         let ton = AVAudioSession.sharedInstance()
@@ -106,11 +111,13 @@ struct ErkennenView: View {
         }
     }
 
-    /// In Navidrome suchen; fehlt der Titel, führt ein Knopf zum Künstler in Ohrwurm.
+    /// Erst in Navidrome suchen, sonst bei Lidarr (Alben und Singles mit diesem Titel).
     private func suchen(_ titel: String, _ kuenstler: String) async {
         let einfach = { (s: String) in s.lowercased().folding(options: .diacriticInsensitive, locale: nil) }
         let lieder = (try? await client.suche(titel))?.song ?? []
         treffer = lieder.filter { einfach($0.artist ?? "").contains(einfach(kuenstler)) || einfach(kuenstler).contains(einfach($0.artist ?? "-")) }
-        fehlt = treffer.isEmpty && sitzung.dienstDa
+        if treffer.isEmpty {
+            if sitzung.dienstDa && !sitzung.ohrwurmDa && sitzung.lidarrDa { lidarr = (try? await sitzung.musikwunsch?.suche("\(kuenstler) \(titel)")) ?? [] }
+        }
     }
 }

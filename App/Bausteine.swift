@@ -51,6 +51,8 @@ enum Ziel: Hashable {
     case mediathek(MediathekView.Art)
     case albumNachId(String)
     case erkennen
+    case musikwuensche(String)
+    case albumFinden(String, String)
     case kategorie(Kategorie)
     case podcast(Hoerbuch)
     case podcastNachId(String)
@@ -76,6 +78,8 @@ enum Ziel: Hashable {
         case .mediathek(let art): MediathekView(art: art)
         case .albumNachId(let id): AlbumNachId(id: id)
         case .erkennen: ErkennenView()
+        case .musikwuensche(let text): MusikWunschView(text: text)
+        case .albumFinden(let titel, let kuenstler): AlbumFinden(titel: titel, kuenstler: kuenstler)
         case .kategorie(let k): KategorieView(kategorie: k)
         case .podcast(let p): PodcastView(podcast: p)
         case .podcastNachId(let id): PodcastNachId(id: id)

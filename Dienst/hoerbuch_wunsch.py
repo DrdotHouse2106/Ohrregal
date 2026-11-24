@@ -2379,7 +2379,9 @@ class Schnittstelle(BaseHTTPRequestHandler):
     def do_GET(self):
         teile, abfrage = self.pfad()
         if teile == ["status"]:
-            return self.antworte(200, {"ok": True, "version": VERSION})
+            # Was eingerichtet ist, damit die App nur passende Einstiege zeigt (Ohrwurm zuerst, Lidarr optional).
+            return self.antworte(200, {"ok": True, "version": VERSION, "ohrwurm": bool(E.ohrwurm and E.ohrwurm_zugang),
+                                       "lidarr": bool(E.lidarr and E.lidarr_key)})
         if teile[:1] == ["ohrwurm"]:
             return self.benutzer() and self.ohrwurm_weiter("GET", teile)
         if teile[:1] == ["musik"]:
